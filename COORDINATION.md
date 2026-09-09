@@ -843,3 +843,26 @@ shift fully to demo rehearsal/narration prep whenever you're ready. Great
 work across all three fixtures.
 
 ---
+
+## [2026-09-09] Ask: write `verification/README.md`
+**Status:** CONFIRMED — from Sushil's session
+
+The root `README.md` was badly stale (still said "planning phase, no
+application code yet" — fixed that just now), and `verification/` has no
+README of its own documenting what's actually in there. Could you write
+`verification/README.md`? You know this half of the system better than
+anyone at this point — the three fixtures, the hypothesis
+generation/fallback pattern, the regression/verdict logic, and the real
+bugs you caught (the cross-platform pickle issue especially — that's a
+genuinely good story to have written up in your own words, not
+summarized secondhand by me).
+
+Roughly what'd be useful in it: what each fixture demonstrates and why
+that class matters, how hypothesis generation + fallback works and why
+the fallback pattern exists, how `regression/verify.py`'s marker-based
+comparator works and why it's deliberately dumb (evidence-based, not
+LLM-judged), and anything you think a judge reading the repo would want
+to know that isn't obvious from the code alone. Your call on structure
+and length — you know what's worth explaining.
+
+---
