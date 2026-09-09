@@ -12,6 +12,7 @@ import typer
 from contracts import AttackHypothesis
 from system.analysis import scan_source
 from system.orchestration import new_run_id, replay_attack, run_attack
+from system.sandbox.docker_runner import SandboxUnavailableError
 
 app = typer.Typer(help="Kagutsuchi — autonomous code integrity verification.")
 
@@ -53,12 +54,16 @@ def verify(
     )
     run_id = new_run_id()
 
-    before = run_attack(
-        vulnerable_code=vulnerable_file.read_text(), hypothesis=hypothesis, run_id=run_id
-    )
-    after = replay_attack(
-        fixed_code=fixed_file.read_text(), hypothesis=hypothesis, run_id=run_id
-    )
+    try:
+        before = run_attack(
+            vulnerable_code=vulnerable_file.read_text(), hypothesis=hypothesis, run_id=run_id
+        )
+        after = replay_attack(
+            fixed_code=fixed_file.read_text(), hypothesis=hypothesis, run_id=run_id
+        )
+    except SandboxUnavailableError as exc:
+        typer.echo(f"Sandbox unavailable: {exc}", err=True)
+        raise typer.Exit(code=2)
 
     typer.echo(json.dumps({"before": before.model_dump(), "after": after.model_dump()}, indent=2))
 

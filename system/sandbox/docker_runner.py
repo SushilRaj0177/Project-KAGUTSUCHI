@@ -20,6 +20,24 @@ _IMAGE = "python:3.11-slim"
 _MAX_LOG_CHARS = 8000
 
 
+class SandboxUnavailableError(RuntimeError):
+    """Raised when the Docker daemon can't be reached. This is an
+    infrastructure failure, not a security signal — callers should
+    surface it distinctly from an INCONCLUSIVE verdict."""
+
+
+def _client() -> docker.DockerClient:
+    try:
+        client = docker.from_env()
+        client.ping()
+        return client
+    except Exception as exc:  # docker.errors.DockerException, ConnectionError, ...
+        raise SandboxUnavailableError(
+            "Could not reach the Docker daemon. Is Docker running? "
+            f"(underlying error: {exc})"
+        ) from exc
+
+
 def _tar_bytes(filename: str, content: str) -> bytes:
     data = content.encode()
     buf = io.BytesIO()
@@ -43,7 +61,7 @@ def run_in_sandbox(
     from sys.argv[1]) inside an isolated, network-disabled container and
     return the recorded ExecutionEvidence.
     """
-    client = docker.from_env()
+    client = _client()
     container = client.containers.create(
         image=_IMAGE,
         command=["python", "/workspace/candidate.py", payload],

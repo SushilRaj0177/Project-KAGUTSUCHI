@@ -46,3 +46,27 @@ here as a new dated entry below this line. Sushil's session will confirm
 or counter-propose._
 
 ---
+
+## [SUGGESTED] Draft fixture candidate — command injection
+**Status:** PROPOSED (draft, to unblock — supersede freely if you have a
+better one, this isn't final)
+**From:** Sushil's session
+
+`system/analysis` already detects this class (os.system/subprocess with
+string-built input) and it's tested, so it's zero-risk to build against
+right now instead of waiting idle:
+
+- **Vulnerable:** a function that shells out with a hostname/filename
+  built from unsanitized user input, e.g. `os.system("ping -c 1 " + host)`.
+- **Attack:** payload like `"; cat /etc/passwd"` or `"&& touch /tmp/pwned"`
+  appended to the host — proves shell metacharacters escape into the
+  command.
+- **Fixed:** same function using `subprocess.run(["ping", "-c", "1", host])`
+  with `shell=False` and no string concatenation — same payload as input,
+  no shell to escape into.
+
+If you'd rather target SQL injection instead (also detected — string-built
+`cursor.execute()` calls), that works too, just flag which one you're
+building so the fixture and the analyzer stay pointed at the same class.
+
+---
