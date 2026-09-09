@@ -1,0 +1,15 @@
+[project]
+name = "kagutsuchi"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.0",
+    "docker>=7.0",
+    "typer>=0.12",
+]
+
+[project.scripts]
+kagutsuchi = "system.cli.main:app"
+
+[tool.setuptools]
+packages = ["contracts", "system", "system.analysis", "system.sandbox", "system.orchestration", "system.cli"]
