@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 from typing import Callable
 
-from verification.models import EvidencePhase, ExecutionEvidence
+from verification.models import ExecutionEvidence, ExecutionPhase
 
 MARKER_PATH = Path("/tmp/kagutsuchi_pwned")
 
@@ -32,7 +32,7 @@ def run_local_attack(
     payload: str,
     hypothesis_id: str,
     run_id: str,
-    phase: EvidencePhase,
+    phase: ExecutionPhase,
 ) -> ExecutionEvidence:
     """Run `target(payload)` locally and observe the marker-file side effect.
 

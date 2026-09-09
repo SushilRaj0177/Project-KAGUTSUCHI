@@ -10,7 +10,7 @@ import pytest
 from verification.attacks.run_local import MARKER_PATH, run_local_attack
 from verification.fixtures.netdiag import fixed, vulnerable
 from verification.hypothesis.fallback import NETDIAG_FALLBACK_HYPOTHESIS
-from verification.models import EvidencePhase
+from verification.models import ExecutionPhase
 
 PAYLOAD = NETDIAG_FALLBACK_HYPOTHESIS.payload
 
@@ -26,13 +26,13 @@ posix_only = pytest.mark.skipif(
 @posix_only
 def test_vulnerable_creates_marker_file():
     evidence = run_local_attack(
-        vulnerable, PAYLOAD, "hyp-1", "run-1", EvidencePhase.before
+        vulnerable, PAYLOAD, "hyp-1", "run-1", ExecutionPhase.BEFORE
     )
     assert evidence.filesystem_diff["created"] == [str(MARKER_PATH)]
 
 
 def test_fixed_rejects_payload_and_never_creates_marker():
-    evidence = run_local_attack(fixed, PAYLOAD, "hyp-1", "run-1", EvidencePhase.after)
+    evidence = run_local_attack(fixed, PAYLOAD, "hyp-1", "run-1", ExecutionPhase.AFTER)
     assert evidence.filesystem_diff["created"] == []
     assert evidence.exit_code == -1  # fixed() raises ValueError on invalid host
 
