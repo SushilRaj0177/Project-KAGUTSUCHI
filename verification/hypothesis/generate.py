@@ -130,7 +130,7 @@ def _build_prompt(finding: SecurityFinding) -> str:
 def generate(
     finding: SecurityFinding,
     model_id: str = "groq:openai/gpt-oss-120b",
-    fallback: AttackHypothesis = NETDIAG_FALLBACK_HYPOTHESIS,
+    fallback: AttackHypothesis | None = NETDIAG_FALLBACK_HYPOTHESIS,
 ) -> AttackHypothesis:
     """`fallback` defaults to the netdiag hypothesis for backward
     compatibility with existing call sites (e.g. integration/pipeline.py's
@@ -138,6 +138,13 @@ def generate(
     per-fixture fallback explicitly for any other fixture, e.g.
     `generate(finding, fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS)` - see
     verification/hypothesis/sql_fallback.py.
+
+    Pass `fallback=None` for arbitrary/unknown code where no fallback is
+    safe (a "fallback" for code nobody's ever seen is just a wrong guess
+    wearing a confident label) - the original failure (`GroqUnavailable`,
+    `KeyError`, etc.) propagates uncaught instead of being swallowed, so
+    the caller can surface "couldn't generate an attack right now" rather
+    than silently running an unrelated payload.
     """
     try:
         raw = generate_hypothesis_json(_build_prompt(finding))
@@ -157,4 +164,6 @@ def generate(
         # keys (KeyError), a non-dict JSON value (TypeError on indexing),
         # and valid-but-wrong-shaped values, e.g. `payload` coming back as
         # a list/object instead of a string (pydantic ValidationError).
+        if fallback is None:
+            raise
         return fallback.model_copy(update={"finding_id": finding.finding_id})

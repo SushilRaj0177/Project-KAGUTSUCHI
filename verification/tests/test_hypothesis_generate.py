@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import pytest
+
 import verification.hypothesis.generate as generate_module
 from verification.hypothesis.generate import generate
+from verification.hypothesis.groq_client import GroqUnavailable
 from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import SecurityFinding, SensitiveOp, Severity
 
@@ -78,6 +81,33 @@ def test_generate_falls_back_to_the_given_fallback_not_always_netdiag(monkeypatc
     assert hyp.hypothesis_id == SQL_INJECTION_FALLBACK_HYPOTHESIS.hypothesis_id
     assert hyp.finding_id == finding.finding_id
     assert "ATTACH DATABASE" in hyp.payload
+
+
+def test_generate_with_no_fallback_propagates_groq_unavailable(monkeypatch):
+    # fallback=None is for arbitrary/unknown code (see
+    # integration/upload_pipeline.py) where no hardcoded fallback is
+    # safe - the original failure must propagate, not be swallowed.
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    with pytest.raises(GroqUnavailable):
+        generate(_fake_finding(), fallback=None)
+
+
+def test_generate_with_no_fallback_propagates_validation_error(monkeypatch):
+    monkeypatch.setattr(
+        generate_module,
+        "generate_hypothesis_json",
+        lambda prompt: {
+            "security_property": "x",
+            "attack_vector": "x",
+            "payload": {"not": "a string"},
+            "expected_if_vulnerable": "x",
+            "expected_if_safe": "x",
+        },
+    )
+
+    with pytest.raises(Exception):  # noqa: B017 - ValidationError, not swallowed into a fallback
+        generate(_fake_finding(), fallback=None)
 
 
 def test_generate_uses_live_response_when_well_formed(monkeypatch):
