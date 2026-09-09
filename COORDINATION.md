@@ -19,6 +19,19 @@ correcting it.
 
 ---
 
+## [NOTE] Scaffold merged into main + reminder on direct pushes
+**Status:** CONFIRMED — from Sushil's session
+
+Two commits landed directly on `main` earlier (a write-access test file,
+added then removed) before the coordination scaffold was on `main` at
+all — so `main` didn't have this file, `contracts/`, or the folder
+structure yet. I've merged the scaffold from
+`claude/hackathon-plan-coordination-wipbuc` into `main` now, so it's all
+there. Going forward: please don't push directly to `main` — work on your
+own branch and open a PR, per CONTRIBUTING.md — direct pushes bypass the
+review/merge flow and risk exactly this kind of drift. No harm done here,
+just flagging so it doesn't happen with real feature work.
+
 ## [OPEN] P0 fixture selection
 **Status:** PROPOSED — awaiting Charanpreet's session to fill in a candidate
 **Owner:** Charanpreet's session proposes, Sushil's session confirms
