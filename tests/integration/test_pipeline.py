@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from contracts import ExecutionEvidence, ExecutionPhase, SecurityFinding, SensitiveOp, Severity
 from integration.pipeline import run_full_verification
+from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import Verdict
 
 
@@ -71,3 +72,28 @@ def test_full_pipeline_catches_an_incomplete_fix(mock_run, monkeypatch):
         finding=_netdiag_finding(),
     )
     assert result.verdict == Verdict.STILL_VULNERABLE
+
+
+@patch("system.orchestration.pipeline.run_in_sandbox", side_effect=_fake_run_in_sandbox)
+def test_full_pipeline_generalizes_to_a_second_vulnerability_class(mock_run, monkeypatch):
+    # The actual "generalizes, no special-casing" proof: same
+    # run_full_verification, same regression logic, a completely
+    # different vulnerability class (SQL injection instead of command
+    # injection), only the fallback hypothesis and finding differ.
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    finding = SecurityFinding(
+        file_path="verification/fixtures/sql_injection.py",
+        symbol="vulnerable",
+        diff_hunk="cur.executescript(f\"SELECT * FROM users WHERE name = '{name}'\")",
+        sensitive_op=SensitiveOp.SQL_QUERY,
+        rationale="test finding",
+        detected_by="test",
+        severity_hint=Severity.HIGH,
+    )
+    result = run_full_verification(
+        vulnerable_code="def vulnerable(name): pass",
+        fixed_code="def fixed(name): pass",
+        finding=finding,
+        fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS,
+    )
+    assert result.verdict == Verdict.VERIFIED_FIXED
