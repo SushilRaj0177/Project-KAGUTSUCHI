@@ -20,6 +20,7 @@ it, is what makes trusting an LLM-generated fix safe to ship.
 from __future__ import annotations
 
 import ast
+import builtins as _builtins_module
 
 from verification.hypothesis.groq_client import generate_hypothesis_json
 from verification.models import AttackHypothesis, SecurityFinding
@@ -42,6 +43,15 @@ Rewrite the function so that exact payload, and anything like it, no \
 longer works - without changing what the function is for or its \
 signature. Do not add extra parameters, don't rename it, don't wrap it \
 in a class.
+
+CRITICAL - the function must be fully self-contained: it will be run on \
+its own, with nothing else from the original file present. Put any \
+`import` statements it needs INSIDE the function body itself (not at the \
+top of a module that won't exist). Do not call any helper function, or \
+reference any variable/constant, that isn't a builtin, a parameter, or \
+something you define inside this function - if the original code relied \
+on a module-level helper or constant, inline an equivalent directly into \
+this function instead of calling out to it.
 
 Respond with a single JSON object with exactly one key, "fixed_source", \
 whose value is the complete rewritten function's full source code as a \
@@ -106,6 +116,64 @@ def _validate(source: str, expected_function_name: str) -> None:
             f"{expected_function_name}() must take exactly one parameter, "
             f"got {len(positional)}"
         )
+
+    free_names = _free_names(functions[0])
+    if free_names:
+        raise FixValidationError(
+            f"{expected_function_name}() is not self-contained - it references "
+            f"{sorted(free_names)}, which aren't builtins, parameters, or "
+            f"defined/imported inside the function itself. It will be run "
+            f"standalone with nothing else from the original file present "
+            f"(see propose_fix()'s prompt requirement), so this would raise "
+            f"NameError instead of actually running - and a crash on every "
+            f"call would look like 'fixed' to the sandbox (no exploit ever "
+            f"fires) instead of a broken fix."
+        )
+
+
+def _free_names(func_node: ast.FunctionDef) -> set[str]:
+    """Best-effort static check for names the function reads but never
+    defines, imports (within itself), or receives as a parameter - a
+    strong signal it depends on module-level context (a helper function,
+    an import, a constant) that won't exist when it's run on its own.
+    Not a full scope/closure analysis, just enough to catch the common
+    real case of "calls a sibling function from the original file" or
+    "uses a name that needed a module-level import".
+    """
+    bound: set[str] = {func_node.name}
+
+    def _add_arglist(a: ast.arguments) -> None:
+        for arg in a.posonlyargs + a.args + a.kwonlyargs:
+            bound.add(arg.arg)
+        if a.vararg:
+            bound.add(a.vararg.arg)
+        if a.kwarg:
+            bound.add(a.kwarg.arg)
+
+    _add_arglist(func_node.args)
+
+    loaded: set[str] = set()
+    for node in ast.walk(func_node):
+        if isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                bound.add(alias.asname or alias.name.split(".")[0])
+        elif isinstance(node, ast.Name):
+            if isinstance(node.ctx, (ast.Store, ast.Del)):
+                bound.add(node.id)
+            elif isinstance(node.ctx, ast.Load):
+                loaded.add(node.id)
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node is not func_node:
+                bound.add(node.name)
+            _add_arglist(node.args)
+        elif isinstance(node, ast.Lambda):
+            _add_arglist(node.args)
+        elif isinstance(node, ast.ClassDef):
+            bound.add(node.name)
+        elif isinstance(node, ast.ExceptHandler) and node.name:
+            bound.add(node.name)
+
+    return loaded - bound - set(dir(_builtins_module))
 
 
 def propose_fix(finding: SecurityFinding, hypothesis: AttackHypothesis) -> str:

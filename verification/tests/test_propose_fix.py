@@ -136,3 +136,73 @@ def test_propose_fix_rejects_async_function(monkeypatch):
 
     with pytest.raises(FixValidationError, match="not async"):
         propose_fix(_fake_finding(), _fake_hypothesis())
+
+
+def test_propose_fix_rejects_call_to_undefined_helper(monkeypatch):
+    # Regression test for a real bug: a fix that calls a module-level
+    # helper (e.g. _seed(cur), matching the original file it was "fixed"
+    # in) will raise NameError when run standalone via
+    # build_script_from_source, which only ever gets THIS function's text
+    # - nothing else from the original module. Worse, that NameError
+    # means the exploit never runs either, so a broken fix like this
+    # would otherwise look like VERIFIED_FIXED instead of a crash.
+    monkeypatch.setattr(
+        propose_fix_module,
+        "generate_hypothesis_json",
+        lambda prompt: {
+            "fixed_source": (
+                "def vulnerable(name):\n"
+                "    con = sqlite3.connect(':memory:')\n"
+                "    cur = con.cursor()\n"
+                "    _seed(cur)\n"
+                "    cur.execute('SELECT * FROM users WHERE name = ?', (name,))\n"
+                "    return 0\n"
+            )
+        },
+    )
+
+    with pytest.raises(FixValidationError, match="not self-contained"):
+        propose_fix(_fake_finding(), _fake_hypothesis())
+
+
+def test_propose_fix_accepts_self_contained_fix_with_inline_import(monkeypatch):
+    monkeypatch.setattr(
+        propose_fix_module,
+        "generate_hypothesis_json",
+        lambda prompt: {
+            "fixed_source": (
+                "def vulnerable(name):\n"
+                "    import sqlite3\n"
+                "    con = sqlite3.connect(':memory:')\n"
+                "    cur = con.cursor()\n"
+                "    cur.execute('CREATE TABLE users (name TEXT)')\n"
+                "    cur.execute('SELECT * FROM users WHERE name = ?', (name,))\n"
+                "    return 0\n"
+            )
+        },
+    )
+
+    result = propose_fix(_fake_finding(), _fake_hypothesis())
+    assert "import sqlite3" in result
+
+
+def test_propose_fix_accepts_recursive_and_nested_helper_definitions(monkeypatch):
+    # A function that defines its own nested helper, or calls itself, is
+    # genuinely self-contained - must not be flagged.
+    monkeypatch.setattr(
+        propose_fix_module,
+        "generate_hypothesis_json",
+        lambda prompt: {
+            "fixed_source": (
+                "def vulnerable(host):\n"
+                "    def _is_safe(h):\n"
+                "        return h.isalnum()\n"
+                "    if not _is_safe(host):\n"
+                "        raise ValueError('bad host')\n"
+                "    return 0\n"
+            )
+        },
+    )
+
+    result = propose_fix(_fake_finding(), _fake_hypothesis())
+    assert "_is_safe" in result
