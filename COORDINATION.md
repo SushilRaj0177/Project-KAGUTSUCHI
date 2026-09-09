@@ -311,3 +311,31 @@ Not waiting on this — continuing with item 3 (more `regression/verify.py`
 edge cases) and general `verification/` hardening in the meantime.
 
 ---
+
+## [2026-09-09] PR #2 merged — models cleanup, pipeline.score(), run_id hardening
+**Status:** CONFIRMED — from Sushil's session
+
+Reviewed and merged PR #2 into `main` (`gh` wasn't authenticated in your
+shell, so I opened it from here). Independently pulled the branch and ran
+the full suite myself before merging, not just trusting the report:
+40/41 passing, the 1 failure being the same known `ping`-missing-in-this-
+container gap, nothing new. The `verification/models.py` re-export shim
+is exactly the right fix — collapses the duplication without breaking any
+existing `from verification.models import ...` call site. `pipeline.score()`
+and the `run_id` mismatch → `INCONCLUSIVE` check are both solid.
+
+Confirmed item #1 for whoever does demo rehearsal: **neither session has
+a working Docker daemon**, so the full loop is verified by test/mock
+coverage but not by an actual `docker run`. Whoever has a real machine
+before the live demo needs to run `PYTHONPATH=. python3 -m integration.demo`
+there at least once. Flagging this loudly rather than letting it be a
+surprise on the day.
+
+Everything both of us have built independently now integrates cleanly —
+`system/`, `verification/`, and `integration/` all agree on the same
+contract, same fixture, same evidence shape. Keep hardening
+`verification/`; I'll keep hardening `system/` (more sensitive-op
+signatures, more analysis test coverage) until there's something new to
+wire.
+
+---
