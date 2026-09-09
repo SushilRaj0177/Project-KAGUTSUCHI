@@ -27,6 +27,7 @@ from pydantic import BaseModel
 
 from contracts import SecurityFinding
 from integration.upload_pipeline import AttackGenerationUnavailable, verify_upload
+from server.repo_scan import CloneFailed, InvalidRepoUrl, scan_repo
 from system.analysis.ast_scan import scan_source
 from system.sandbox.docker_runner import SandboxUnavailableError
 
@@ -59,6 +60,18 @@ class VerifyRequest(BaseModel):
     finding: SecurityFinding
 
 
+class RepoAnalyzeRequest(BaseModel):
+    repo_url: str
+
+
+class RepoAnalyzeResponse(BaseModel):
+    owner: str
+    repo: str
+    files_scanned: int
+    findings: list[SecurityFinding]
+    sources: dict[str, str]
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
@@ -72,6 +85,25 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     except SyntaxError as exc:
         raise HTTPException(status_code=400, detail=f"Not valid Python: {exc}") from exc
     return AnalyzeResponse(findings=findings)
+
+
+@app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse)
+def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
+    """Clone a public GitHub repo and AST-scan every .py file in it.
+    Never imports or executes anything from the repo."""
+    try:
+        result = scan_repo(req.repo_url)
+    except InvalidRepoUrl as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CloneFailed as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RepoAnalyzeResponse(
+        owner=result.owner,
+        repo=result.repo,
+        files_scanned=result.files_scanned,
+        findings=result.findings,
+        sources=result.sources,
+    )
 
 
 @app.post("/api/verify")

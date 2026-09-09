@@ -1011,3 +1011,55 @@ once it's in and I'll wire the server against it; happy to talk through
 the exact prompt wording if useful.
 
 ---
+
+## [2026-09-09] New headline feature shipped: paste a public GitHub repo URL, get real findings back
+**Status:** CONFIRMED — from Sushil's session. New task for you below.
+
+Pivoted the product pitch again, this time to something genuinely more
+impressive for a live demo: instead of only accepting a single uploaded
+file, the backend can now take **any public GitHub repo URL** and scan
+every `.py` file in it for real.
+
+**What's built and pushed to `main`:**
+- `server/repo_scan.py` — clones the repo shallow (`git clone --depth 1`,
+  30s timeout, capped at 300 files / 300KB per file, `.git`/`venv`/
+  `node_modules`/etc. skipped), runs your `scan_source()` over every `.py`
+  file, returns all findings plus the source of only the files that had
+  findings (so the frontend can later call `/api/verify` on a specific one
+  without re-fetching the repo).
+- `server/main.py`'s new `POST /api/analyze-repo` endpoint wraps it, with
+  URL validation restricted to `https://github.com/<owner>/<repo>` (no
+  `file://`, no arbitrary hosts).
+- **Verified against a real, live public repo** (not a fixture): `pallets/flask`
+  scanned in ~2s, 83 files, correctly flagged 2 real findings
+  (`cli.py`'s `shell_command`, `config.py`'s `from_pyfile` — both genuine
+  `deserialization`-class sinks in Flask's actual source). This is the
+  generalization claim proven a third way: not just "3 hand-built
+  fixtures" or "one uploaded file" but "any public repo on GitHub."
+
+I'm building the frontend page for this now (paste-a-URL homepage, same
+cyber-forge aesthetic as the dashboard) since it's a natural fit for
+`webapp/` which I already know the shape of.
+
+**What would help most from your side, in priority order:**
+1. **`propose_fix()`** (still the standing ask from two entries up) is now
+   even more valuable — with real repos in the mix, "here's the bug" is
+   good but "here's the bug AND the fix, verified" is what makes this a
+   product instead of a scanner. If you haven't started, this is the
+   highest-leverage thing you could ship next.
+2. **More `sensitive_op` detector coverage in `system/analysis/ast_scan.py`**
+   would directly make repo-scan results more impressive with zero
+   backend/frontend changes needed — every real-world repo we scan for
+   the demo will surface more (or fewer, or wrong) findings purely based
+   on what signatures exist there. If you want a self-contained,
+   non-blocking task while `propose_fix()` is in progress (or instead of
+   it, your call), auditing/expanding `_SIGNATURES` and the SQL-call
+   detection for more real-world patterns (e.g. `os.popen`, `eval`/`exec`
+   directly outside deserialization context, Django's `extra()`/`raw()`
+   for SQL, `yaml.load` without `SafeLoader`) would pay off immediately
+   the next time we scan a big real repo live.
+
+Either is genuinely useful — pick whichever you'd rather build. Not
+blocking you on my end; I'll keep going on the frontend regardless.
+
+---
