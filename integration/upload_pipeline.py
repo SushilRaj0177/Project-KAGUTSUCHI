@@ -18,13 +18,12 @@ Two real constraints, stated plainly rather than papered over:
 from __future__ import annotations
 
 import ast
-import uuid
 from dataclasses import dataclass
 
 from contracts import AttackHypothesis, ExecutionEvidence, SecurityFinding
 from integration.adapters import to_system, to_verification
 from system.orchestration import build_script_from_source, new_run_id, replay_attack, run_attack
-from verification.hypothesis.groq_client import generate_hypothesis_json
+from verification.hypothesis.generate import generate as generate_hypothesis
 from verification.models import AttackHypothesis as VAttackHypothesis
 from verification.models import ExecutionEvidence as VExecutionEvidence
 from verification.models import SecurityFinding as VSecurityFinding
@@ -54,54 +53,13 @@ class UploadVerificationBundle:
     fix_error: str | None
 
 
-_PROMPT_TEMPLATE = """You are a security analyst producing exactly ONE concrete, \
-deterministic attack hypothesis for the vulnerable code below. Do not fuzz \
-or list options - pick the single most direct exploit of the flagged \
-sensitive operation.
-
-sensitive_op: {sensitive_op}
-symbol: {symbol}
-file_path: {file_path}
-diff_hunk:
-{diff_hunk}
-
-rationale: {rationale}
-
-Your payload MUST, if the exploit succeeds, cause a file at the exact \
-path /tmp/kagutsuchi_pwned to be created — this is the single observable \
-signal used to score every finding, so route whatever mechanism fits this \
-sensitive_op (shell metacharacter chaining, ATTACH DATABASE, a __reduce__ \
-that calls eval(...), etc.) toward creating that exact file. If the code \
-truly cannot be made to create a file this way, pick the closest \
-equivalent side effect and say so plainly in attack_vector.
-
-Respond with a single JSON object with exactly these keys:
-security_property, attack_vector, payload, expected_if_vulnerable, \
-expected_if_safe. All values must be plain strings. `payload` must be a \
-single concrete input, not a description.
-"""
-
-
 def _generate_hypothesis_or_raise(finding: VSecurityFinding) -> VAttackHypothesis:
-    prompt = _PROMPT_TEMPLATE.format(
-        sensitive_op=finding.sensitive_op.value,
-        symbol=finding.symbol,
-        file_path=finding.file_path,
-        diff_hunk=finding.diff_hunk,
-        rationale=finding.rationale,
-    )
+    """Delegates to verification.hypothesis.generate() with fallback=None
+    (one prompt implementation, not two that can drift apart -- this used
+    to hand-duplicate the prompt template with a less specific marker
+    instruction than generate()'s per-sensitive_op mechanism hints)."""
     try:
-        raw = generate_hypothesis_json(prompt)
-        return VAttackHypothesis(
-            hypothesis_id=str(uuid.uuid4()),
-            finding_id=finding.finding_id,
-            security_property=raw["security_property"],
-            attack_vector=raw["attack_vector"],
-            payload=raw["payload"],
-            expected_if_vulnerable=raw["expected_if_vulnerable"],
-            expected_if_safe=raw["expected_if_safe"],
-            generated_by="groq:openai/gpt-oss-120b",
-        )
+        return generate_hypothesis(finding, fallback=None)
     except Exception as exc:
         raise AttackGenerationUnavailable(
             "Could not generate an attack for this code right now "
