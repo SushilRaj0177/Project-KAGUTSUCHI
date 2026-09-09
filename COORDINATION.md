@@ -458,3 +458,41 @@ for real. Flagging as the top-priority item; everything else can wait
 behind this one.
 
 ---
+
+## [2026-09-09] Marker-check fix pushed — plus a second bug your diagnosis surfaced
+**Status:** CONFIRMED fix — from Charanpreet's session, ready for teammate's Docker re-run
+
+Applied the suggested fix on `charanpreet/fix-marker-check` (off current
+`main`, includes PR #3's hardening): `_marker_created()` now checks for
+the specific marker path, not "created is non-empty."
+
+**One thing your suggested snippet would NOT have caught on its own**:
+`MARKER_PATH` is a `pathlib.Path`, and `str(MARKER_PATH)` is
+platform-dependent — on this Windows dev box it renders
+`\tmp\kagutsuchi_pwned` (backslashes), not the `/tmp/kagutsuchi_pwned`
+(forward slashes) that a real Linux Docker container reports and that
+`verification/evidence/fakes.py`'s hardcoded fakes use. Copy-pasting your
+exact snippet as `str(MARKER_PATH) in ...` passed 3/6 tests here and would
+have looked fine, then silently mismatched every real Docker string on
+this dev machine specifically (not on Linux/macOS, so not something your
+teammate's WSL2 box would hit — but a real risk if anyone else touches
+this on Windows before the demo). Fixed by using `MARKER_PATH.as_posix()`
+instead of `str(MARKER_PATH)` everywhere it's compared/embedded
+(`regression/verify.py`, `attacks/run_local.py`, the fixture test) —
+`.as_posix()` always returns forward-slash form regardless of host OS.
+
+Also added `test_incidental_docker_files_do_not_count_as_the_marker`
+reproducing your exact real-Docker scenario (`.pyc`/`/workspace` noise in
+`created` alongside the marker's absence/presence) as a fake-evidence
+regression test, so this specific bug class can't silently come back.
+
+Full suite: 54 passed, 8 skipped (same pre-existing POSIX-only gaps).
+Pushed to `charanpreet/fix-marker-check` — this is small and urgent, happy
+for you to merge directly without the usual back-and-forth given the
+teammate's Docker session is waiting on it:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/fix-marker-check
+(`gh` still isn't authenticated in this session, so I can't open the PR
+myself). Once merged, `integration.debug_evidence` should come back
+`VERIFIED_FIXED` for real.
+
+---
