@@ -1368,3 +1368,205 @@ real sandboxed Attack & Verify only runs from a machine with Docker
 
 Not blocking you — signature-suggestions work is still the most useful
 next thing whenever you get to it.
+
+---
+
+## [2026-09-10] Full ast_scan.py patch, ready to apply — deleted the stale branch
+**Status:** PROPOSED — from Charanpreet's session, ready-to-paste code (not editing system/ myself)
+
+Deleted `charanpreet/signature-suggestions` (both remote and local) — you
+were right, it was branched before `propose-fix`/`more-payload-variants`/
+`generate-no-fallback-mode` landed and had nothing real in it. Did the
+actual implementation work this time instead of just describing it, and
+**validated every new heuristic against synthetic code in a standalone
+scratch script first** (copied `_dotted_call_name`/`_is_string_built`
+verbatim, ran 12 hand-written positive/negative cases through each new
+function) — all 12 passed — before writing this up, since I won't touch
+`system/analysis/ast_scan.py` myself to test it directly there.
+
+**1. New `_SIGNATURES` entries** (add to the existing dict):
+```python
+    "marshal.loads": (
+        SensitiveOp.DESERIALIZATION,
+        "marshal.loads can execute/reconstruct arbitrary code objects "
+        "from untrusted data, the same class of risk as pickle.loads.",
+        "ast.marshal.loads",
+    ),
+    "os.execv": (
+        SensitiveOp.SUBPROCESS,
+        "os.execv replaces the current process image with an "
+        "attacker-influenced argv.",
+        "ast.subprocess.os_execv",
+    ),
+    "os.execve": (
+        SensitiveOp.SUBPROCESS,
+        "os.execve replaces the current process image with an "
+        "attacker-influenced argv/environment.",
+        "ast.subprocess.os_execve",
+    ),
+    "os.spawnv": (
+        SensitiveOp.SUBPROCESS,
+        "os.spawnv spawns a new process with an attacker-influenced argv.",
+        "ast.subprocess.os_spawnv",
+    ),
+```
+
+**2. Django ORM `.raw()`/`.extra(where=...)`** — same string-built-argument
+philosophy as the existing `_sql_call_hit`, just different method names/shape:
+```python
+def _django_sql_call_hit(node: ast.Call) -> _CallSite | None:
+    """Extends _sql_call_hit to Django ORM's .raw()/.extra(where=...) —
+    same string-built-argument heuristic, different method names."""
+    func = node.func
+    if not isinstance(func, ast.Attribute):
+        return None
+    if func.attr == "raw":
+        if not node.args or not _is_string_built(node.args[0]):
+            return None
+        return _CallSite(
+            function_name="",
+            call_name="<queryset>.raw",
+            lineno=node.lineno,
+            op=SensitiveOp.SQL_QUERY,
+            rationale=(
+                ".raw() is called with a string built at runtime — Django's "
+                "raw SQL escape hatch bypasses ORM parameterization."
+            ),
+            detector="ast.sql_injection.django_raw",
+        )
+    if func.attr == "extra":
+        where_arg = next((kw.value for kw in node.keywords if kw.arg == "where"), None)
+        if where_arg is None or not (
+            isinstance(where_arg, (ast.List, ast.Tuple))
+            and any(_is_string_built(elt) for elt in where_arg.elts)
+        ):
+            return None
+        return _CallSite(
+            function_name="",
+            call_name="<queryset>.extra",
+            lineno=node.lineno,
+            op=SensitiveOp.SQL_QUERY,
+            rationale=(
+                ".extra(where=[...]) with a string built at runtime injects "
+                "raw SQL into the WHERE clause, bypassing parameterization."
+            ),
+            detector="ast.sql_injection.django_extra",
+        )
+    return None
+```
+
+**3. `yaml.load()` without a Safe loader** — the highest real-world hit
+rate one, checks the `Loader=` kwarg rather than just the call name:
+```python
+def _yaml_load_hit(node: ast.Call) -> _CallSite | None:
+    """yaml.load(data, Loader=X) is safe only if X names a Safe loader.
+    yaml.load(data) with no Loader kwarg at all is also flagged - older
+    PyYAML defaults to the unsafe Loader in that case."""
+    if _dotted_call_name(node) != "yaml.load":
+        return None
+    loader_kw = next((kw.value for kw in node.keywords if kw.arg == "Loader"), None)
+    if loader_kw is not None:
+        loader_name = None
+        if isinstance(loader_kw, ast.Attribute):
+            loader_name = loader_kw.attr
+        elif isinstance(loader_kw, ast.Name):
+            loader_name = loader_kw.id
+        elif isinstance(loader_kw, ast.Call):
+            loader_name = _dotted_call_name(loader_kw)
+        if loader_name and "Safe" in loader_name:
+            return None
+    return _CallSite(
+        function_name="",
+        call_name="yaml.load",
+        lineno=node.lineno,
+        op=SensitiveOp.DESERIALIZATION,
+        rationale=(
+            "yaml.load() without Loader=yaml.SafeLoader can construct "
+            "arbitrary Python objects from untrusted YAML, a known "
+            "code-execution sink (use yaml.safe_load instead)."
+        ),
+        detector="ast.deserialization.yaml_load_unsafe",
+    )
+```
+
+**4. SSTI**: `flask.render_template_string(<string-built>)` or a chained
+`jinja2.Template(<string-built>).render(...)`:
+```python
+def _ssti_hit(node: ast.Call) -> _CallSite | None:
+    """flask.render_template_string(x) or a Jinja2 Template(x).render(...)
+    where the template source itself is string-built - server-side
+    template injection, a code-execution sink."""
+    name = _dotted_call_name(node)
+    if name in ("render_template_string", "flask.render_template_string"):
+        if node.args and _is_string_built(node.args[0]):
+            return _CallSite(
+                function_name="",
+                call_name=name,
+                lineno=node.lineno,
+                op=SensitiveOp.DESERIALIZATION,
+                rationale=(
+                    "render_template_string compiles and executes its "
+                    "argument as a Jinja2 template - string-built input "
+                    "is server-side template injection (SSTI)."
+                ),
+                detector="ast.ssti.render_template_string",
+            )
+        return None
+    func = node.func
+    if isinstance(func, ast.Attribute) and func.attr == "render" and isinstance(func.value, ast.Call):
+        inner_name = _dotted_call_name(func.value)
+        if inner_name in ("Template", "jinja2.Template") and func.value.args and _is_string_built(func.value.args[0]):
+            return _CallSite(
+                function_name="",
+                call_name="Template(...).render",
+                lineno=node.lineno,
+                op=SensitiveOp.DESERIALIZATION,
+                rationale=(
+                    "jinja2.Template() is constructed from a string built "
+                    "at runtime, then rendered - server-side template "
+                    "injection (SSTI), a code-execution sink."
+                ),
+                detector="ast.ssti.jinja2_template",
+            )
+    return None
+```
+
+**5. Wire the three new heuristics into `sensitive_ops_in_function`**
+(alongside the existing `_sql_call_hit` call):
+```python
+def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
+    hits: list[_CallSite] = []
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.Call):
+            continue
+        name = _dotted_call_name(node)
+        if name in _SIGNATURES:
+            hits.append(_CallSite(func_node.name, name, node.lineno))
+            continue
+        for heuristic in (_sql_call_hit, _django_sql_call_hit, _yaml_load_hit, _ssti_hit):
+            hit = heuristic(node)
+            if hit is not None:
+                hit.function_name = func_node.name
+                hits.append(hit)
+                break
+    return hits
+```
+
+Notes: `_ssti_hit`'s `Template(...).render()` chain-matching is the one
+I'd give the most scrutiny in review — it's a two-level call pattern
+(`.render` on the result of a `Template(...)` call), structurally
+different from every other heuristic here. All four `_is_string_built`
+literal-vs-f-string distinctions worked correctly in my synthetic tests
+(a hardcoded template/query string never fires, matching the existing
+`_sql_call_hit` philosophy of avoiding false positives on safe literals).
+`yaml.safe_load` is intentionally NOT flagged (it's already safe) - only
+`yaml.load` is checked, and only when its `Loader` kwarg is absent or
+non-Safe.
+
+Didn't touch `system/analysis/ast_scan.py` or its test suite - this is
+ready to paste in, plus whatever test cases you want in
+`tests/system/test_ast_scan.py` (my 12 synthetic cases above would need
+adapting to that suite's existing fixture style). Your call on exact
+wording/detector-id naming if you want to adjust before merging.
+
+---
