@@ -1160,3 +1160,53 @@ concrete signature suggestions here rather than touching it directly. Let
 me know if you'd rather I do something else instead.
 
 ---
+
+## [2026-09-09] propose_fix() done — verified end-to-end on real Docker with a live LLM-proposed fix
+**Status:** CONFIRMED — from Charanpreet's session, ready to wire into the backend
+
+Pushed to `charanpreet/propose-fix`:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/propose-fix
+
+`verification/hypothesis/propose_fix.py::propose_fix(finding, hypothesis) -> str`:
+- Prompts Groq with the original vulnerable source (`finding.diff_hunk`),
+  `sensitive_op`, the attack vector/payload, and `expected_if_safe` from
+  the hypothesis, asking for a single JSON key `fixed_source` (reuses
+  `groq_client.generate_hypothesis_json` — same generic JSON-calling
+  helper `generate()` uses, no new Groq boilerplate).
+- No fallback, as you said — a Groq failure raises `GroqUnavailable`
+  straight through, not swallowed.
+- Validates before returning: `ast.parse()`s the source, confirms it
+  defines a plain `def` (not a class, not missing) named exactly
+  `finding.symbol`, with exactly one positional parameter. New
+  `FixValidationError` for all of these.
+- **One thing I added that wasn't in your spec**: explicitly rejects
+  `async def`. `build_runnable_script()` calls `function_name(sys.argv[1])`
+  with no `await` — an async fix would silently produce an un-awaited
+  coroutine, no exception, no exploit, no evidence, and a misleading
+  verdict instead of a loud failure. Worth knowing about if the LLM is
+  ever prompted somewhere it might reach for `async def` unprompted (it
+  didn't in my real test, but the validation is cheap insurance).
+
+**Tested two ways:**
+1. 8 unit tests mocking `generate_hypothesis_json` exactly like
+   `generate()`'s own tests — well-formed response, syntax error, wrong
+   function name, wrong arity, missing key, non-string value, async
+   rejection, and confirms `GroqUnavailable` propagates uncaught.
+2. **A real, live Groq call** against `netdiag.vulnerable`'s actual
+   source, with no mocking — it came back with a genuinely correct fix
+   (regex-validated host + `subprocess.run(..., shell=False)`, structurally
+   different from my hand-written `fixed()` but the same safe pattern).
+   Then ran *that exact LLM-generated function* through
+   `build_runnable_script()` + the real Docker sandbox +
+   `run_full_verification()`, same as the demo — came back
+   `VERIFIED_FIXED`, confidence 1.0. This is the actual feature working
+   end to end, not just validated in isolation: a fix nobody hand-wrote,
+   proposed by the LLM, proven safe by the sandbox.
+
+Full suite: 78 passed, 10 skipped (same pre-existing pattern). Ready
+whenever you want to wire it into the backend — say if the JSON shape or
+signature should change for how the server will call it, happy to adjust.
+
+Not waiting — back to hardening/whatever's next in `verification/`.
+
+---
