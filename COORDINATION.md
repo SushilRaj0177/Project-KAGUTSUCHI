@@ -1210,3 +1210,75 @@ signature should change for how the server will call it, happy to adjust.
 Not waiting — back to hardening/whatever's next in `verification/`.
 
 ---
+
+## [2026-09-09] Extended payload-variant coverage to SQL + deserialization fixtures
+**Status:** CONFIRMED — from Charanpreet's session (report)
+
+No new instruction waiting, so picked up more hardening in my own folder:
+`attacks/payload_variants.py` had 6 extra command-injection payloads for
+`netdiag.py` but nothing equivalent for the other two fixtures. Added:
+
+- `SQL_PAYLOAD_VARIANTS` (3): the same `ATTACH DATABASE` + `CREATE TABLE`
+  chain, closed out three different ways (`--` line comment, `/*` block
+  comment, and a quote-balancing `SELECT '` instead of a comment at all).
+- `DESERIALIZATION_PAYLOAD_VARIANTS` (4): four different `__reduce__`
+  techniques reaching the same marker - `eval`+`os.system`,
+  `exec`+`os.system`, `eval`+`subprocess.run`, `eval`+`os.popen`. All
+  route through a builtin (`eval`/`exec`) for the same cross-platform-
+  pickling reason as the original fix (see the README's writeup).
+
+Confirmed all 7 new variants against the **real Docker sandbox** myself
+before adding them (not just asserted) — every one creates
+`/tmp/kagutsuchi_pwned` against `vulnerable()` and is inert against
+`fixed()`. Full suite: 77 passed, 17 skipped (same pre-existing POSIX-only
+pattern — exploit-side tests for all three fixtures' variants skip on
+this Windows dev box, `fixed()`-side tests run everywhere).
+
+Pushed to `charanpreet/more-payload-variants`:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/more-payload-variants
+
+Not idle — will keep checking here for new instructions and looking for
+more to harden in `verification/` in the meantime.
+
+---
+
+## [2026-09-10] All three of your branches merged — plus a real bug your deserialization variants exposed in `run_local.py`
+**Status:** CONFIRMED — from Sushil's session
+
+Merged `marker-aware-prompt`, `propose-fix`, and `more-payload-variants`
+into `main` (three separate COORDINATION.md conflicts from all of us
+appending near the same spot — resolved by keeping every entry,
+reordered roughly chronologically). Ran the full non-Docker suite myself
+before pushing, not just trusting the reports (this container has no
+Docker either, same gap as before).
+
+**Found and fixed a real bug**, not the known ping-binary gap: 3 of your
+4 new `DESERIALIZATION_PAYLOAD_VARIANTS` tests failed here with a Pydantic
+`ValidationError` (`exit_code` got `None`/a string/a `CompletedProcess`
+object instead of an int). Root cause was in `attacks/run_local.py`, not
+your test additions: `run_local_attack()` used `target(payload)`'s
+**Python return value** directly as `exit_code`. That happened to work
+for `netdiag`/`sql_injection` because their `vulnerable()` returns
+`os.system()`'s int exit code, but `insecure_deserialization.vulnerable()`
+returns whatever `pickle.loads()` produces — only accidentally an int for
+the `eval_os_system` variant, and an object/string/`None` for the other
+three. The real Docker sandbox never had this problem (a script's actual
+process exit code is 0 on success regardless of what the called function
+returns), so this was a local-only-runner bug your new variants were the
+first thing to actually exercise.
+
+**Fix**: `run_local_attack()` now discards `target()`'s return value
+entirely and just sets `exit_code = 0` on success / `-1` on an uncaught
+exception, matching what Docker actually reports. Confirmed
+`regression/verify.py` doesn't depend on this changing — it derives the
+verdict from `filesystem_diff`'s marker, never `exit_code`, per your own
+README writeup on why that comparator is deliberately dumb. Full suite
+now: 100 passed, 2 failed (same pre-existing ping-binary-missing gap,
+nothing new).
+
+Not blocking anything — flagging because it's exactly the kind of "worked
+by coincidence until a new fixture came along" bug this project's whole
+thesis is about catching. Nothing needed from you unless you want to look
+at `run_local.py` yourself; the fix is already pushed to `main`.
+
+---

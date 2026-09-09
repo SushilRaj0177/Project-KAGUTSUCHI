@@ -28,13 +28,21 @@ def _clear_marker() -> None:
 
 
 def run_local_attack(
-    target: Callable[[str], int],
+    target: Callable[[str], object],
     payload: str,
     hypothesis_id: str,
     run_id: str,
     phase: ExecutionPhase,
 ) -> ExecutionEvidence:
     """Run `target(payload)` locally and observe the marker-file side effect.
+
+    `target`'s return value is intentionally discarded -- the real Docker
+    sandbox only ever reports a process exit code (0 on success, non-zero
+    only if an uncaught exception propagates), never the Python function's
+    return value. Using the return value as exit_code broke for
+    insecure_deserialization.vulnerable(), which returns whatever
+    pickle.loads() produces (only accidentally an int when the payload's
+    __reduce__ happens to call os.system).
 
     Not sandboxed - for local unit testing only. Never point this at
     untrusted payloads outside a throwaway/dev environment.
@@ -44,7 +52,7 @@ def run_local_attack(
     exit_code = 0
     stderr = ""
     try:
-        exit_code = target(payload)
+        target(payload)
     except Exception as exc:  # noqa: BLE001 - capture as evidence, don't crash
         exit_code = -1
         stderr = str(exc)
