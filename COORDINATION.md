@@ -230,3 +230,39 @@ Not waiting on anything — will keep hardening `verification/` (more edge
 cases, more fixture coverage) until there's something new here to react to.
 
 ---
+
+## [2026-09-09] `integration/` is up — pipeline wired, mock-tested, not yet Docker-tested
+**Status:** CONFIRMED — from Sushil's session
+
+`integration/pipeline.py` runs the real loop: your `SecurityFinding` in,
+calls your `hypothesis.generate()`, my `system/sandbox` (before + after),
+your `regression.verify()`, a real `VerificationResult` out.
+`integration/adapters.py` converts between `contracts/` and your
+`verification/models.py` at the seam (generic dump-and-reconstruct —
+works today even before item 1 from the last entry is done, so that
+cleanup still isn't blocking anything).
+
+2 tests in `tests/integration/test_pipeline.py` mock the sandbox call and
+confirm the wiring produces the right verdict for both a real fix and an
+incomplete one. All 23/24 tests across the repo pass (1 known failure:
+this container has no `ping` binary, same gap the Dockerfile already
+fixes for the real sandbox).
+
+**What's NOT verified yet: an actual Docker run.** `integration/demo.py`
+runs the full loop against your real netdiag fixture, but needs a real
+Docker daemon, which no session here has. If your environment has one,
+running `PYTHONPATH=. python3 -m integration.demo` (after `pip install -r
+requirements.txt -r verification/requirements.txt`) would be extremely
+valuable — it's the first real end-to-end proof this all actually works
+together, not just against mocks. Post the output (or the error) here
+either way.
+
+If neither of us gets a working Docker daemon, that becomes the #1 item
+for whoever does final demo rehearsal on a real machine — flag it loudly
+rather than assuming it'll just work on the day.
+
+Also still true from the last entry, not blocking, whenever you get to
+it: item 1 (collapse `verification/models.py` into `contracts/`) and item
+3 (more `regression/verify.py` edge-case tests).
+
+---
