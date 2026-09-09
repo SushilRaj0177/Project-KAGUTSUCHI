@@ -63,39 +63,58 @@ function RunDetail({ run }: { run: RunRow }) {
   const finding = run.finding as { symbol?: string; file_path?: string; rationale?: string };
   const hypothesis = run.hypothesis as { payload?: string; security_property?: string };
 
+  const plainSummary =
+    run.verdict === "VERIFIED_FIXED"
+      ? t.plainVerifiedFixed
+      : run.verdict === "STILL_VULNERABLE"
+        ? t.plainStillVulnerable
+        : t.plainOther;
+
   return (
-    <div className="space-y-4 border-t border-line p-5">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <div className={`bracket-label font-mono text-sm font-bold text-paper-50 ${jp}`}>{t.finding}</div>
-          <div className="font-mono text-sm text-paper-50">
-            {finding?.file_path ?? "—"} · {finding?.symbol ?? "—"}
-          </div>
-          <p className="mt-1 text-xs text-steel-400">{finding?.rationale ?? ""}</p>
+    <div className="space-y-6 border-t border-line p-5">
+      <div>
+        <div className={`text-xs font-bold tracking-wide neon-text-cyan uppercase ${jp}`}>{t.whatHappened}</div>
+        <p className="mt-2 max-w-2xl text-sm leading-relaxed text-paper-50">{plainSummary}</p>
+      </div>
+
+      <div>
+        <div className={`bracket-label mb-3 font-mono text-xs font-bold text-steel-400 uppercase ${jp}`}>
+          {t.technicalDetails}
         </div>
-        <div>
-          <div className={`bracket-label font-mono text-sm font-bold text-paper-50 ${jp}`}>{t.hypothesis}</div>
-          <p className="text-xs text-steel-400">{hypothesis?.security_property ?? ""}</p>
-          {hypothesis?.payload && (
-            <div className="mt-1 inline-block border border-line px-2 py-1 font-mono text-xs text-paper-50">
-              {hypothesis.payload}
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <div className={`font-mono text-sm font-bold text-paper-50 ${jp}`}>{t.finding}</div>
+            <div className="font-mono text-sm text-paper-50">
+              {finding?.file_path ?? "—"} · {finding?.symbol ?? "—"}
             </div>
-          )}
+            <p className="mt-1 text-xs text-steel-400">{finding?.rationale ?? ""}</p>
+          </div>
+          <div>
+            <div className={`font-mono text-sm font-bold text-paper-50 ${jp}`}>{t.hypothesis}</div>
+            <p className="text-xs text-steel-400">{hypothesis?.security_property ?? ""}</p>
+            {hypothesis?.payload && (
+              <div className="mt-1 inline-block border border-line px-2 py-1 font-mono text-xs text-paper-50">
+                {hypothesis.payload}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2">
-        <EvidenceColumn evidence={run.before_evidence} label={t.before} tone="pink" />
-        <EvidenceColumn evidence={run.after_evidence} label={t.after} tone="cyan" />
-      </div>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <EvidenceColumn evidence={run.before_evidence} label={t.before} tone="pink" />
+          <EvidenceColumn evidence={run.after_evidence} label={t.after} tone="cyan" />
+        </div>
 
-      <p className="border border-line-strong p-3 text-sm text-paper-50">{run.summary}</p>
+        <p className="mt-4 border border-line-strong p-3 text-sm text-paper-50">{run.summary}</p>
+      </div>
     </div>
   );
 }
 
 export function Dashboard({ runs }: { runs: RunRow[] }) {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
   const [openId, setOpenId] = useState<string | null>(runs[0]?.id ?? null);
 
   const verifiedCount = runs.filter((r) => r.verdict === "VERIFIED_FIXED").length;
@@ -115,21 +134,20 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
         <div className="border border-line">
           {runs.map((run) => {
             const isOpen = openId === run.id;
+            const vulnLabel = t.vulnClass[run.sensitive_op] ?? run.sensitive_op;
             return (
               <div key={run.id} className="border-b border-line last:border-b-0">
                 <button
                   onClick={() => setOpenId(isOpen ? null : run.id)}
                   className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-void-900"
                 >
-                  <div className="flex items-center gap-4">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className={`font-display text-base font-bold ${jp}`}>{vulnLabel}</span>
                     <span className="font-mono text-xs text-steel-400 tabular-nums">
                       {formatTimestamp(run.created_at)}
                     </span>
-                    <span className="font-display text-base font-bold">
+                    <span className="border border-line-strong px-2 py-0.5 font-mono text-[11px] text-steel-400">
                       {run.fixture_name}
-                    </span>
-                    <span className="border border-line-strong px-2 py-0.5 font-mono text-[11px] uppercase text-steel-400">
-                      [ {run.sensitive_op} ]
                     </span>
                   </div>
                   <VerdictBadge verdict={run.verdict} />

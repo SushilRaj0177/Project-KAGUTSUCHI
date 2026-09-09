@@ -35,6 +35,13 @@ export interface Dict {
   fixUnavailable: string;
   severity: string;
   rationale: string;
+  vulnClass: Record<string, string>;
+  whatHappened: string;
+  plainVerifiedFixed: string;
+  plainStillVulnerable: string;
+  plainOther: string;
+  technicalDetails: string;
+  vulnerableCode: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -79,7 +86,24 @@ export const translations: Record<Lang, Dict> = {
     proposedFix: "Proposed fix",
     fixUnavailable: "Fix not available",
     severity: "Severity",
-    rationale: "Why this was flagged",
+    rationale: "Why this is dangerous",
+    vulnClass: {
+      shell_exec: "Command Injection",
+      subprocess: "Command Injection",
+      sql_query: "SQL Injection",
+      deserialization: "Insecure Deserialization",
+      filesystem: "Path Traversal",
+      auth_change: "Authentication Bypass",
+      network_egress: "Unsafe Network Access",
+    },
+    whatHappened: "What happened",
+    plainVerifiedFixed:
+      "We attacked this code for real, in an isolated sandbox — the attack worked. We then tried the exact same attack against the fixed version — it was blocked. The fix is verified.",
+    plainStillVulnerable:
+      "We attacked this code for real, in an isolated sandbox — the attack worked, and it still works after the proposed fix. This is not safe yet.",
+    plainOther: "We attacked this code for real, in an isolated sandbox. See the technical details below for exactly what happened.",
+    technicalDetails: "Technical details (for the curious)",
+    vulnerableCode: "The vulnerable code",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -122,6 +146,23 @@ export const translations: Record<Lang, Dict> = {
     proposedFix: "修正案",
     fixUnavailable: "修正案なし",
     severity: "深刻度",
-    rationale: "検出理由",
+    rationale: "危険な理由",
+    vulnClass: {
+      shell_exec: "コマンドインジェクション",
+      subprocess: "コマンドインジェクション",
+      sql_query: "SQLインジェクション",
+      deserialization: "安全でないデシリアライゼーション",
+      filesystem: "パストラバーサル",
+      auth_change: "認証バイパス",
+      network_egress: "危険なネットワークアクセス",
+    },
+    whatHappened: "何が起きたか",
+    plainVerifiedFixed:
+      "このコードに対して、隔離されたサンドボックス内で実際に攻撃を行いました — 攻撃は成功しました。次に、修正後のバージョンに全く同じ攻撃を試しました — 今度はブロックされました。修正は確認済みです。",
+    plainStillVulnerable:
+      "このコードに対して、隔離されたサンドボックス内で実際に攻撃を行いました — 攻撃は成功し、提案された修正後も依然として成功します。まだ安全ではありません。",
+    plainOther: "このコードに対して、隔離されたサンドボックス内で実際に攻撃を行いました。詳細は下記の技術情報をご覧ください。",
+    technicalDetails: "技術詳細（興味のある方向け）",
+    vulnerableCode: "脆弱なコード",
   },
 };

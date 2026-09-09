@@ -99,11 +99,8 @@ function FindingCard({
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-void-850"
       >
         <div className="flex flex-wrap items-center gap-3">
-          <span className="font-mono text-sm text-paper-50">{finding.file_path}</span>
-          <span className="font-mono text-xs text-steel-400">{finding.symbol}()</span>
-          <span className="border border-line-strong px-2 py-0.5 font-mono text-[11px] uppercase text-steel-400">
-            [ {finding.sensitive_op} ]
-          </span>
+          <span className={`font-display text-base font-bold ${jp}`}>{t.vulnClass[finding.sensitive_op] ?? finding.sensitive_op}</span>
+          <span className="font-mono text-xs text-steel-400">{finding.file_path}</span>
         </div>
         <span
           className={`font-mono text-xs tracking-widest ${finding.severity_hint === "high" ? "neon-text-pink" : "text-paper-50"}`}
@@ -116,12 +113,24 @@ function FindingCard({
       {open && (
         <div className="fade-in-up space-y-4 border-t border-line p-5">
           <div>
-            <div className={`bracket-label font-mono text-xs font-bold uppercase text-steel-400 ${jp}`}>{t.rationale}</div>
-            <p className="mt-1 text-sm text-paper-50">{finding.rationale}</p>
+            <div className={`text-xs font-bold tracking-wide neon-text-cyan uppercase ${jp}`}>{t.rationale}</div>
+            <p className="mt-2 text-sm leading-relaxed text-paper-50">{finding.rationale}</p>
           </div>
-          <pre className="max-h-56 overflow-auto border border-line bg-void-950 p-3 font-mono text-xs text-steel-400">
-            {finding.diff_hunk}
-          </pre>
+
+          <div>
+            <div className={`bracket-label mb-2 font-mono text-xs font-bold text-steel-400 uppercase ${jp}`}>
+              {t.vulnerableCode}
+            </div>
+            <div className="mb-2 flex flex-wrap gap-2">
+              <span className="font-mono text-xs text-steel-400">{finding.symbol}()</span>
+              <span className="border border-line-strong px-2 py-0.5 font-mono text-[11px] uppercase text-steel-400">
+                [ {finding.sensitive_op} ]
+              </span>
+            </div>
+            <pre className="max-h-56 overflow-auto border border-line bg-void-950 p-3 font-mono text-xs text-steel-400">
+              {finding.diff_hunk}
+            </pre>
+          </div>
 
           <MagneticButton
             onClick={runVerify}
@@ -140,11 +149,25 @@ function FindingCard({
           )}
 
           {verifyResult && (
-            <div className="fade-in-up space-y-3 border-t border-line pt-4">
+            <div className="fade-in-up space-y-4 border-t border-line pt-4">
               <div>
-                <div className={`text-xs font-bold uppercase text-steel-400 ${jp}`}>
-                  {t.attackResult}
+                <div className={`text-xs font-bold tracking-wide neon-text-cyan uppercase ${jp}`}>{t.whatHappened}</div>
+                {verifyResult.result ? (
+                  <p className="mt-2 text-sm leading-relaxed text-paper-50">{verifyResult.result.summary}</p>
+                ) : (
+                  <p className="mt-2 text-sm leading-relaxed text-paper-50">
+                    {verifyResult.before.filesystem_diff?.created?.includes("/tmp/kagutsuchi_pwned")
+                      ? t.plainOther
+                      : t.noFindingsBody}
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <div className={`bracket-label mb-2 font-mono text-xs font-bold text-steel-400 uppercase ${jp}`}>
+                  {t.technicalDetails}
                 </div>
+                <div className={`text-xs font-bold uppercase text-steel-400 ${jp}`}>{t.attackResult}</div>
                 <div className="mt-1 inline-block border border-line bg-void-950 px-2 py-1 font-mono text-xs text-paper-50">
                   {verifyResult.hypothesis.payload}
                 </div>
@@ -152,29 +175,23 @@ function FindingCard({
                   <EvidenceBox label={t.before} evidence={verifyResult.before} tone="pink" />
                   {verifyResult.after && <EvidenceBox label={t.after} evidence={verifyResult.after} tone="cyan" />}
                 </div>
+
+                {verifyResult.fixed_source ? (
+                  <div className="mt-4">
+                    <div className={`text-xs font-bold uppercase neon-text-cyan ${jp}`}>{t.proposedFix}</div>
+                    <pre className="mt-1 max-h-56 overflow-auto border border-neon-cyan/30 bg-void-950 p-3 font-mono text-xs text-neon-cyan-soft">
+                      {verifyResult.fixed_source}
+                    </pre>
+                  </div>
+                ) : (
+                  verifyResult.fix_error && (
+                    <p className="mt-4 border border-line bg-void-950 p-3 text-xs text-steel-400">
+                      <span className={`font-bold text-paper-50 ${jp}`}>{t.fixUnavailable}: </span>
+                      {verifyResult.fix_error}
+                    </p>
+                  )
+                )}
               </div>
-
-              {verifyResult.result && (
-                <p className="border border-line-strong bg-void-950 p-3 text-sm text-paper-50">
-                  {verifyResult.result.summary}
-                </p>
-              )}
-
-              {verifyResult.fixed_source ? (
-                <div>
-                  <div className={`text-xs font-bold uppercase neon-text-cyan ${jp}`}>{t.proposedFix}</div>
-                  <pre className="mt-1 max-h-56 overflow-auto border border-neon-cyan/30 bg-void-950 p-3 font-mono text-xs text-neon-cyan-soft">
-                    {verifyResult.fixed_source}
-                  </pre>
-                </div>
-              ) : (
-                verifyResult.fix_error && (
-                  <p className="border border-line bg-void-950 p-3 text-xs text-steel-400">
-                    <span className={`font-bold text-paper-50 ${jp}`}>{t.fixUnavailable}: </span>
-                    {verifyResult.fix_error}
-                  </p>
-                )
-              )}
             </div>
           )}
         </div>
