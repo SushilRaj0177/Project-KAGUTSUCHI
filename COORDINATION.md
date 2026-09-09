@@ -1470,3 +1470,73 @@ Not blocking anything — happy to keep looking for real hits on the other
 `marshal`/`execv`) if useful, or move to something else.
 
 ---
+
+## [2026-09-10] Real bug found + fixed: propose_fix() could silently produce broken "fixes" that look VERIFIED_FIXED
+**Status:** CONFIRMED fix — from Charanpreet's session, worth reading in full
+
+Picked this up unprompted (nothing new was waiting from you) by trying
+`propose_fix()` against the SQL fixture for the first time — it had only
+ever been proven against netdiag before. Found a real, serious bug in the
+process, not just a missing test.
+
+**The bug**: `sql_injection.vulnerable()`'s original source calls a
+module-level helper, `_seed(cur)`. Groq's proposed fix for it (correctly)
+kept calling `_seed(cur)` and used `sqlite3.connect(...)` without an
+inline `import sqlite3` — completely reasonable, since it was shown the
+original function which relies on both. But `propose_fix()`'s contract
+only ever returns *that one function's source text*, and
+`integration/upload_pipeline.py`'s `build_script_from_source()` embeds
+**only that text**, nothing else from the original file. Run standalone,
+this fix would raise `NameError: name '_seed' is not defined` on its very
+first line of real work.
+
+**Why this is worse than a normal bug**: a `NameError` means the fix
+never reaches the part of the code that would create the marker file —
+so `after_evidence` shows no marker, `_marker_created()` reports `False`,
+and `regression/verify.py` returns `VERIFIED_FIXED`. A completely broken
+fix — one that would crash for every legitimate caller, not just the
+attacker — would have been reported as a verified success. This is
+exactly the kind of thing the whole project exists to prevent, just one
+layer up: the sandbox proved something ran without the exploit firing,
+but "ran" here meant "immediately crashed," not "safely handled the
+input."
+
+**The fix, in `verification/hypothesis/propose_fix.py`**:
+1. The prompt now explicitly requires the returned function to be fully
+   self-contained — imports inline, no calls to anything not a builtin/
+   parameter/locally-defined name.
+2. Added a static check, `_free_names()`, that walks the proposed
+   function's AST and flags any name it reads that isn't a builtin, a
+   parameter, or bound/imported inside the function itself. Catches
+   exactly this bug class before the fix ever reaches the sandbox, not
+   just this one instance of it.
+3. 3 new tests: the exact `_seed`/`sqlite3` regression case, a
+   self-contained-with-inline-import positive case, and a nested-
+   helper/recursion positive case (to make sure the check isn't so strict
+   it rejects a function that's legitimately self-contained). Also caught
+   and fixed a bug in my own check while writing these — nested function
+   parameters weren't tracked as bound, so a fix defining its own inner
+   helper function was being wrongly flagged.
+
+**Re-verified live**: same Groq call against the SQL fixture now returns
+a genuinely self-contained function (`import sqlite3` inline, no `_seed`
+call, its own `CREATE TABLE`) that passes validation. Couldn't do the
+final real-Docker confirmation for this specific run — Docker Desktop
+isn't running in this environment right now (was earlier this session,
+seems to have stopped) — but the validation logic itself is unit-tested
+against the exact failure mode, and I proved this same
+build_runnable_script→sandbox→verify path works for `propose_fix()`
+output earlier in this session (the arbitrary `load_config`/`eval` case).
+
+Full suite: 101 passed, 17 skipped (same pre-existing gaps). Pushed to
+`charanpreet/self-contained-fix-check`:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/self-contained-fix-check
+
+This is squarely in `verification/hypothesis/propose_fix.py`, which I own
+and already tested — but since it changes what `propose_fix()` accepts
+as valid, and affects the live "upload code" backend, wanted to flag it
+clearly rather than bury it as a routine PR. Whenever Docker's back up on
+either of our machines, re-running `verify_upload()` against a
+multi-helper-function real file would be good final confirmation.
+
+---
