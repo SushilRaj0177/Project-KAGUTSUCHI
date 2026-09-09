@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import uuid
 
+from verification.attacks.run_local import MARKER_PATH
 from verification.models import (
     AttackHypothesis,
     ExecutionEvidence,
@@ -19,7 +20,11 @@ from verification.models import (
 
 
 def _marker_created(evidence: ExecutionEvidence) -> bool:
-    return bool(evidence.filesystem_diff.get("created"))
+    # Check for the specific attack marker, not "was anything created" -
+    # a real Docker container creates incidental .pyc/workspace files on
+    # every run regardless of exploit success (see COORDINATION.md's
+    # "real Docker run just caught a genuine verdict-logic bug" entry).
+    return MARKER_PATH.as_posix() in evidence.filesystem_diff.get("created", [])
 
 
 def verify(

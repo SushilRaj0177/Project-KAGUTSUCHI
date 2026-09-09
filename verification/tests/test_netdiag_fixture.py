@@ -28,7 +28,7 @@ def test_vulnerable_creates_marker_file():
     evidence = run_local_attack(
         vulnerable, PAYLOAD, "hyp-1", "run-1", ExecutionPhase.BEFORE
     )
-    assert evidence.filesystem_diff["created"] == [str(MARKER_PATH)]
+    assert evidence.filesystem_diff["created"] == [MARKER_PATH.as_posix()]
 
 
 def test_fixed_rejects_payload_and_never_creates_marker():

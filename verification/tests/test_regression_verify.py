@@ -83,3 +83,31 @@ def test_missing_created_key_treated_as_not_vulnerable():
     result = verify(HYP, before, after, PAYLOAD, PAYLOAD)
 
     assert result.verdict == Verdict.FALSE_POSITIVE
+
+
+def test_incidental_docker_files_do_not_count_as_the_marker():
+    # Regression test for the real-Docker bug (see COORDINATION.md's "real
+    # Docker run just caught a genuine verdict-logic bug" entry): a real
+    # container's filesystem_diff["created"] always contains incidental
+    # noise (.pyc bytecode cache, /workspace, /workspace/candidate.py) in
+    # BOTH before and after runs, regardless of whether the exploit fired.
+    # _marker_created() must key on the specific marker path, not on
+    # "created" being non-empty.
+    noise = [
+        "/workspace",
+        "/workspace/candidate.py",
+        "/workspace/__pycache__",
+        "/workspace/__pycache__/re.cpython-311.pyc",
+        "/workspace/__pycache__/subprocess.cpython-311.pyc",
+    ]
+    before = fake_evidence_vulnerable_before().model_copy(
+        update={"filesystem_diff": {"created": noise + ["/tmp/kagutsuchi_pwned"], "modified": [], "deleted": []}}
+    )
+    # after (fixed): same incidental noise, but the marker itself is absent.
+    after = fake_evidence_fixed_after().model_copy(
+        update={"filesystem_diff": {"created": list(noise), "modified": [], "deleted": []}}
+    )
+
+    result = verify(HYP, before, after, PAYLOAD, PAYLOAD)
+
+    assert result.verdict == Verdict.VERIFIED_FIXED

@@ -67,7 +67,7 @@ def run_local_attack(
         # "created" - even though this local runner only ever detects
         # marker-file creation, not modifications or deletions.
         filesystem_diff={
-            "created": [str(MARKER_PATH)] if marker_created else [],
+            "created": [MARKER_PATH.as_posix()] if marker_created else [],
             "modified": [],
             "deleted": [],
         },
