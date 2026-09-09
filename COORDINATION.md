@@ -1403,3 +1403,70 @@ at 300 files/300KB per file for the live demo, so any of these new
 detectors firing on a real, well-known public repo (not just synthetic
 test code) would be a good thing to go find and report here — strengthens
 the "this generalizes to real-world code" claim for the pitch.
+
+---
+
+## [2026-09-10] Real-world hit: `yaml_load_unsafe` fires on a real public repo, not synthetic code
+**Status:** CONFIRMED — from Charanpreet's session, a genuine data point for the pitch
+
+Ran `server.repo_scan.scan_repo()` directly against several real, well-known
+public repos (`saltstack/salt`, `docker/compose`, `ansible-runner`,
+`certbot`, `netbox`, `wagtail`, `cookiecutter`, `openstack/nova`) — mostly
+turned up the pre-existing detectors (`subprocess.run`/`popen`, `eval`,
+`pickle.loads`), no new-class hits, likely because the 300-file cap on
+huge repos doesn't necessarily land on the interesting files.
+
+**Got a clean, real hit on `adeyosemanputra/pygoat`** — an OWASP-style
+intentionally-vulnerable Django training app (real, public, 80 Python
+files, well within the cap):
+
+```
+detector: ast.deserialization.yaml_load_unsafe
+file: introduction/views.py, function: a9_lab (yes — named after OWASP A9,
+      "Insecure Deserialization")
+line: yaml.load(file, yaml.Loader)
+```
+
+Full function (real code, not a snippet I wrote):
+```python
+def a9_lab(request):
+    if request.user.is_authenticated:
+        if request.method=="GET":
+            return render(request,"Lab/A9/a9_lab.html")
+        else:
+            try:
+                file=request.FILES["file"]
+                try:
+                    data = yaml.load(file,yaml.Loader)
+                    return render(request,"Lab/A9/a9_lab.html",{"data":data})
+                except:
+                    return render(request, "Lab/A9/a9_lab.html", {"data": "Error"})
+            except:
+                return render(request, "Lab/A9/a9_lab.html", {"data":"Please Upload a Yaml file."})
+    else:
+        return redirect('login')
+```
+A file-upload endpoint that runs the uploaded content through
+`yaml.load()` with the explicit unsafe `Loader` — exactly the real-world
+pattern `_yaml_load_hit` was built to catch, found in real code nobody on
+this team wrote, not a fixture and not a synthetic test case. Good demo
+material: "here's a real security-training repo demonstrating this exact
+CVE-class bug, and our scanner catches it with zero special-casing for
+this repo."
+
+**One honest nuance, not a bug in what merged**: PyGoat also has an SSTI
+lab (`introduction/views.py::ssti_lab`), but it doesn't use
+`render_template_string()` or `jinja2.Template(...).render()` — it writes
+attacker-controlled content into a **file** on disk, then Django's normal
+`render(request, "that_file.html")` picks it up. Real SSTI, structurally
+different delivery mechanism than what `_ssti_hit` currently matches, so
+it doesn't fire here. Not urgent (didn't find this pattern common enough
+elsewhere to prioritize over what's already shipped), just flagging
+honestly since real-world testing is what surfaced it — same spirit as
+everything else in this log.
+
+Not blocking anything — happy to keep looking for real hits on the other
+3 new detector classes (Django `.raw()`/`.extra()`, SSTI proper,
+`marshal`/`execv`) if useful, or move to something else.
+
+---
