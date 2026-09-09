@@ -1,9 +1,8 @@
 import { useLanguage } from "./LanguageContext";
 
-// Status reads through weight, fill, and symbol -- never color.
 const STYLES: Record<string, string> = {
   VERIFIED_FIXED: "bg-paper-50 text-ink-950 border-paper-50",
-  STILL_VULNERABLE: "border-2 border-paper-50 text-paper-50",
+  STILL_VULNERABLE: "bg-seal-500 text-ink-950 border-seal-500",
   FALSE_POSITIVE: "border border-dashed border-line-strong text-steel-400",
   INCONCLUSIVE: "border border-dotted border-line-strong text-steel-400",
 };
@@ -22,7 +21,7 @@ export function VerdictBadge({ verdict }: { verdict: string }) {
   const label = t.verdict[verdict] ?? verdict;
   return (
     <span
-      className={`inline-flex items-center gap-2 px-3 py-1 font-mono text-xs font-semibold tracking-wide uppercase ${cls} ${lang === "ja" ? "font-jp normal-case" : ""}`}
+      className={`inline-flex items-center gap-2 border px-3 py-1 font-mono text-xs font-semibold tracking-wide uppercase ${cls} ${lang === "ja" ? "font-jp normal-case" : ""}`}
     >
       <span aria-hidden="true">{symbol}</span>
       {label}

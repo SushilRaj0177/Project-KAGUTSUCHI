@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { MagneticButton } from "./MagneticButton";
+import { Marquee } from "./Marquee";
 import { RevealText } from "./RevealText";
 import { useLanguage } from "./LanguageContext";
 import { useInView } from "./useInView";
@@ -104,7 +105,10 @@ function FindingCard({
             [ {finding.sensitive_op} ]
           </span>
         </div>
-        <span className="font-mono text-xs tracking-widest text-paper-50" title={finding.severity_hint}>
+        <span
+          className={`font-mono text-xs tracking-widest ${finding.severity_hint === "high" ? "text-seal-500" : "text-paper-50"}`}
+          title={finding.severity_hint}
+        >
           {SEVERITY_MARK[finding.severity_hint] ?? SEVERITY_MARK.low}
         </span>
       </button>
@@ -239,64 +243,76 @@ export function RepoScanner() {
 
   return (
     <div>
-      <section className="relative overflow-hidden pb-16">
+      <section className="relative overflow-hidden pb-4">
+        {/* The seal: a big pulsing red disc, half-cropped off the edge for scale/energy */}
         <div
-          className="pointer-events-none absolute -top-24 -right-24 h-[420px] w-[420px] rounded-full border border-line"
-          style={{ animation: "spin 40s linear infinite" }}
+          className="seal-pulse pointer-events-none absolute top-1/2 -right-40 h-[520px] w-[520px] -translate-y-1/2 rounded-full bg-seal-500"
+          style={{ filter: "blur(2px)" }}
         />
         <div
-          className="pointer-events-none absolute -top-8 -right-8 h-[340px] w-[340px] rounded-full border border-dashed border-line"
-          style={{ animation: "spin 60s linear infinite reverse" }}
+          className="pointer-events-none absolute top-1/2 -right-24 h-[380px] w-[380px] -translate-y-1/2 rounded-full border border-paper-50/30"
+          style={{ animation: "spin 30s linear infinite" }}
         />
 
-        <div
-          className={`fade-in-up text-xs tracking-[0.25em] text-steel-400 uppercase ${jp}`}
-          style={{ animationDelay: "0.1s", opacity: 0 }}
-        >
-          {t.heroKanji}
+        {/* Vertical Japanese strip along the right edge */}
+        <div className="vertical-text font-jp pointer-events-none absolute top-0 right-6 hidden h-full py-6 text-sm tracking-[0.3em] text-paper-50/50 md:block">
+          自律型セキュリティ検証エンジン
         </div>
-        <h2 className={`font-display mt-4 max-w-3xl text-6xl leading-[0.95] font-extrabold tracking-tight md:text-7xl ${jp}`}>
-          <RevealText text={t.heroTitle} startDelay={0.15} />
-        </h2>
-        <p
-          className={`fade-in-up mt-6 max-w-md text-sm leading-relaxed text-steel-400 ${jp}`}
-          style={{ animationDelay: "0.6s", opacity: 0 }}
-        >
-          {t.heroSubtitle}
-        </p>
 
-        <form
-          onSubmit={handleSubmit}
-          className="fade-in-up mt-10 max-w-xl"
-          style={{ animationDelay: "0.75s", opacity: 0 }}
-        >
-          <label className="relative flex items-center gap-2 border-b border-line-strong pb-2">
-            <span className="font-mono text-paper-50">&gt;</span>
-            <input
-              data-cursor="hover"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              onFocus={() => setFocused(true)}
-              onBlur={() => setFocused(false)}
-              placeholder={t.repoPlaceholder}
-              className="flex-1 bg-transparent font-mono text-sm text-paper-50 outline-none placeholder:text-steel-600"
-            />
-            <span
-              className="absolute right-0 -bottom-px left-0 h-px origin-center bg-paper-50 transition-transform duration-300"
-              style={{ transform: focused ? "scaleX(1)" : "scaleX(0)" }}
-            />
-          </label>
-          <MagneticButton
-            type="submit"
-            disabled={loading}
-            className={`mt-5 border border-paper-50 px-6 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-paper-50 transition-colors hover:bg-paper-50 hover:text-ink-950 disabled:cursor-wait disabled:opacity-50 ${jp}`}
+        <div className="relative z-10 max-w-2xl">
+          <div
+            className={`fade-in-up text-xs tracking-[0.25em] text-steel-400 uppercase ${jp}`}
+            style={{ animationDelay: "0.1s", opacity: 0 }}
           >
-            {loading ? t.scanningButton : t.scanButton}
-          </MagneticButton>
-        </form>
+            {t.heroKanji}
+          </div>
+          <h2
+            className="parallax-slow font-display mt-4 text-6xl leading-[0.95] font-extrabold tracking-tight md:text-7xl"
+          >
+            <RevealText text={t.heroTitle} startDelay={0.15} />
+          </h2>
+          <p
+            className={`fade-in-up mt-6 max-w-md text-sm leading-relaxed text-steel-400 ${jp}`}
+            style={{ animationDelay: "0.6s", opacity: 0 }}
+          >
+            {t.heroSubtitle}
+          </p>
 
-        {error && <p className="mt-4 max-w-md border border-line-strong p-3 font-mono text-xs text-paper-50">{error}</p>}
+          <form
+            onSubmit={handleSubmit}
+            className="fade-in-up mt-10 max-w-xl"
+            style={{ animationDelay: "0.75s", opacity: 0 }}
+          >
+            <label className="relative flex items-center gap-2 border-b border-line-strong pb-2">
+              <span className="font-mono text-seal-500">&gt;</span>
+              <input
+                data-cursor="hover"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                placeholder={t.repoPlaceholder}
+                className="flex-1 bg-transparent font-mono text-sm text-paper-50 outline-none placeholder:text-steel-600"
+              />
+              <span
+                className="absolute right-0 -bottom-px left-0 h-px origin-center bg-seal-500 transition-transform duration-300"
+                style={{ transform: focused ? "scaleX(1)" : "scaleX(0)" }}
+              />
+            </label>
+            <MagneticButton
+              type="submit"
+              disabled={loading}
+              className={`mt-5 border-2 border-seal-500 bg-seal-500 px-6 py-2.5 text-xs font-bold tracking-[0.2em] text-ink-950 uppercase transition-colors hover:bg-transparent hover:text-seal-400 disabled:cursor-wait disabled:opacity-50 ${jp}`}
+            >
+              {loading ? t.scanningButton : t.scanButton}
+            </MagneticButton>
+          </form>
+
+          {error && <p className="mt-4 max-w-md border border-line-strong p-3 font-mono text-xs text-paper-50">{error}</p>}
+        </div>
       </section>
+
+      <Marquee text={`${t.heroTitle.replace(/\.$/, "")} — `} />
 
       {result && (
         <section ref={resultsRef} className="border-t border-line pt-10">

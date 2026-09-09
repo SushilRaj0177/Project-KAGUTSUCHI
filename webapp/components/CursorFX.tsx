@@ -41,8 +41,15 @@ export function CursorFX() {
 
     window.addEventListener("mousemove", onMove);
     raf = requestAnimationFrame(tick);
+
+    function onScroll() {
+      document.documentElement.style.setProperty("--scroll-y", `${window.scrollY}`);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+
     return () => {
       window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("scroll", onScroll);
       cancelAnimationFrame(raf);
     };
   }, []);

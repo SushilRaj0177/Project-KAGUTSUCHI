@@ -18,6 +18,9 @@
 
   --line: rgba(239, 236, 228, 0.14);
   --line-strong: rgba(239, 236, 228, 0.3);
+
+  --seal-500: #e33629;
+  --seal-400: #ff5a4a;
 }
 
 @theme inline {
@@ -31,6 +34,8 @@
   --color-steel-600: var(--steel-600);
   --color-line: var(--line);
   --color-line-strong: var(--line-strong);
+  --color-seal-500: var(--seal-500);
+  --color-seal-400: var(--seal-400);
 
   --font-display: var(--font-display), "Big Shoulders Display", ui-sans-serif, sans-serif;
   --font-sans: var(--font-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
@@ -183,4 +188,37 @@ body {
 
 @keyframes spin {
   to { transform: rotate(360deg); }
+}
+
+.vertical-text {
+  writing-mode: vertical-rl;
+  text-orientation: mixed;
+}
+
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 22s linear infinite;
+}
+
+@keyframes seal-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.9; }
+  50% { transform: scale(1.04); opacity: 1; }
+}
+
+.seal-pulse {
+  animation: seal-pulse 4s ease-in-out infinite;
+}
+
+.parallax-slow {
+  transform: translateY(calc(var(--scroll-y, 0) * -0.08px));
+}
+
+.parallax-fast {
+  transform: translateY(calc(var(--scroll-y, 0) * 0.05px));
 }

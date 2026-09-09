@@ -11,7 +11,7 @@ export function LanguageToggle() {
         onClick={() => setLang("en")}
         aria-pressed={lang === "en"}
         className={`px-3 py-1.5 transition-colors ${
-          lang === "en" ? "bg-paper-50 text-ink-950" : "text-steel-400 hover:text-paper-50"
+          lang === "en" ? "bg-seal-500 text-ink-950" : "text-steel-400 hover:text-paper-50"
         }`}
       >
         EN
@@ -20,7 +20,7 @@ export function LanguageToggle() {
         onClick={() => setLang("ja")}
         aria-pressed={lang === "ja"}
         className={`font-jp px-3 py-1.5 transition-colors ${
-          lang === "ja" ? "bg-paper-50 text-ink-950" : "text-steel-400 hover:text-paper-50"
+          lang === "ja" ? "bg-seal-500 text-ink-950" : "text-steel-400 hover:text-paper-50"
         }`}
       >
         日本語
