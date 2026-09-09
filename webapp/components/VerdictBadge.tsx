@@ -1,10 +1,10 @@
 import { useLanguage } from "./LanguageContext";
 
 const STYLES: Record<string, string> = {
-  VERIFIED_FIXED: "bg-paper-50 text-ink-950 border-paper-50",
-  STILL_VULNERABLE: "bg-seal-500 text-ink-950 border-seal-500",
-  FALSE_POSITIVE: "border border-dashed border-line-strong text-steel-400",
-  INCONCLUSIVE: "border border-dotted border-line-strong text-steel-400",
+  VERIFIED_FIXED: "border-neon-cyan/60 text-neon-cyan-soft bg-neon-cyan/10 neon-border-cyan",
+  STILL_VULNERABLE: "border-neon-pink/60 text-neon-pink-soft bg-neon-pink/10 neon-border-pink",
+  FALSE_POSITIVE: "border-dashed border-line-strong text-steel-400",
+  INCONCLUSIVE: "border-dotted border-line-strong text-steel-400",
 };
 
 const SYMBOLS: Record<string, string> = {

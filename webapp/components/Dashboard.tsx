@@ -18,9 +18,11 @@ function formatTimestamp(iso: string): string {
 function EvidenceColumn({
   evidence,
   label,
+  tone,
 }: {
   evidence: Record<string, unknown>;
   label: string;
+  tone: "pink" | "cyan";
 }) {
   const { t } = useLanguage();
   const created = Array.isArray((evidence as { filesystem_diff?: { created?: string[] } })?.filesystem_diff?.created)
@@ -28,10 +30,12 @@ function EvidenceColumn({
     : [];
   const exitCode = evidence?.exit_code as number | undefined;
   const stderr = (evidence?.stderr as string | undefined) ?? "";
+  const border = tone === "pink" ? "border-t-neon-pink" : "border-t-neon-cyan";
+  const text = tone === "pink" ? "neon-text-pink" : "neon-text-cyan";
 
   return (
-    <div className="border border-line border-t-2 border-t-paper-50 p-4">
-      <div className="text-sm font-bold text-paper-50">{label}</div>
+    <div className={`border border-line border-t-2 ${border} p-4`}>
+      <div className={`text-sm font-bold ${text}`}>{label}</div>
       <dl className="mt-3 space-y-2 text-xs">
         <div className="flex justify-between gap-3">
           <dt className="text-steel-400">{t.exitCode}</dt>
@@ -81,8 +85,8 @@ function RunDetail({ run }: { run: RunRow }) {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
-        <EvidenceColumn evidence={run.before_evidence} label={t.before} />
-        <EvidenceColumn evidence={run.after_evidence} label={t.after} />
+        <EvidenceColumn evidence={run.before_evidence} label={t.before} tone="pink" />
+        <EvidenceColumn evidence={run.after_evidence} label={t.after} tone="cyan" />
       </div>
 
       <p className="border border-line-strong p-3 text-sm text-paper-50">{run.summary}</p>
@@ -100,9 +104,9 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
   return (
     <div>
       <div className="mb-8 grid grid-cols-3 gap-px overflow-hidden border border-line bg-line">
-        <StatTile label={t.statTotal} value={runs.length} />
-        <StatTile label={t.statVerified} value={verifiedCount} />
-        <StatTile label={t.statVulnerable} value={vulnerableCount} />
+        <StatTile label={t.statTotal} value={runs.length} tone="neutral" />
+        <StatTile label={t.statVerified} value={verifiedCount} tone="cyan" />
+        <StatTile label={t.statVulnerable} value={vulnerableCount} tone="pink" />
       </div>
 
       {runs.length === 0 ? (
@@ -115,7 +119,7 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
               <div key={run.id} className="border-b border-line last:border-b-0">
                 <button
                   onClick={() => setOpenId(isOpen ? null : run.id)}
-                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-ink-900"
+                  className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-void-900"
                 >
                   <div className="flex items-center gap-4">
                     <span className="font-mono text-xs text-steel-400 tabular-nums">
@@ -140,10 +144,19 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
   );
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
+function StatTile({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "cyan" | "pink" | "neutral";
+}) {
   const { lang } = useLanguage();
+  const border = tone === "cyan" ? "border-t-neon-cyan" : tone === "pink" ? "border-t-neon-pink" : "border-t-paper-50";
   return (
-    <div className="border-t-2 border-paper-50 p-5">
+    <div className={`border-t-2 bg-void-900 p-5 ${border}`}>
       <div className={`text-[11px] uppercase tracking-wide text-steel-400 ${lang === "ja" ? "font-jp normal-case" : ""}`}>
         {label}
       </div>
