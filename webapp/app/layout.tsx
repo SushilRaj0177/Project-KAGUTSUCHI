@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Big_Shoulders, IBM_Plex_Mono, IBM_Plex_Sans, Noto_Sans_JP } from "next/font/google";
+import { CursorFX } from "@/components/CursorFX";
 import { LanguageProvider } from "@/components/LanguageContext";
 import "./globals.css";
 
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${display.variable} ${sans.variable} ${mono.variable} ${jp.variable} h-full`}
     >
       <body className="min-h-full">
+        <CursorFX />
         <LanguageProvider>{children}</LanguageProvider>
       </body>
     </html>

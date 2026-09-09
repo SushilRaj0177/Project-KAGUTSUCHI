@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { AsciiEmblem } from "./AsciiEmblem";
+import { MagneticButton } from "./MagneticButton";
+import { RevealText } from "./RevealText";
 import { useLanguage } from "./LanguageContext";
+import { useInView } from "./useInView";
 
 interface SecurityFinding {
   finding_id: string;
@@ -47,12 +49,15 @@ function apiUrl(path: string): string {
 function FindingCard({
   finding,
   source,
+  index,
 }: {
   finding: SecurityFinding;
   source: string | undefined;
+  index: number;
 }) {
   const { t, lang } = useLanguage();
   const jp = lang === "ja" ? "font-jp" : "";
+  const { ref, inView } = useInView<HTMLDivElement>();
   const [open, setOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -82,8 +87,13 @@ function FindingCard({
   }
 
   return (
-    <div className="border border-line">
+    <div
+      ref={ref}
+      className={`hover-lift border border-line ${inView ? "in-view" : "scroll-hidden"}`}
+      style={{ transitionDelay: inView ? `${index * 60}ms` : "0ms" }}
+    >
       <button
+        data-cursor="hover"
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-ink-900"
       >
@@ -100,7 +110,7 @@ function FindingCard({
       </button>
 
       {open && (
-        <div className="space-y-4 border-t border-line p-5">
+        <div className="fade-in-up space-y-4 border-t border-line p-5">
           <div>
             <div className={`bracket-label font-mono text-xs font-bold uppercase text-steel-400 ${jp}`}>{t.rationale}</div>
             <p className="mt-1 text-sm text-paper-50">{finding.rationale}</p>
@@ -109,7 +119,7 @@ function FindingCard({
             {finding.diff_hunk}
           </pre>
 
-          <button
+          <MagneticButton
             onClick={runVerify}
             disabled={verifying || !source}
             className={`border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${jp} ${
@@ -119,14 +129,14 @@ function FindingCard({
             }`}
           >
             {verifying ? t.verifyingButton : t.verifyButton}
-          </button>
+          </MagneticButton>
 
           {verifyError && (
             <p className="border border-line-strong p-3 font-mono text-xs text-paper-50">{verifyError}</p>
           )}
 
           {verifyResult && (
-            <div className="space-y-3 border-t border-line pt-4">
+            <div className="fade-in-up space-y-3 border-t border-line pt-4">
               <div>
                 <div className={`text-xs font-bold uppercase text-steel-400 ${jp}`}>
                   {t.attackResult}
@@ -197,9 +207,11 @@ export function RepoScanner() {
   const { t, lang } = useLanguage();
   const jp = lang === "ja" ? "font-jp" : "";
   const [repoUrl, setRepoUrl] = useState("");
+  const [focused, setFocused] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RepoAnalyzeResponse | null>(null);
+  const { ref: resultsRef, inView: resultsInView } = useInView<HTMLDivElement>();
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -227,42 +239,70 @@ export function RepoScanner() {
 
   return (
     <div>
-      <section className="grid gap-10 pb-16 md:grid-cols-[1.1fr_0.9fr] md:items-center">
-        <div>
-          <div className={`text-xs tracking-[0.2em] text-steel-400 uppercase ${jp}`}>{t.heroKanji}</div>
-          <h2 className={`font-display mt-4 text-5xl leading-[0.95] font-extrabold tracking-tight md:text-6xl ${jp}`}>
-            {t.heroTitle}
-          </h2>
-          <p className={`mt-6 max-w-md text-sm leading-relaxed text-steel-400 ${jp}`}>{t.heroSubtitle}</p>
+      <section className="relative overflow-hidden pb-16">
+        <div
+          className="pointer-events-none absolute -top-24 -right-24 h-[420px] w-[420px] rounded-full border border-line"
+          style={{ animation: "spin 40s linear infinite" }}
+        />
+        <div
+          className="pointer-events-none absolute -top-8 -right-8 h-[340px] w-[340px] rounded-full border border-dashed border-line"
+          style={{ animation: "spin 60s linear infinite reverse" }}
+        />
 
-          <form onSubmit={handleSubmit} className="mt-10 max-w-md">
-            <label className="flex items-center gap-2 border-b border-line-strong pb-2 focus-within:border-paper-50">
-              <span className="font-mono text-paper-50">&gt;</span>
-              <input
-                value={repoUrl}
-                onChange={(e) => setRepoUrl(e.target.value)}
-                placeholder={t.repoPlaceholder}
-                className="flex-1 bg-transparent font-mono text-sm text-paper-50 outline-none placeholder:text-steel-600"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={loading}
-              className={`mt-5 border border-paper-50 px-6 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-paper-50 transition-colors hover:bg-paper-50 hover:text-ink-950 disabled:cursor-wait disabled:opacity-50 ${jp}`}
-            >
-              {loading ? t.scanningButton : t.scanButton}
-            </button>
-          </form>
-
-          {error && <p className="mt-4 max-w-md border border-line-strong p-3 font-mono text-xs text-paper-50">{error}</p>}
+        <div
+          className={`fade-in-up text-xs tracking-[0.25em] text-steel-400 uppercase ${jp}`}
+          style={{ animationDelay: "0.1s", opacity: 0 }}
+        >
+          {t.heroKanji}
         </div>
+        <h2 className={`font-display mt-4 max-w-3xl text-6xl leading-[0.95] font-extrabold tracking-tight md:text-7xl ${jp}`}>
+          <RevealText text={t.heroTitle} startDelay={0.15} />
+        </h2>
+        <p
+          className={`fade-in-up mt-6 max-w-md text-sm leading-relaxed text-steel-400 ${jp}`}
+          style={{ animationDelay: "0.6s", opacity: 0 }}
+        >
+          {t.heroSubtitle}
+        </p>
 
-        <AsciiEmblem />
+        <form
+          onSubmit={handleSubmit}
+          className="fade-in-up mt-10 max-w-xl"
+          style={{ animationDelay: "0.75s", opacity: 0 }}
+        >
+          <label className="relative flex items-center gap-2 border-b border-line-strong pb-2">
+            <span className="font-mono text-paper-50">&gt;</span>
+            <input
+              data-cursor="hover"
+              value={repoUrl}
+              onChange={(e) => setRepoUrl(e.target.value)}
+              onFocus={() => setFocused(true)}
+              onBlur={() => setFocused(false)}
+              placeholder={t.repoPlaceholder}
+              className="flex-1 bg-transparent font-mono text-sm text-paper-50 outline-none placeholder:text-steel-600"
+            />
+            <span
+              className="absolute right-0 -bottom-px left-0 h-px origin-center bg-paper-50 transition-transform duration-300"
+              style={{ transform: focused ? "scaleX(1)" : "scaleX(0)" }}
+            />
+          </label>
+          <MagneticButton
+            type="submit"
+            disabled={loading}
+            className={`mt-5 border border-paper-50 px-6 py-2.5 text-xs font-bold tracking-[0.2em] uppercase text-paper-50 transition-colors hover:bg-paper-50 hover:text-ink-950 disabled:cursor-wait disabled:opacity-50 ${jp}`}
+          >
+            {loading ? t.scanningButton : t.scanButton}
+          </MagneticButton>
+        </form>
+
+        {error && <p className="mt-4 max-w-md border border-line-strong p-3 font-mono text-xs text-paper-50">{error}</p>}
       </section>
 
       {result && (
-        <section className="border-t border-line pt-10">
-          <div className="mb-8 grid grid-cols-2 gap-px overflow-hidden border border-line bg-line">
+        <section ref={resultsRef} className="border-t border-line pt-10">
+          <div
+            className={`mb-8 grid grid-cols-2 gap-px overflow-hidden border border-line bg-line ${resultsInView ? "in-view" : "scroll-hidden"}`}
+          >
             <StatTile label={t.filesScanned} value={result.files_scanned} />
             <StatTile label={t.findingsCount} value={result.findings.length} />
           </div>
@@ -274,11 +314,12 @@ export function RepoScanner() {
             </div>
           ) : (
             <div className="space-y-3">
-              {result.findings.map((finding) => (
+              {result.findings.map((finding, i) => (
                 <FindingCard
                   key={finding.finding_id}
                   finding={finding}
                   source={result.sources[finding.file_path]}
+                  index={i}
                 />
               ))}
             </div>
