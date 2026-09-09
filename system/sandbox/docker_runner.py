@@ -11,12 +11,14 @@ from __future__ import annotations
 import io
 import tarfile
 import time
+from pathlib import Path
 
 import docker
 
 from contracts import ExecutionEvidence, ExecutionPhase
 
-_IMAGE = "python:3.11-slim"
+_IMAGE = "kagutsuchi-sandbox:latest"
+_DOCKERFILE_DIR = Path(__file__).parent
 _MAX_LOG_CHARS = 8000
 
 
@@ -36,6 +38,33 @@ def _client() -> docker.DockerClient:
             "Could not reach the Docker daemon. Is Docker running? "
             f"(underlying error: {exc})"
         ) from exc
+
+
+def _ensure_image(client: docker.DockerClient) -> None:
+    """Build the sandbox image (see Dockerfile in this directory) if it
+    isn't already present. Built once per host, then reused — the build
+    only re-runs when the image is missing, not on every attack."""
+    try:
+        client.images.get(_IMAGE)
+    except docker.errors.ImageNotFound:
+        client.images.build(path=str(_DOCKERFILE_DIR), tag=_IMAGE)
+
+
+# Docker's container.diff() "Kind" codes: 0=modified, 1=added, 2=deleted.
+_DIFF_KIND_TO_BUCKET = {0: "modified", 1: "created", 2: "deleted"}
+
+
+def _bucket_filesystem_diff(raw_changes: list[dict]) -> dict[str, list[str]]:
+    """Convert Docker's raw container.diff() list into the
+    {"created": [...], "modified": [...], "deleted": [...]} shape that
+    verification/regression's marker-file check expects (see
+    COORDINATION.md's filesystem_diff convention)."""
+    buckets: dict[str, list[str]] = {"created": [], "modified": [], "deleted": []}
+    for change in raw_changes:
+        bucket = _DIFF_KIND_TO_BUCKET.get(change.get("Kind"))
+        if bucket is not None:
+            buckets[bucket].append(change.get("Path", ""))
+    return buckets
 
 
 def _tar_bytes(filename: str, content: str) -> bytes:
@@ -62,6 +91,7 @@ def run_in_sandbox(
     return the recorded ExecutionEvidence.
     """
     client = _client()
+    _ensure_image(client)
     container = client.containers.create(
         image=_IMAGE,
         command=["python", "/workspace/candidate.py", payload],
@@ -98,7 +128,7 @@ def run_in_sandbox(
             exit_code=exit_code,
             stdout=stdout[:_MAX_LOG_CHARS],
             stderr=stderr[:_MAX_LOG_CHARS],
-            filesystem_diff={"changes": fs_changes},
+            filesystem_diff=_bucket_filesystem_diff(fs_changes),
             network_egress_attempts=[],
             policy_violations=[],
             duration_ms=duration_ms,
