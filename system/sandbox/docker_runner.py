@@ -11,6 +11,7 @@ from __future__ import annotations
 import io
 import tarfile
 import time
+import warnings
 from pathlib import Path
 
 import docker
@@ -109,7 +110,10 @@ def run_in_sandbox(
             result = container.wait(timeout=timeout_s)
             exit_code = result.get("StatusCode", -1)
         except Exception:
-            container.kill()
+            try:
+                container.kill()
+            except Exception:
+                pass  # already exited/removed — nothing to kill
             exit_code = -1
         duration_ms = int((time.monotonic() - start) * 1000)
 
@@ -134,4 +138,17 @@ def run_in_sandbox(
             duration_ms=duration_ms,
         )
     finally:
-        container.remove(force=True)
+        try:
+            container.remove(force=True)
+        except Exception as exc:
+            # Best-effort cleanup: a transient daemon race (seen on
+            # Windows/WSL2 - removing immediately after exit can race the
+            # daemon's own teardown) shouldn't crash the run or mask
+            # whatever result/exception was already in flight. Leaves at
+            # most a stopped container behind for manual cleanup, never a
+            # running one - it's already exited or been killed by this
+            # point.
+            warnings.warn(
+                f"Failed to remove sandbox container {container.id}: {exc}",
+                stacklevel=2,
+            )
