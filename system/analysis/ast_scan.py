@@ -72,6 +72,44 @@ class _CallSite:
     function_name: str
     call_name: str
     lineno: int
+    op: SensitiveOp | None = None
+    rationale: str | None = None
+    detector: str | None = None
+
+
+def _is_string_built(node: ast.expr) -> bool:
+    """True if `node` looks like a runtime-assembled string: an f-string,
+    or string concatenation (`"..." + var`), rather than a plain literal."""
+    if isinstance(node, ast.JoinedStr):
+        return True
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return True
+    return False
+
+
+def _sql_call_hit(node: ast.Call) -> _CallSite | None:
+    """Heuristic: cursor.execute(...)/.executescript(...) where the query
+    argument is string-built, not a parameterized literal — the actual
+    SQL-injection-relevant pattern, independent of the cursor's module."""
+    func = node.func
+    if not isinstance(func, ast.Attribute):
+        return None
+    if func.attr not in ("execute", "executescript"):
+        return None
+    if not node.args or not _is_string_built(node.args[0]):
+        return None
+    return _CallSite(
+        function_name="",
+        call_name=f"<obj>.{func.attr}",
+        lineno=node.lineno,
+        op=SensitiveOp.SQL_QUERY,
+        rationale=(
+            f".{func.attr} is called with a string built at runtime "
+            "(f-string/concatenation) instead of a parameterized query — "
+            "classic SQL injection sink."
+        ),
+        detector="ast.sql_injection.string_built_query",
+    )
 
 
 def _dotted_call_name(node: ast.Call) -> str | None:
@@ -93,10 +131,16 @@ def _dotted_call_name(node: ast.Call) -> str | None:
 def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
     hits: list[_CallSite] = []
     for node in ast.walk(func_node):
-        if isinstance(node, ast.Call):
-            name = _dotted_call_name(node)
-            if name in _SIGNATURES:
-                hits.append(_CallSite(func_node.name, name, node.lineno))
+        if not isinstance(node, ast.Call):
+            continue
+        name = _dotted_call_name(node)
+        if name in _SIGNATURES:
+            hits.append(_CallSite(func_node.name, name, node.lineno))
+            continue
+        sql_hit = _sql_call_hit(node)
+        if sql_hit is not None:
+            sql_hit.function_name = func_node.name
+            hits.append(sql_hit)
     return hits
 
 
@@ -115,7 +159,10 @@ def scan_source(source: str, file_path: str) -> list[SecurityFinding]:
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             for hit in sensitive_ops_in_function(node):  # type: ignore[arg-type]
-                op, rationale, detector = _SIGNATURES[hit.call_name]
+                if hit.op is not None:
+                    op, rationale, detector = hit.op, hit.rationale, hit.detector
+                else:
+                    op, rationale, detector = _SIGNATURES[hit.call_name]
                 findings.append(
                     SecurityFinding(
                         file_path=file_path,
