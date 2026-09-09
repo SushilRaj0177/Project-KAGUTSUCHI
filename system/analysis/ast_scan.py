@@ -15,7 +15,17 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass
 
-from contracts import SecurityFinding, SensitiveOp
+from contracts import SecurityFinding, SensitiveOp, Severity
+
+_SEVERITY_BY_OP: dict[SensitiveOp, Severity] = {
+    SensitiveOp.SHELL_EXEC: Severity.HIGH,
+    SensitiveOp.SUBPROCESS: Severity.HIGH,
+    SensitiveOp.DESERIALIZATION: Severity.HIGH,
+    SensitiveOp.SQL_QUERY: Severity.HIGH,
+    SensitiveOp.AUTH_CHANGE: Severity.HIGH,
+    SensitiveOp.FILESYSTEM: Severity.MEDIUM,
+    SensitiveOp.NETWORK_EGRESS: Severity.MEDIUM,
+}
 
 # Qualified call name -> (SensitiveOp, rationale, detector id)
 _SIGNATURES: dict[str, tuple[SensitiveOp, str, str]] = {
@@ -179,6 +189,7 @@ def scan_source(
                         sensitive_op=op,
                         rationale=f"{rationale} (call: {hit.call_name}, line {hit.lineno})",
                         detected_by=detector,
+                        severity_hint=_SEVERITY_BY_OP.get(op, Severity.MEDIUM),
                     )
                 )
     return findings
