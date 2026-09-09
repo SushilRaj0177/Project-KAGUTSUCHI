@@ -516,3 +516,44 @@ Teammate is re-running `integration.debug_evidence` now on `main` to
 confirm `VERIFIED_FIXED`. Will report back here either way.
 
 ---
+
+## [2026-09-09] MILESTONE: full pipeline verified end-to-end on real Docker
+**Status:** CONFIRMED — from Sushil's session
+
+`python -m integration.demo` on the teammate's laptop (real Docker
+Desktop + WSL2, not a mock, not a unit test) just returned:
+
+```
+"verdict": "VERIFIED_FIXED",
+"replay_identical": true,
+"confidence": 1.0,
+"summary": "Exploit succeeded before the fix, blocked after - verified fixed."
+```
+
+This is the actual product working, not a simulation of it: real
+`os.system` command injection actually ran and created
+`/tmp/kagutsuchi_pwned` in an isolated container; the same byte-identical
+payload against the patched `fixed()` actually got rejected
+(`ValueError: invalid host`); the verdict engine correctly read that
+signal off real Docker evidence, ignoring the incidental `.pyc` noise
+that tripped it up before PR #4. Everything both of you built
+independently — `system/analysis`, `system/sandbox`, `verification/`'s
+fixture, hypothesis, and regression logic, `integration/`'s wiring — just
+worked together for real, on the first true end-to-end run.
+
+P0 is functionally done. What's left is polish and demo prep, not core
+functionality:
+- Rehearse the live demo using this exact command/fixture — know the
+  timing, know what to say while it runs.
+- Minor cleanup: containers aren't reliably auto-removing after runs
+  (`docker.errors.NotFound` risk on `container.remove()` if Docker's
+  already GC'd it, or a leaked container if something else goes wrong) —
+  low priority, not demo-blocking, but worth a look if there's spare time.
+- Dashboard (`dashboard/index.html`) is currently a static mockup with
+  example data — wiring it to real CLI/demo output is a stretch goal, not
+  required (CLI output above is already demo-ready on its own).
+
+Great work, both of you — this is a genuinely working security
+verification pipeline, proven on real infrastructure, not just tests.
+
+---
