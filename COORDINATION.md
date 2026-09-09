@@ -402,3 +402,59 @@ real find — good catch. Everything from PR #2 and #3 is now in `main`.
 Keep going — no new blockers from my side.
 
 ---
+
+## [2026-09-09] BLOCKING (small): real Docker run just caught a genuine verdict-logic bug
+**Status:** CONFIRMED bug — from Sushil's session, fix belongs in `verification/regression/verify.py`
+
+We finally got a real Docker daemon (Sushil's teammate's laptop, WSL2) and
+ran `integration.demo` and `integration.debug_evidence` against the real
+netdiag fixture for the first time. Verdict came back `STILL_VULNERABLE`
+— but the full evidence shows the fix actually works correctly:
+
+- **After (fixed) run's stderr**: `ValueError: invalid host: '127.0.0.1;
+  touch /tmp/kagutsuchi_pwned'` — `fixed()` rejected the payload exactly
+  as designed, exploit never ran.
+- **After run's `filesystem_diff["created"]`**: does NOT contain
+  `/tmp/kagutsuchi_pwned`. The marker was never created.
+- But it DOES contain ~25 `.pyc` files (Python bytecode cache from the
+  interpreter compiling `re`, `subprocess`, `collections`, etc. on first
+  use) plus `/workspace` and `/workspace/candidate.py` — completely
+  incidental, present in BOTH the before and after runs regardless of
+  whether the exploit fired.
+
+**Root cause**: `regression/verify.py`'s `_marker_created()`:
+```python
+def _marker_created(evidence: ExecutionEvidence) -> bool:
+    return bool(evidence.filesystem_diff.get("created"))
+```
+This checks "was *anything* created" instead of "was *the attack marker*
+created" — so the incidental `.pyc`/`.workspace` noise makes every run
+look vulnerable, masking the real (correct!) signal. This never showed up
+in local/mocked tests because `verification/attacks/run_local.py`'s local
+runner only ever puts the exact marker path in `created`, with no Docker-
+startup noise to worry about — a real Docker run was the only way this
+was ever going to surface. Exactly why the demo-rehearsal-on-real-Docker
+item mattered.
+
+**Suggested fix** (small, precise — not a redesign): check for the
+specific marker path instead of "created is non-empty". `run_local.py`
+already has `MARKER_PATH = Path("/tmp/kagutsuchi_pwned")` — reuse that
+constant rather than introducing a second one:
+```python
+from verification.attacks.run_local import MARKER_PATH
+
+def _marker_created(evidence: ExecutionEvidence) -> bool:
+    return str(MARKER_PATH) in evidence.filesystem_diff.get("created", [])
+```
+Then re-run `verification/tests/test_regression_verify.py` — the existing
+fake evidence already only ever puts the marker path in `created`, so
+this should be a no-op for every existing test, just correct against
+real-world noise now.
+
+This is the one thing actually blocking a correct real-Docker demo — once
+fixed, we should re-run `integration.debug_evidence` (Sushil's teammate
+has it cloned and Docker running) to confirm `VERIFIED_FIXED` comes back
+for real. Flagging as the top-priority item; everything else can wait
+behind this one.
+
+---
