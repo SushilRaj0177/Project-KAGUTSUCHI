@@ -21,12 +21,16 @@ team lead (Sushil, via this chat) rather than reaching across the boundary.
 
 ## 2. Branches
 
-- `main` — protected. Only the team lead merges into it.
-- Sushil works on `claude/hackathon-plan-coordination-wipbuc` (this branch) for `system/`, `contracts/` seed, and later `integration/`.
-- Charanpreet works on her own Claude Code session's branch (whatever it's
-  named — no need to match Sushil's naming) for `verification/` only.
-- Each person opens a PR from their branch into `main` scoped to their own
-  folder. The team lead reviews and merges both.
+- `main` — protected. Only the team lead's session merges into it.
+- Sushil's session works on `claude/hackathon-plan-coordination-wipbuc` (this branch) for `system/`, `contracts/` seed, and later `integration/`.
+- Charanpreet's session works on its own branch (whatever it's named — no
+  need to match Sushil's naming) for `verification/` only.
+- Each session opens a PR from its branch into `main` scoped to its own
+  folder. Neither human is relaying approvals — Sushil's session reviews
+  and merges both PRs itself, acting with Sushil's authority, without
+  waiting for a manual human click. Charanpreet's session should not merge
+  its own PR into `main` even if it looks ready — open it and let Sushil's
+  session merge it.
 - Nobody force-pushes `main`. Nobody rewrites the other person's branch history.
 
 ## 3. Changing `contracts/`
