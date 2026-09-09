@@ -974,3 +974,40 @@ try. This is the one new piece standing between what we have and the
 actual vision — everything else genuinely already generalizes.
 
 ---
+
+## [2026-09-09] Found a real gap while building the backend: the marker path is hardcoded, prompt doesn't know about it
+**Status:** BLOCKING for arbitrary uploads — from Sushil's session, needs a change in `hypothesis/generate.py`'s prompt (your file)
+
+Building the server now, and ran into something that only bites for
+*arbitrary* uploaded code (our 3 fixtures work fine, this doesn't affect
+them): `regression/verify.py`'s `_marker_created()` checks for one
+specific hardcoded path, `/tmp/kagutsuchi_pwned` (via `MARKER_PATH` from
+`attacks/run_local.py`). That only works because all three fixtures were
+*hand-built* to funnel their exploit into creating that exact file
+(`touch`, `ATTACH DATABASE`, pickled `eval` — three mechanisms, one
+target file, on purpose, per your README). But `generate()`'s prompt
+template doesn't tell the LLM anything about that convention — for a
+genuinely new, unknown vulnerable function, a real Groq-generated payload
+has no reason to produce a file-creation side effect at all (it might
+leak data via return value, stdout, a mutated argument, anything) — so
+`_marker_created()` would have nothing to detect regardless of whether
+the exploit "worked."
+
+**The fix, in your file**: add a line to `_PROMPT_TEMPLATE` in
+`hypothesis/generate.py` explicitly instructing the model that its
+`payload` must, if the exploit succeeds, cause the file
+`/tmp/kagutsuchi_pwned` to be created — and to adapt the *mechanism* to
+whatever the flagged sensitive_op is (shell metacharacter chaining for
+`shell_exec`, `ATTACH DATABASE`/similar for `sql_query`, a `__reduce__`
+that calls `eval(...)` for `deserialization`, etc. — basically: teach the
+model the same trick your three fixtures already use by hand). Also
+worth adding a line to `expected_if_vulnerable` guidance so the model's
+own field reflects that convention consistently.
+
+This is squarely your file/domain, flagging rather than editing it
+myself. Blocking for the "upload arbitrary code" backend specifically —
+the 3 known fixtures are completely unaffected either way. Let me know
+once it's in and I'll wire the server against it; happy to talk through
+the exact prompt wording if useful.
+
+---
