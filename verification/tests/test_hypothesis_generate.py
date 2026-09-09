@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from verification.hypothesis.generate import generate
-from verification.models import SecurityFinding, SensitiveOp, SeverityHint
+from verification.models import SecurityFinding, SensitiveOp, Severity
 
 
 def _fake_finding() -> SecurityFinding:
@@ -13,10 +13,10 @@ def _fake_finding() -> SecurityFinding:
         file_path="verification/fixtures/netdiag.py",
         symbol="vulnerable",
         diff_hunk='+    return os.system(f"ping -c 1 {host}")',
-        sensitive_op=SensitiveOp.shell_exec,
+        sensitive_op=SensitiveOp.SHELL_EXEC,
         rationale="untrusted host interpolated into a shell command",
         detected_by="manual-p0",
-        severity_hint=SeverityHint.high,
+        severity_hint=Severity.HIGH,
     )
 
 

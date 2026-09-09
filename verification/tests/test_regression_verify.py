@@ -59,3 +59,27 @@ def test_replay_not_identical_lowers_confidence():
     assert result.verdict == Verdict.VERIFIED_FIXED
     assert result.replay_identical is False
     assert result.confidence < 1.0
+
+
+def test_mismatched_run_ids_are_inconclusive():
+    before = fake_evidence_vulnerable_before()
+    after = fake_evidence_fixed_after().model_copy(update={"run_id": "a-different-run"})
+
+    result = verify(HYP, before, after, PAYLOAD, PAYLOAD)
+
+    assert result.verdict == Verdict.INCONCLUSIVE
+    assert result.confidence == 0.0
+    assert before.run_id in result.summary
+    assert after.run_id in result.summary
+
+
+def test_missing_created_key_treated_as_not_vulnerable():
+    # Malformed evidence: filesystem_diff has no "created" key at all,
+    # rather than an empty list - must not raise, must not be treated as
+    # exploited.
+    before = fake_evidence_vulnerable_before().model_copy(update={"filesystem_diff": {}})
+    after = fake_evidence_fixed_after().model_copy(update={"filesystem_diff": {}})
+
+    result = verify(HYP, before, after, PAYLOAD, PAYLOAD)
+
+    assert result.verdict == Verdict.FALSE_POSITIVE

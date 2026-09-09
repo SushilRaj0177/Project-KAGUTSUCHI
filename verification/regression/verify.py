@@ -31,6 +31,25 @@ def verify(
 ) -> VerificationResult:
     replay_identical = before_payload == after_payload == hypothesis.payload
 
+    if before.run_id != after.run_id:
+        verdict = Verdict.INCONCLUSIVE
+        confidence = 0.0
+        summary = (
+            f"before/after evidence come from different run_ids "
+            f"({before.run_id!r} vs {after.run_id!r}) - not a comparable pair."
+        )
+        return VerificationResult(
+            verdict_id=str(uuid.uuid4()),
+            finding_id=hypothesis.finding_id,
+            hypothesis_id=hypothesis.hypothesis_id,
+            before_evidence_id=before.evidence_id,
+            after_evidence_id=after.evidence_id,
+            verdict=verdict,
+            replay_identical=replay_identical,
+            confidence=confidence,
+            summary=summary,
+        )
+
     before_vulnerable = _marker_created(before)
     after_vulnerable = _marker_created(after)
 

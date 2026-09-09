@@ -191,6 +191,46 @@ on me.
 
 ---
 
+## [2026-09-09] All 4 next-tasks done — pipeline.score() needs a note for integration/
+**Status:** CONFIRMED — from Charanpreet's session (report, not asking for confirmation)
+
+Pulled `main`, merged into `charanpreet/verification-core`, all four items done:
+
+1. **`verification/models.py` now just re-exports from `contracts`** —
+   removed the duplicate type definitions. Had to update a handful of
+   enum-member usages across `verification/` to match `contracts`' names
+   (`SensitiveOp.SHELL_EXEC` not `.shell_exec`, `Severity.HIGH` not
+   `SeverityHint.high`, `ExecutionPhase.BEFORE`/`.AFTER` not
+   `EvidencePhase.before`/`.after`) since the two mirrors used different
+   casing/names for the same values. All 10 unit tests still pass.
+2. **Added `verification/pipeline.py::score(finding, before_evidence, after_evidence, hypothesis=None)`.**
+   One flag for your integration wiring: if `hypothesis` is omitted, `score()`
+   generates a *fresh* one from `finding` and assumes its payload is what
+   ran in both evidence phases — that's only correct if you already made
+   sure of that out-of-band, since a fresh Groq-generated hypothesis gets a
+   new `hypothesis_id`/payload each call and won't match what
+   `before_evidence`/`after_evidence` actually saw. **For real integration,
+   please call `hypothesis.generate(finding)` once yourself, feed that same
+   hypothesis's `payload` to the sandbox for both before/after runs, and
+   pass that hypothesis into `score(..., hypothesis=hyp)` explicitly** —
+   the no-arg path is a demo/convenience fallback only, not FK-correct.
+3. **Added regression/verify.py coverage for mismatched `run_id`s** (now
+   returns `INCONCLUSIVE`, confidence 0.0, explicit summary naming both
+   run_ids — didn't raise, since a bad pairing is a data/wiring problem,
+   not something that should crash the pipeline) **and missing `"created"`
+   key** (already handled gracefully pre-existing via `dict.get`, added a
+   test to lock that in — treated as FALSE_POSITIVE the same as an empty
+   list, since "no evidence of exploitation" either way).
+4. **No Docker daemon in this environment either** (`docker: command not
+   found`) — can't test `system/sandbox` end-to-end from my side. Flagging
+   per your ask; whoever does final demo rehearsal will need a machine with
+   Docker installed.
+
+Not waiting on anything — will keep hardening `verification/` (more edge
+cases, more fixture coverage) until there's something new here to react to.
+
+---
+
 ## [2026-09-09] `integration/` is up — pipeline wired, mock-tested, not yet Docker-tested
 **Status:** CONFIRMED — from Sushil's session
 
@@ -224,5 +264,50 @@ rather than assuming it'll just work on the day.
 Also still true from the last entry, not blocking, whenever you get to
 it: item 1 (collapse `verification/models.py` into `contracts/`) and item
 3 (more `regression/verify.py` edge-case tests).
+
+---
+
+## [2026-09-09] Docker demo attempted — no daemon here either, clean error
+**Status:** CONFIRMED — from Charanpreet's session (report)
+
+Pulled `main`, merged `integration/` into `charanpreet/verification-core`
+(one conflict in this file from both of us appending near the same spot —
+resolved by keeping both entries, mine first). Ran the full suite after
+merging: **26 passed, 2 skipped** (same pre-existing Windows/POSIX skips
+as before) — `integration/`'s wiring against my `verification/pipeline.py`
+changes (items 1–3 from my last entry) didn't break anything.
+
+Ran the requested demo:
+
+```
+pip install -r requirements.txt -r verification/requirements.txt
+PYTHONPATH=. python3 -m integration.demo
+```
+
+No Docker daemon in this environment either (this machine doesn't have
+Docker installed at all, not just "daemon not running"). Fails cleanly at
+the sandbox boundary, not a crash elsewhere in the pipeline:
+
+```
+docker.errors.DockerException: Error while fetching server API version:
+(2, 'CreateFile', 'The system cannot find the file specified.')
+...
+system.sandbox.docker_runner.SandboxUnavailableError: Could not reach the
+Docker daemon. Is Docker running? (underlying error: Error while fetching
+server API version: (2, 'CreateFile', 'The system cannot find the file
+specified.'))
+```
+
+So: confirmed `#1 item for demo rehearsal` per your last entry — neither
+session has Docker, someone needs to run `integration.demo` on a real
+machine with Docker before the live demo, not assume it on the day. The
+failure mode itself is reassuring though — `SandboxUnavailableError` is a
+named, caught exception at a clear boundary (`system/sandbox/docker_runner.py`),
+not a bare traceback from deep inside the pipeline, so whoever hits this
+on a Docker-less machine will get a legible error pointing at the right
+fix (install/start Docker), not a mystery.
+
+Not waiting on this — continuing with item 3 (more `regression/verify.py`
+edge cases) and general `verification/` hardening in the meantime.
 
 ---

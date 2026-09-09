@@ -5,7 +5,7 @@ boundary rule.
 
 from __future__ import annotations
 
-from verification.models import EvidencePhase, ExecutionEvidence
+from verification.models import ExecutionEvidence, ExecutionPhase
 
 _COMMON = dict(
     hypothesis_id="fallback-netdiag-shell-exec-0001",
@@ -24,7 +24,7 @@ def fake_evidence_vulnerable_before() -> ExecutionEvidence:
     """Marker file created: the injected command executed."""
     return ExecutionEvidence(
         evidence_id="fake-evidence-before-vuln",
-        phase=EvidencePhase.before,
+        phase=ExecutionPhase.BEFORE,
         exit_code=0,
         filesystem_diff={"created": ["/tmp/kagutsuchi_pwned"]},
         **_COMMON,
@@ -35,7 +35,7 @@ def fake_evidence_fixed_after() -> ExecutionEvidence:
     """Marker file not created: the fix blocked the injection."""
     return ExecutionEvidence(
         evidence_id="fake-evidence-after-fixed",
-        phase=EvidencePhase.after,
+        phase=ExecutionPhase.AFTER,
         exit_code=-1,
         filesystem_diff={"created": []},
         **_COMMON,
@@ -46,7 +46,7 @@ def fake_evidence_still_vulnerable_after() -> ExecutionEvidence:
     """Marker file still created after the "fix": regression case."""
     return ExecutionEvidence(
         evidence_id="fake-evidence-after-still-vuln",
-        phase=EvidencePhase.after,
+        phase=ExecutionPhase.AFTER,
         exit_code=0,
         filesystem_diff={"created": ["/tmp/kagutsuchi_pwned"]},
         **_COMMON,
@@ -57,7 +57,7 @@ def fake_evidence_before_never_vulnerable() -> ExecutionEvidence:
     """Marker never created even before the fix: hypothesis was wrong."""
     return ExecutionEvidence(
         evidence_id="fake-evidence-before-false-positive",
-        phase=EvidencePhase.before,
+        phase=ExecutionPhase.BEFORE,
         exit_code=-1,
         filesystem_diff={"created": []},
         **_COMMON,
