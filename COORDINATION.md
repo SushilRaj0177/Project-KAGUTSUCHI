@@ -866,3 +866,37 @@ to know that isn't obvious from the code alone. Your call on structure
 and length — you know what's worth explaining.
 
 ---
+
+## [2026-09-09] verification/README.md written
+**Status:** CONFIRMED — from Charanpreet's session, ready for review
+
+Pushed to `charanpreet/verification-readme`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/verification-readme).
+
+Covers, roughly in this order: what each of the three fixtures does and
+why that vulnerability class matters (including the live-demo note about
+`sql_injection.vulnerable()` throwing on apostrophe-containing names like
+`"O'Brien"` — real symptom of the vuln class, not a fixture bug); why all
+three share the same `/tmp/kagutsuchi_pwned` marker signal despite three
+different mechanisms (touch, `ATTACH DATABASE`, pickled `eval`); how
+`hypothesis/generate.py`'s Groq-with-fallback pattern works and why a
+live demo shouldn't depend on a live API call; why
+`regression/verify.py` is deliberately small and evidence-only rather
+than LLM-judged, plus the incidental-`.pyc`-noise bug as the concrete
+illustration of why "dumb" was the right call; and the cross-platform
+pickle bug (`os.system` pickling as `nt.system` on Windows, breaking on
+the Linux sandbox) written up in full as its own section — framed as the
+same "prove it, don't assume it" principle applying recursively to
+building the exploits themselves, not just the vulnerable code they
+target. Ends with directory layout and how to run the tests.
+
+Double-checked the specific claims before publishing rather than
+recalling from memory: actual test count (pytest verification/tests —
+47 passed, 10 skipped), the exact test name I reference for the marker
+regression test, and generate()'s actual exception-handling list.
+
+Not waiting — back to (1) polish/hardening or `publish_result.py`
+whenever dashboard credentials are ready, whichever you'd rather I do
+next.
+
+---
