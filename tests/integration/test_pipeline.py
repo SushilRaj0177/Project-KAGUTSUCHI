@@ -13,6 +13,7 @@ from unittest.mock import patch
 
 from contracts import ExecutionEvidence, ExecutionPhase, SecurityFinding, SensitiveOp, Severity
 from integration.pipeline import run_full_verification, run_full_verification_detailed
+from verification.hypothesis.deserialization_fallback import DESERIALIZATION_FALLBACK_HYPOTHESIS
 from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import Verdict
 
@@ -21,11 +22,12 @@ def _fake_run_in_sandbox(
     *, candidate_code, payload, hypothesis_id, run_id, phase, timeout_s=10
 ):
     """Stand-in for the real Docker sandbox: 'vulnerable' code creates the
-    marker file when the payload contains a shell separator, 'fixed' code
-    never does, regardless of payload - mirrors the netdiag fixture's
-    actual before/after behavior without needing Docker or `ping`."""
+    marker file, 'fixed' code never does - this only tests the wiring
+    (finding -> hypothesis -> evidence -> verdict), not real exploit
+    mechanics, which each fixture's own tests and the real Docker runs
+    already cover independently."""
     is_vulnerable_code = "def vulnerable" in candidate_code
-    created = ["/tmp/kagutsuchi_pwned"] if (is_vulnerable_code and ";" in payload) else []
+    created = ["/tmp/kagutsuchi_pwned"] if is_vulnerable_code else []
     return ExecutionEvidence(
         hypothesis_id=hypothesis_id,
         run_id=run_id,
@@ -113,3 +115,27 @@ def test_detailed_bundle_carries_every_intermediate_artifact(mock_run, monkeypat
     assert bundle.hypothesis.payload  # non-empty
     assert bundle.before.phase.value == "before"
     assert bundle.after.phase.value == "after"
+
+
+@patch("system.orchestration.pipeline.run_in_sandbox", side_effect=_fake_run_in_sandbox)
+def test_full_pipeline_generalizes_to_a_third_vulnerability_class(mock_run, monkeypatch):
+    # Third proof of the same generalization claim: insecure
+    # deserialization instead of command/SQL injection, still zero
+    # special-casing in run_full_verification itself.
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    finding = SecurityFinding(
+        file_path="verification/fixtures/insecure_deserialization.py",
+        symbol="vulnerable",
+        diff_hunk="pickle.loads(base64.b64decode(data))",
+        sensitive_op=SensitiveOp.DESERIALIZATION,
+        rationale="test finding",
+        detected_by="test",
+        severity_hint=Severity.HIGH,
+    )
+    result = run_full_verification(
+        vulnerable_code="def vulnerable(data): pass",
+        fixed_code="def fixed(data): pass",
+        finding=finding,
+        fallback=DESERIALIZATION_FALLBACK_HYPOTHESIS,
+    )
+    assert result.verdict == Verdict.VERIFIED_FIXED
