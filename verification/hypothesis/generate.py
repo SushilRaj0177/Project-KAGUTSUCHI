@@ -1,8 +1,12 @@
 """Given a SecurityFinding, produce one deterministic AttackHypothesis.
 
 Tries Groq once; on any failure (down, rate-limited, malformed output)
-degrades to the hardcoded P0 fallback rather than raising - see
-verification/hypothesis/fallback.py.
+degrades to a hardcoded fallback rather than raising - see
+verification/hypothesis/fallback.py (netdiag) and sql_fallback.py (SQL
+injection). The fallback is per-fixture, not hardcoded to one vulnerability
+class - see COORDINATION.md's "Next milestone: prove this generalizes
+beyond one fixture" for why this had to change from a single hardcoded
+import once a second fixture existed.
 """
 
 from __future__ import annotations
@@ -11,7 +15,7 @@ import uuid
 
 from pydantic import ValidationError
 
-from verification.hypothesis.fallback import with_finding_id
+from verification.hypothesis.fallback import NETDIAG_FALLBACK_HYPOTHESIS
 from verification.hypothesis.groq_client import GroqUnavailable, generate_hypothesis_json
 from verification.models import AttackHypothesis, SecurityFinding
 
@@ -45,7 +49,18 @@ def _build_prompt(finding: SecurityFinding) -> str:
     )
 
 
-def generate(finding: SecurityFinding, model_id: str = "groq:openai/gpt-oss-120b") -> AttackHypothesis:
+def generate(
+    finding: SecurityFinding,
+    model_id: str = "groq:openai/gpt-oss-120b",
+    fallback: AttackHypothesis = NETDIAG_FALLBACK_HYPOTHESIS,
+) -> AttackHypothesis:
+    """`fallback` defaults to the netdiag hypothesis for backward
+    compatibility with existing call sites (e.g. integration/pipeline.py's
+    single-arg `generate_hypothesis(v_finding)` call). Pass the matching
+    per-fixture fallback explicitly for any other fixture, e.g.
+    `generate(finding, fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS)` - see
+    verification/hypothesis/sql_fallback.py.
+    """
     try:
         raw = generate_hypothesis_json(_build_prompt(finding))
         return AttackHypothesis(
@@ -64,4 +79,4 @@ def generate(finding: SecurityFinding, model_id: str = "groq:openai/gpt-oss-120b
         # keys (KeyError), a non-dict JSON value (TypeError on indexing),
         # and valid-but-wrong-shaped values, e.g. `payload` coming back as
         # a list/object instead of a string (pydantic ValidationError).
-        return with_finding_id(finding.finding_id)
+        return fallback.model_copy(update={"finding_id": finding.finding_id})

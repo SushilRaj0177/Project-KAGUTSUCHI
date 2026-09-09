@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import verification.hypothesis.generate as generate_module
 from verification.hypothesis.generate import generate
+from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import SecurityFinding, SensitiveOp, Severity
 
 
@@ -63,6 +64,20 @@ def test_generate_falls_back_on_wrong_typed_field(monkeypatch):
     )
     hyp = generate(_fake_finding())
     assert hyp.generated_by == "fallback:hardcoded-v1"
+
+
+def test_generate_falls_back_to_the_given_fallback_not_always_netdiag(monkeypatch):
+    # Regression test: generate() used to hardcode the netdiag fallback
+    # for every fixture. Passing a different fallback must actually be
+    # honored, not silently ignored.
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    finding = _fake_finding()
+
+    hyp = generate(finding, fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS)
+
+    assert hyp.hypothesis_id == SQL_INJECTION_FALLBACK_HYPOTHESIS.hypothesis_id
+    assert hyp.finding_id == finding.finding_id
+    assert "ATTACH DATABASE" in hyp.payload
 
 
 def test_generate_uses_live_response_when_well_formed(monkeypatch):

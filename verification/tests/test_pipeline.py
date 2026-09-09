@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from verification.evidence.fakes import fake_evidence_fixed_after, fake_evidence_vulnerable_before
 from verification.hypothesis.fallback import NETDIAG_FALLBACK_HYPOTHESIS
+from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import SecurityFinding, SensitiveOp, Severity, Verdict
 from verification.pipeline import score
 
@@ -34,4 +35,19 @@ def test_score_uses_explicit_hypothesis_for_fk_consistency():
         _fake_finding(), fake_evidence_vulnerable_before(), fake_evidence_fixed_after(), hypothesis=hyp
     )
     assert result.hypothesis_id == hyp.hypothesis_id
+    assert result.verdict == Verdict.VERIFIED_FIXED
+
+
+def test_score_generates_the_sql_fallback_when_told_to(monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)  # force the fallback path
+    finding = _fake_finding().model_copy(update={"finding_id": "finding-0002"})
+
+    result = score(
+        finding,
+        fake_evidence_vulnerable_before(),
+        fake_evidence_fixed_after(),
+        fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS,
+    )
+
+    assert result.hypothesis_id == SQL_INJECTION_FALLBACK_HYPOTHESIS.hypothesis_id
     assert result.verdict == Verdict.VERIFIED_FIXED
