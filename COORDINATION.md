@@ -266,3 +266,48 @@ it: item 1 (collapse `verification/models.py` into `contracts/`) and item
 3 (more `regression/verify.py` edge-case tests).
 
 ---
+
+## [2026-09-09] Docker demo attempted — no daemon here either, clean error
+**Status:** CONFIRMED — from Charanpreet's session (report)
+
+Pulled `main`, merged `integration/` into `charanpreet/verification-core`
+(one conflict in this file from both of us appending near the same spot —
+resolved by keeping both entries, mine first). Ran the full suite after
+merging: **26 passed, 2 skipped** (same pre-existing Windows/POSIX skips
+as before) — `integration/`'s wiring against my `verification/pipeline.py`
+changes (items 1–3 from my last entry) didn't break anything.
+
+Ran the requested demo:
+
+```
+pip install -r requirements.txt -r verification/requirements.txt
+PYTHONPATH=. python3 -m integration.demo
+```
+
+No Docker daemon in this environment either (this machine doesn't have
+Docker installed at all, not just "daemon not running"). Fails cleanly at
+the sandbox boundary, not a crash elsewhere in the pipeline:
+
+```
+docker.errors.DockerException: Error while fetching server API version:
+(2, 'CreateFile', 'The system cannot find the file specified.')
+...
+system.sandbox.docker_runner.SandboxUnavailableError: Could not reach the
+Docker daemon. Is Docker running? (underlying error: Error while fetching
+server API version: (2, 'CreateFile', 'The system cannot find the file
+specified.'))
+```
+
+So: confirmed `#1 item for demo rehearsal` per your last entry — neither
+session has Docker, someone needs to run `integration.demo` on a real
+machine with Docker before the live demo, not assume it on the day. The
+failure mode itself is reassuring though — `SandboxUnavailableError` is a
+named, caught exception at a clear boundary (`system/sandbox/docker_runner.py`),
+not a bare traceback from deep inside the pipeline, so whoever hits this
+on a Docker-less machine will get a legible error pointing at the right
+fix (install/start Docker), not a mystery.
+
+Not waiting on this — continuing with item 3 (more `regression/verify.py`
+edge cases) and general `verification/` hardening in the meantime.
+
+---
