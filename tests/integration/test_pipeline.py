@@ -12,7 +12,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from contracts import ExecutionEvidence, ExecutionPhase, SecurityFinding, SensitiveOp, Severity
-from integration.pipeline import run_full_verification
+from integration.pipeline import run_full_verification, run_full_verification_detailed
 from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import Verdict
 
@@ -97,3 +97,19 @@ def test_full_pipeline_generalizes_to_a_second_vulnerability_class(mock_run, mon
         fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS,
     )
     assert result.verdict == Verdict.VERIFIED_FIXED
+
+
+@patch("system.orchestration.pipeline.run_in_sandbox", side_effect=_fake_run_in_sandbox)
+def test_detailed_bundle_carries_every_intermediate_artifact(mock_run, monkeypatch):
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    finding = _netdiag_finding()
+    bundle = run_full_verification_detailed(
+        vulnerable_code="def vulnerable(host): pass",
+        fixed_code="def fixed(host): pass",
+        finding=finding,
+    )
+    assert bundle.result.verdict == Verdict.VERIFIED_FIXED
+    assert bundle.finding.file_path == finding.file_path
+    assert bundle.hypothesis.payload  # non-empty
+    assert bundle.before.phase.value == "before"
+    assert bundle.after.phase.value == "after"

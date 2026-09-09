@@ -1,3 +1,4 @@
 pydantic>=2.0
 docker>=7.0
 typer>=0.12
+requests>=2.31

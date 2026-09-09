@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+/* Kagutsuchi commits to a single dark "forge at night" identity —
+   a security console, not a document that adapts to system light mode.
+   Tokens are still explicit (never relying on inherited/transparent
+   backgrounds) per the single-theme allowance. */
+:root {
+  --void-950: #0a0d12;
+  --void-900: #12161d;
+  --void-850: #191f28;
+  --void-800: #212836;
+
+  --ember-500: #ff4630;
+  --ember-300: #ff9d86;
+
+  --temper-500: #2fd6c4;
+  --temper-300: #9aeee4;
+
+  --gold-500: #e7b23a;
+  --gold-300: #f3d693;
+
+  --paper-50: #eef1f6;
+  --steel-400: #808b9a;
+  --steel-600: #545e6b;
+
+  --line: rgba(128, 139, 154, 0.16);
+  --line-strong: rgba(128, 139, 154, 0.28);
+}
+
+@theme inline {
+  --color-void-950: var(--void-950);
+  --color-void-900: var(--void-900);
+  --color-void-850: var(--void-850);
+  --color-void-800: var(--void-800);
+  --color-ember-500: var(--ember-500);
+  --color-ember-300: var(--ember-300);
+  --color-temper-500: var(--temper-500);
+  --color-temper-300: var(--temper-300);
+  --color-gold-500: var(--gold-500);
+  --color-gold-300: var(--gold-300);
+  --color-paper-50: var(--paper-50);
+  --color-steel-400: var(--steel-400);
+  --color-steel-600: var(--steel-600);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --font-display: var(--font-display), "Big Shoulders Display", ui-sans-serif, sans-serif;
+  --font-sans: var(--font-sans), "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-mono), "IBM Plex Mono", ui-monospace, "SFMono-Regular", monospace;
+  --font-jp: var(--font-jp), "Noto Sans JP", ui-sans-serif, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--void-950);
+  color: var(--paper-50);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: 0 0;
+}
+
+::selection {
+  background: var(--ember-500);
+  color: var(--void-950);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
