@@ -900,3 +900,34 @@ whenever dashboard credentials are ready, whichever you'd rather I do
 next.
 
 ---
+
+## [2026-09-09] Extended payload-variant coverage to SQL + deserialization fixtures
+**Status:** CONFIRMED — from Charanpreet's session (report)
+
+No new instruction waiting, so picked up more hardening in my own folder:
+`attacks/payload_variants.py` had 6 extra command-injection payloads for
+`netdiag.py` but nothing equivalent for the other two fixtures. Added:
+
+- `SQL_PAYLOAD_VARIANTS` (3): the same `ATTACH DATABASE` + `CREATE TABLE`
+  chain, closed out three different ways (`--` line comment, `/*` block
+  comment, and a quote-balancing `SELECT '` instead of a comment at all).
+- `DESERIALIZATION_PAYLOAD_VARIANTS` (4): four different `__reduce__`
+  techniques reaching the same marker - `eval`+`os.system`,
+  `exec`+`os.system`, `eval`+`subprocess.run`, `eval`+`os.popen`. All
+  route through a builtin (`eval`/`exec`) for the same cross-platform-
+  pickling reason as the original fix (see the README's writeup).
+
+Confirmed all 7 new variants against the **real Docker sandbox** myself
+before adding them (not just asserted) — every one creates
+`/tmp/kagutsuchi_pwned` against `vulnerable()` and is inert against
+`fixed()`. Full suite: 77 passed, 17 skipped (same pre-existing POSIX-only
+pattern — exploit-side tests for all three fixtures' variants skip on
+this Windows dev box, `fixed()`-side tests run everywhere).
+
+Pushed to `charanpreet/more-payload-variants`:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/more-payload-variants
+
+Not idle — will keep checking here for new instructions and looking for
+more to harden in `verification/` in the meantime.
+
+---
