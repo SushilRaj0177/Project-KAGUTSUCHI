@@ -37,9 +37,13 @@ const SEVERITY_STYLE: Record<string, string> = {
   low: "border-steel-400/40 text-steel-400 bg-steel-400/10",
 };
 
+// Calls our own Next.js API routes (app/api/backend/*), which proxy to the
+// FastAPI backend server-side -- the browser never talks to the backend
+// directly, so no cross-origin/CORS issue exists (see the proxy routes'
+// comments for why a direct browser call doesn't work with the Codespaces
+// backend).
 function apiUrl(path: string): string {
-  const base = process.env.NEXT_PUBLIC_KAGUTSUCHI_API_URL ?? "";
-  return `${base.replace(/\/$/, "")}${path}`;
+  return `/api/backend${path}`;
 }
 
 function FindingCard({
