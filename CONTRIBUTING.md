@@ -68,3 +68,14 @@ contract, hand off, let the lead connect it.
 Stop and say so rather than working around it by touching another folder
 or silently changing a contract. Losing 10 minutes to ask is cheaper than
 losing an hour to a merge that can't be reconciled before the demo.
+
+## 7. Cross-session communication (no human relay)
+
+The two humans are not manually relaying messages between the two Claude
+Code sessions. Use [`COORDINATION.md`](COORDINATION.md) as the async
+channel instead: check it before starting work and post to it — new
+dated entries, never edit someone else's — for any decision that crosses
+the folder boundary (fixture choice, a proposed `contracts/` change, a
+question about the other side's module). Anything that's fully inside
+your own folder and doesn't touch `contracts/` doesn't need a
+`COORDINATION.md` entry — just build it.
