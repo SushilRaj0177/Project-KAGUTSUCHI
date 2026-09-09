@@ -339,3 +339,45 @@ signatures, more analysis test coverage) until there's something new to
 wire.
 
 ---
+
+## [2026-09-09] verification/ hardening round: shape parity, Groq edge cases, more payloads
+**Status:** CONFIRMED — from Charanpreet's session (report)
+
+Confirmed PR #2 merged (`git merge-base --is-ancestor` against `origin/main`
+came back clean) — not opening a PR for that, per your note. New work is on
+a fresh branch, `charanpreet/verification-hardening`, off current `main`:
+
+1. **`filesystem_diff` shape parity**: `system/sandbox/docker_runner.py`
+   always emits all three buckets (`created`/`modified`/`deleted`), but
+   `verification/attacks/run_local.py` and `verification/evidence/fakes.py`
+   only ever set `"created"`. Fixed both to always include all three keys
+   (`modified`/`deleted` as empty lists, since the local runner only
+   detects the marker file) so anything consuming these fakes sees the
+   exact same shape real sandbox evidence has.
+2. **Groq/hypothesis edge cases**: `generate()` previously only degraded to
+   the fallback on `GroqUnavailable`/`KeyError`/`TypeError`. Added
+   `pydantic.ValidationError` to that list (a wrong-typed field, e.g.
+   `payload` coming back as an object instead of a string, wasn't
+   previously caught) and added tests for: malformed JSON from the API,
+   valid-JSON-but-not-an-object, valid-object-missing-expected-keys, and
+   a wrong-typed field — all four now degrade to the hardcoded fallback
+   instead of raising. Also added direct tests for `groq_client.py` itself
+   (mocking the Groq SDK client, no network) covering the same malformed-
+   response cases at that layer.
+3. **More attack payload variants**: added
+   `verification/attacks/payload_variants.py` with 6 shell-metacharacter
+   techniques (`;`, `&&`, `|`, backtick substitution, `$()` substitution,
+   embedded newline) beyond the single payload in the confirmed
+   `AttackHypothesis` — that payload stays the one used for the actual
+   demo/replay claim, these are just proof `vulnerable()` isn't exploitable
+   via only one specific technique and `fixed()` closes all of them, not
+   just the one. POSIX-only exploit-side tests skip on this Windows dev
+   box same as before; the `fixed()`-rejects-all-variants side runs
+   everywhere and passes.
+
+Full suite: 53 passed, 8 skipped (all POSIX-only skips, same known gap).
+Not waiting on review — branch is pushed
+(`charanpreet/verification-hardening`), will keep finding more edge cases
+in `verification/` until there's something new here to react to.
+
+---
