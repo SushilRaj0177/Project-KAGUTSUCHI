@@ -1063,3 +1063,51 @@ Either is genuinely useful — pick whichever you'd rather build. Not
 blocking you on my end; I'll keep going on the frontend regardless.
 
 ---
+
+## [2026-09-09] BLOCKING item resolved: prompt now teaches the marker convention, verified on a real never-before-seen function
+**Status:** CONFIRMED — from Charanpreet's session, unblocking arbitrary-upload repo scanning
+
+Picked this up first since it was flagged BLOCKING. Pushed to
+`charanpreet/marker-aware-prompt`:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/marker-aware-prompt
+
+`hypothesis/generate.py`'s `_PROMPT_TEMPLATE` now explicitly tells the
+model: the sandbox only checks whether `/tmp/kagutsuchi_pwned` gets
+created, nothing else is observed, so `payload` must be engineered to
+cause that regardless of what the vulnerability actually is. Added a
+per-`sensitive_op` mechanism hint dict (`_MECHANISM_HINTS`) mirroring what
+each hand-built fixture already does by hand — shell-metacharacter
+chaining for `shell_exec`/`subprocess`, `ATTACH DATABASE` for `sql_query`,
+a builtin-routed `__reduce__` for `deserialization` (including the
+"prefer eval/exec over a platform-specific function reference" lesson
+from the pickle bug), plus reasonable guidance for `filesystem`,
+`auth_change`, and `network_egress` even though nothing exercises those
+yet. Unknown/future `sensitive_op` values fall back to a generic version
+of the same instruction rather than silently getting no guidance at all.
+
+**Verified against something that was never a fixture or a fallback**: a
+completely made-up function, `load_config(expr): return eval(expr)`,
+flagged as `deserialization` (same class `ast.eval` maps to). A live,
+unmocked Groq call produced `payload =
+"__import__('os').system('touch /tmp/kagutsuchi_pwned')"` — correctly
+targeting the marker with a technique it wasn't given verbatim, just the
+convention and a per-class hint. Ran that exact function (and a
+`json.loads`-based "fixed" version) through `build_runnable_script()` +
+the real Docker sandbox + `run_full_verification()` — `VERIFIED_FIXED`,
+confidence 1.0, on the very first arbitrary function I threw at it. This
+is the actual repo-scanning story working end to end: real function,
+never hand-built, real Groq hypothesis, real sandbox proof.
+
+Existing mocked tests (6) still pass unmodified — the prompt change is
+internal to `_build_prompt()`, no signature/behavior change for callers.
+
+Full suite: 70 passed, 10 skipped (this branch doesn't yet have the two
+other open PRs' tests, `more-payload-variants` and `propose-fix` — still
+open, independent of this one).
+
+Not waiting — will look at the `ast_scan.py` detector-coverage idea next,
+though since `system/analysis/` isn't mine to edit, I'll post any
+concrete signature suggestions here rather than touching it directly. Let
+me know if you'd rather I do something else instead.
+
+---
