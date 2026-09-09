@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp } from "@/lib/clientIp";
 import { ensureSchema, sql } from "@/lib/db";
 
 // See app/api/backend/analyze-repo/route.ts for why this proxy exists.
@@ -54,7 +55,7 @@ export async function POST(request: NextRequest) {
   try {
     const upstream = await fetch(`${backendUrl.replace(/\/$/, "")}/api/verify`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Client-IP": clientIp(request) },
       body,
     });
     const data = await upstream.text();

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { clientIp } from "@/lib/clientIp";
 
 // Proxies to the FastAPI backend server-side. Browser CORS rules only
 // apply to fetch() calls made FROM the browser -- routing through our own
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const upstream = await fetch(`${backendUrl.replace(/\/$/, "")}/api/analyze-repo`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "X-Client-IP": clientIp(request) },
       body,
     });
     const data = await upstream.text();

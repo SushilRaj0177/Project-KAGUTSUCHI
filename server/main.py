@@ -21,12 +21,13 @@ from __future__ import annotations
 
 import os
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from contracts import SecurityFinding
 from integration.upload_pipeline import AttackGenerationUnavailable, verify_upload
+from server.rate_limit import rate_limit
 from server.repo_scan import CloneFailed, InvalidRepoUrl, scan_repo
 from system.analysis.ast_scan import scan_source
 from system.sandbox.docker_runner import SandboxUnavailableError
@@ -88,7 +89,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     return AnalyzeResponse(findings=findings)
 
 
-@app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse)
+@app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse, dependencies=[Depends(rate_limit)])
 def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
     """Clone a public GitHub repo and AST-scan every .py file in it.
     Never imports or executes anything from the repo."""
@@ -112,7 +113,7 @@ def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
     )
 
 
-@app.post("/api/verify")
+@app.post("/api/verify", dependencies=[Depends(rate_limit)])
 def verify(req: VerifyRequest) -> dict:
     """Attack the finding for real, in the Docker sandbox, then (if it
     lands) attempt and replay a fix. Only endpoint that executes anything."""
