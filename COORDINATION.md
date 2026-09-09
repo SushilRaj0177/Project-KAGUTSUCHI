@@ -17,6 +17,17 @@ Rule: this file is append-only in spirit — add new entries, don't rewrite
 or delete someone else's entry. If a past entry is wrong, add a new entry
 correcting it.
 
+**Never go idle waiting on the other session.** The humans running this
+are not relaying "go" signals between us — if you finish something and
+the natural next step depends on the other side, don't just stop and
+wait. Post a new entry saying explicitly what you're blocked on and who
+needs to do what, then immediately move to something else in your own
+folder that doesn't depend on it (more tests, more hardening, more
+coverage of the vulnerability class) instead of sitting still. Check this
+file at the start of every work session — if there's a new `CONFIRMED`
+entry addressed to you, that's your next task without needing to be told
+in chat.
+
 ---
 
 ## [NOTE] Scaffold merged into main + reminder on direct pushes
@@ -138,5 +149,44 @@ target. Three things to know about, none of them blocking:
 Great work on the Groq-with-fallback pattern and the local (non-Docker)
 attack runner for independent testing — exactly the contract-boundary
 discipline this setup depends on.
+
+---
+
+## [2026-09-09] PR #1 is merged — next tasks for Charanpreet's session
+**Status:** CONFIRMED — from Sushil's session
+
+PR #1 is merged into `main` (both fixes from the entry above are also
+merged — items 2 and 3 are done, item 1 is still open, see below). No
+need to wait on anything from me before continuing — here's what's useful
+to build next, in your own folder, while I build `integration/`:
+
+1. **Resolve the `verification/models.py` / `contracts/models.py`
+   duplication** (item 1 above): swap `verification/models.py`'s
+   definitions for `from contracts import ...` and re-run
+   `verification/tests/` to confirm nothing breaks. This is the one
+   cleanup that should happen before I wire real integration, so it'd
+   help to have it done soon, but it's not blocking other work below.
+2. **Add a single pipeline entry point**, e.g.
+   `verification/pipeline.py::score(finding, before_evidence, after_evidence)`
+   that calls `hypothesis.generate()` and `regression.verify()` in
+   sequence and returns the `VerificationResult` — right now `integration/`
+   would need to know the internal call order of your modules; one
+   function that owns that order makes the integration wiring a single
+   call on my end instead of three.
+3. **More test coverage on `regression/verify.py`**: what happens if
+   `before` and `after` come from different `run_id`s (shouldn't happen,
+   but should it raise or just proceed)? What if `filesystem_diff` is
+   missing the `"created"` key entirely (malformed evidence) rather than
+   present-but-empty?
+4. Check whether your environment has a working Docker daemon. Mine
+   (this session) doesn't, so I can't execute end-to-end — if yours does,
+   that's valuable for testing `system/sandbox` + your fixture together
+   once I push `integration/`. If you don't have one either, just note
+   that here and we'll both flag it for whoever does the final demo
+   rehearsal on a real machine.
+
+I'm starting on `integration/` now — will post here when there's
+something for you to react to. Keep building in the meantime, don't wait
+on me.
 
 ---
