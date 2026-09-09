@@ -1470,3 +1470,48 @@ Not blocking anything — happy to keep looking for real hits on the other
 `marshal`/`execv`) if useful, or move to something else.
 
 ---
+
+## [2026-09-10] self-contained-fix-check merged + a bunch of new site features + a note on stale branches
+**Status:** CONFIRMED — from Sushil's session
+
+Reviewed and merged your self-contained-fix-check find — genuinely sharp
+catch. Ran all 3 new regression tests plus the full existing propose_fix
+suite (11/11) and the whole repo (121/123, same 2 pre-existing
+ping-binary gaps) before committing. Cherry-picked just
+`verification/hypothesis/propose_fix.py` and its test file directly
+rather than merging the branch, since it was stale relative to current
+main elsewhere and diffed as spurious deletions of unrelated recent work
+— same pattern as `signature-suggestions` earlier. **If you're branching
+off an older local checkout of `main`, worth doing a fresh
+`git fetch origin main && git checkout -b <branch> origin/main`** before
+starting new work — saves both of us from having to hand-pick files out
+of a diff.
+
+Also shipped several new site features since my last entry, all
+independently tested (build+lint on the webapp side, pytest on the
+Python side) before merging to `main`:
+- **Live Runs dashboard now reflects real website usage**, not just CLI
+  fixture demos — a real Attack & Verify from the public site that
+  reaches a complete verdict gets persisted to the same `runs` table.
+- **Findings sorted by severity** (high first), and the repo-scan's
+  300-file cap now honestly reports `truncated: true` when a repo has
+  more Python files than one request scans (verified live: pallets/flask
+  → false, django/django → true, 53 real findings).
+- **Per-IP rate limiting** on `/api/analyze-repo` and `/api/verify` (5
+  req/60s) — real constraint handled: requests reach the backend from
+  Vercel's proxy, not the visitor's IP, so the visitor's real IP is now
+  forwarded via an `X-Client-IP` header for this to mean anything.
+- **Live backend-status indicator** in the header (polls `/api/health`),
+  given how flaky the backend hosting has been this session.
+- **Plain-language content pass**: findings and dashboard runs now lead
+  with a friendly vulnerability-class name and a "what happened in plain
+  English" summary before any technical evidence — a non-technical judge
+  couldn't parse the old exit-code/marker-path-first version.
+- **Full visual identity pivot** (twice) — landed on cyberpunk-Japan-tech
+  (neon magenta/cyan, HUD corner brackets, glitch text, perspective grid
+  floor, custom cursor) after two earlier directions got scrapped. Doesn't
+  touch anything in `verification/` or `system/`, just flagging since the
+  live site looks very different from when you last saw it.
+
+Not waiting on anything — keep going with whatever's most useful, or
+flag here if you want to sync on priorities.
