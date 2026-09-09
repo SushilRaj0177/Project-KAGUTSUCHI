@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Big_Shoulders, IBM_Plex_Mono, IBM_Plex_Sans, Noto_Sans_JP } from "next/font/google";
+import { LanguageProvider } from "@/components/LanguageContext";
 import "./globals.css";
 
 const display = Big_Shoulders({
@@ -38,7 +39,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       data-theme="dark"
       className={`${display.variable} ${sans.variable} ${mono.variable} ${jp.variable} h-full`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <LanguageProvider>{children}</LanguageProvider>
+      </body>
     </html>
   );
 }

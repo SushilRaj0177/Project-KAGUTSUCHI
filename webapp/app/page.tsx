@@ -1,4 +1,5 @@
 import { Dashboard } from "@/components/Dashboard";
+import { Header } from "@/components/Header";
 import { ensureSchema, sql, type RunRow } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
@@ -20,24 +21,7 @@ export default async function Home() {
 
   return (
     <main className="mx-auto max-w-5xl px-6 py-10">
-      <header className="mb-10 flex items-end justify-between gap-4 border-b border-line pb-6">
-        <div>
-          <div className="flex items-baseline gap-3">
-            <h1 className="font-display text-3xl font-extrabold tracking-wide">
-              KAGU<span className="text-ember-500">TSU</span>CHI
-            </h1>
-            <span className="font-jp text-lg text-steel-400">鍛・検証</span>
-          </div>
-          <p className="mt-1 text-sm text-steel-400">
-            Autonomous code integrity verification — proof, not opinion.
-          </p>
-        </div>
-        <div className="text-right text-xs text-steel-400">
-          <div className="font-jp text-sm text-paper-50">検証ログ</div>
-          <div>Verification Log</div>
-        </div>
-      </header>
-
+      <Header />
       <Dashboard runs={runs} />
     </main>
   );
