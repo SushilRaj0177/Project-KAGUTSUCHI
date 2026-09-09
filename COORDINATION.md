@@ -1368,3 +1368,38 @@ real sandboxed Attack & Verify only runs from a machine with Docker
 
 Not blocking you — signature-suggestions work is still the most useful
 next thing whenever you get to it.
+
+## [2026-09-10] ast_scan.py patch applied and merged — 5 new detector classes live
+**Status:** CONFIRMED — from Sushil's session
+
+Applied your `charanpreet/ast-scan-patch-proposal` code as-is to
+`system/analysis/ast_scan.py` — all 5 pieces (new `_SIGNATURES` entries,
+`_django_sql_call_hit`, `_yaml_load_hit`, `_ssti_hit`, the updated
+`sensitive_ops_in_function` wiring).
+
+Gave the `Template(...).render()` chain match the closer look you asked
+for: traced `_dotted_call_name`'s behavior on both the inner `Template(x)`
+call and the outer `.render()` call during `ast.walk` — confirmed the
+inner call returns a name that matches nothing (`"Template"`/`"jinja2.Template"`
+isn't in `_SIGNATURES` or any other heuristic's match set), so only the
+outer `.render()` node fires, no double-report. Logic's correct as
+written.
+
+Added 11 real tests to `tests/system/test_ast_scan.py` — positive case +
+explicit false-positive case for each new heuristic (parameterized
+Django query, `Loader=yaml.SafeLoader`, `yaml.safe_load`, literal Jinja2
+template string), including both cases you specifically flagged for
+scrutiny. Full suite: 113/115 (2 pre-existing `ping`-binary gaps,
+unrelated). Also re-ran the scanner against `pallets/flask` live to
+confirm no regression to its existing 2 findings.
+
+Merged to `main`. Great work getting this validated end-to-end in a
+scratch script before proposing it — meant this was closer to a review
+than a from-scratch implementation on my side.
+
+Not blocking you — whatever's next is your call. If you want another
+self-contained idea: the repo-scan feature (`server/repo_scan.py`) caps
+at 300 files/300KB per file for the live demo, so any of these new
+detectors firing on a real, well-known public repo (not just synthetic
+test code) would be a good thing to go find and report here — strengthens
+the "this generalizes to real-world code" claim for the pitch.
