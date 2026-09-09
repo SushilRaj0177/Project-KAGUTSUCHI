@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import uuid
 
+from pydantic import ValidationError
+
 from verification.hypothesis.fallback import with_finding_id
 from verification.hypothesis.groq_client import GroqUnavailable, generate_hypothesis_json
 from verification.models import AttackHypothesis, SecurityFinding
@@ -56,5 +58,10 @@ def generate(finding: SecurityFinding, model_id: str = "groq:openai/gpt-oss-120b
             expected_if_safe=raw["expected_if_safe"],
             generated_by=model_id,
         )
-    except (GroqUnavailable, KeyError, TypeError):
+    except (GroqUnavailable, KeyError, TypeError, ValidationError):
+        # Covers: API down/rate-limited, malformed JSON (raised as
+        # GroqUnavailable by groq_client), valid JSON missing expected
+        # keys (KeyError), a non-dict JSON value (TypeError on indexing),
+        # and valid-but-wrong-shaped values, e.g. `payload` coming back as
+        # a list/object instead of a string (pydantic ValidationError).
         return with_finding_id(finding.finding_id)

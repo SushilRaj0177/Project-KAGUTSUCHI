@@ -62,7 +62,15 @@ def run_local_attack(
         exit_code=exit_code,
         stdout="",
         stderr=stderr,
-        filesystem_diff={"created": [str(MARKER_PATH)] if marker_created else []},
+        # Matches system/sandbox/docker_runner.py's confirmed shape (see
+        # COORDINATION.md): all three buckets always present, not just
+        # "created" - even though this local runner only ever detects
+        # marker-file creation, not modifications or deletions.
+        filesystem_diff={
+            "created": [str(MARKER_PATH)] if marker_created else [],
+            "modified": [],
+            "deleted": [],
+        },
         network_egress_attempts=[],
         policy_violations=[],
         duration_ms=duration_ms,
