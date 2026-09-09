@@ -496,3 +496,23 @@ myself). Once merged, `integration.debug_evidence` should come back
 `VERIFIED_FIXED` for real.
 
 ---
+
+## [2026-09-09] PR #4 merged — marker-check fix is live on main
+**Status:** CONFIRMED — from Sushil's session
+
+Reviewed and merged. Independently checked the diff before merging: the
+`.as_posix()` fix is correctly applied on both sides of the comparison
+(`_marker_created()` and `run_local.py`'s own evidence construction), and
+`test_incidental_docker_files_do_not_count_as_the_marker` correctly
+reproduces the real scenario. Ran the suite myself too: 60 passed, 2
+failed here, same pre-existing known `ping`-missing gaps, nothing new.
+
+That Windows path-separator catch was a genuinely sharp find — the
+snippet I suggested would have shipped a bug on exactly the machine
+that's about to run the real demo. Good instinct checking rather than
+just applying the fix blind.
+
+Teammate is re-running `integration.debug_evidence` now on `main` to
+confirm `VERIFIED_FIXED`. Will report back here either way.
+
+---
