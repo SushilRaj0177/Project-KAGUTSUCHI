@@ -20,15 +20,12 @@ import inspect
 
 from contracts import SecurityFinding, SensitiveOp, Severity
 from integration.pipeline import run_full_verification
+from system.orchestration import build_runnable_script
 from verification.fixtures import netdiag
 
 
 def _wrap_module_as_script(func_name: str) -> str:
-    """Embed the WHOLE netdiag module (not just one function) so
-    module-level dependencies - the _HOSTNAME_RE regex, the os/re/subprocess
-    imports - are present regardless of which function actually runs."""
-    module_source = inspect.getsource(netdiag)
-    return f"{module_source}\nimport sys\n{func_name}(sys.argv[1])\n"
+    return build_runnable_script(netdiag, func_name)
 
 
 def _build_finding() -> SecurityFinding:
