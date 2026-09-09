@@ -50,6 +50,7 @@ class RepoScanResult:
     files_scanned: int
     findings: list[SecurityFinding]
     sources: dict[str, str]  # file_path -> source, only for files with findings
+    truncated: bool  # True if the repo had more matching files than _MAX_FILES
 
 
 def _parse_github_url(repo_url: str) -> tuple[str, str]:
@@ -79,6 +80,9 @@ def _clone(repo_url: str, dest: Path) -> None:
 
 
 def _iter_python_files(root: Path):
+    """Yields matching files up to _MAX_FILES, then keeps counting (without
+    reading file contents) so the caller can tell whether the cap actually
+    truncated the scan rather than just happening to match the file count."""
     count = 0
     for path in root.rglob("*.py"):
         if any(part in _SKIP_DIRS for part in path.parts):
@@ -86,9 +90,10 @@ def _iter_python_files(root: Path):
         if path.stat().st_size > _MAX_FILE_BYTES:
             continue
         count += 1
-        if count > _MAX_FILES:
-            return
-        yield path
+        if count <= _MAX_FILES:
+            yield path
+    if count > _MAX_FILES:
+        yield None  # sentinel: more matching files existed than the cap
 
 
 def scan_repo(repo_url: str) -> RepoScanResult:
@@ -101,8 +106,12 @@ def scan_repo(repo_url: str) -> RepoScanResult:
         findings: list[SecurityFinding] = []
         sources: dict[str, str] = {}
         files_scanned = 0
+        truncated = False
 
         for path in _iter_python_files(root):
+            if path is None:
+                truncated = True
+                continue
             rel_path = str(path.relative_to(root))
             try:
                 source = path.read_text(encoding="utf-8", errors="ignore")
@@ -123,4 +132,5 @@ def scan_repo(repo_url: str) -> RepoScanResult:
             files_scanned=files_scanned,
             findings=findings,
             sources=sources,
+            truncated=truncated,
         )

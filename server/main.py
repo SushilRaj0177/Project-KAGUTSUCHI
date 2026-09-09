@@ -70,6 +70,7 @@ class RepoAnalyzeResponse(BaseModel):
     files_scanned: int
     findings: list[SecurityFinding]
     sources: dict[str, str]
+    truncated: bool
 
 
 @app.get("/api/health")
@@ -97,12 +98,17 @@ def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CloneFailed as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    severity_rank = {"high": 0, "medium": 1, "low": 2}
+    findings = sorted(result.findings, key=lambda f: severity_rank.get(f.severity_hint.value, 3))
+
     return RepoAnalyzeResponse(
         owner=result.owner,
         repo=result.repo,
         files_scanned=result.files_scanned,
-        findings=result.findings,
+        findings=findings,
         sources=result.sources,
+        truncated=result.truncated,
     )
 
 

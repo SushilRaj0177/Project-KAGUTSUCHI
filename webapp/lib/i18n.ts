@@ -26,6 +26,7 @@ export interface Dict {
   scanningButton: string;
   filesScanned: string;
   findingsCount: string;
+  truncatedNotice: string;
   noFindings: string;
   noFindingsBody: string;
   verifyButton: string;
@@ -78,6 +79,8 @@ export const translations: Record<Lang, Dict> = {
     scanningButton: "Scanning…",
     filesScanned: "Python files scanned",
     findingsCount: "Findings",
+    truncatedNotice:
+      "This repo has more Python files than we scan per request — results below are from the first 300 files found, not the whole repo.",
     noFindings: "No sensitive operations found",
     noFindingsBody: "The scanner checked every Python file in this repo and found nothing matching a known vulnerability class.",
     verifyButton: "Attack & Verify",
@@ -138,6 +141,8 @@ export const translations: Record<Lang, Dict> = {
     scanningButton: "スキャン中…",
     filesScanned: "スキャンしたPythonファイル数",
     findingsCount: "検出件数",
+    truncatedNotice:
+      "このリポジトリは1回のスキャン上限を超えるPythonファイルを含んでいます — 以下の結果は最初に見つかった300ファイルのみを対象としており、リポジトリ全体ではありません。",
     noFindings: "危険な処理は見つかりませんでした",
     noFindingsBody: "このリポジトリの全Pythonファイルを検査しましたが、既知の脆弱性クラスに一致するものはありませんでした。",
     verifyButton: "攻撃して検証",

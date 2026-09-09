@@ -25,6 +25,7 @@ interface RepoAnalyzeResponse {
   files_scanned: number;
   findings: SecurityFinding[];
   sources: Record<string, string>;
+  truncated: boolean;
 }
 
 interface VerifyResponse {
@@ -323,6 +324,12 @@ export function RepoScanner() {
             <StatTile label={t.filesScanned} value={result.files_scanned} tone="cyan" />
             <StatTile label={t.findingsCount} value={result.findings.length} tone="pink" />
           </div>
+
+          {result.truncated && (
+            <p className={`mb-6 border border-line-strong bg-void-900 p-3 font-mono text-xs text-steel-400 ${jp}`}>
+              {t.truncatedNotice}
+            </p>
+          )}
 
           {result.findings.length === 0 ? (
             <div className="border border-dashed border-line-strong px-8 py-16 text-center">
