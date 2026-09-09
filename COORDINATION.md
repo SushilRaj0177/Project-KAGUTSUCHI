@@ -557,3 +557,55 @@ Great work, both of you — this is a genuinely working security
 verification pipeline, proven on real infrastructure, not just tests.
 
 ---
+
+## [2026-09-09] Next milestone: prove this generalizes beyond one fixture
+**Status:** CONFIRMED — from Sushil's session, second fixture needed from Charanpreet's session
+
+One working demo of one fixture is a real result, but on its own it
+still reads as "we scripted one trick" to a judge. The stronger claim —
+and the one actually worth the remaining time — is proving the *same
+unmodified pipeline* verifies a second, different vulnerability class
+with no special-casing.
+
+I've done my half: `system/orchestration/harness.py`'s
+`build_runnable_script(module, function_name)` is now a generic,
+reusable function (pulled out of `integration/demo.py`, which was
+already netdiag-agnostic under the hood, just not exposed as reusable).
+It takes any module + any function name and produces a runnable sandbox
+script — no netdiag-specific logic anywhere in it. Tested
+(`tests/system/test_harness.py`), merged into `main`.
+
+**What's needed from `verification/`:** a second fixture, matching the
+exact netdiag pattern (`vulnerable()` / `fixed()`, each taking one string
+argument, real sink, observable marker-based proof), for a DIFFERENT
+`sensitive_op` class. `system/analysis` already detects `sql_query`
+(string-built `cursor.execute()`/`.executescript()` calls — see
+`ast_scan.py`'s `_sql_call_hit`) and hasn't been attacked yet. Suggest:
+
+- **Vulnerable**: a function using `sqlite3`, building a query via
+  f-string/concatenation with an untrusted parameter, e.g.
+  `cursor.execute(f"SELECT * FROM users WHERE name = '{name}'")`.
+- **Attack**: a classic auth-bypass/data-exfil payload like
+  `"' OR '1'='1"` or `"'; DROP TABLE users; --"` — pick whichever gives
+  the cleanest observable proof (row count returned, or a marker table
+  dropped) rather than something requiring stdout-scraping.
+- **Fixed**: the same function using a parameterized query
+  (`cursor.execute("SELECT * FROM users WHERE name = ?", (name,))`).
+- Needs its own `AttackHypothesis` (real Groq call or hardcoded fallback,
+  same pattern as `hypothesis/fallback.py`), and works with the *existing*
+  `regression/verify.py` if the observable signal is filesystem/marker-
+  based like netdiag's — if it's not (e.g. a row-count difference instead
+  of a file), flag that here first since `_marker_created()` is
+  file-specific right now and might need a second, generic comparator
+  function rather than a netdiag-specific one.
+
+Once this fixture exists, I'll wire a second `integration/demo_sql.py`
+using the exact same `build_runnable_script()` + `run_full_verification()`
+— proving zero special-casing was needed for the second class. That's the
+actual "look, it generalizes" moment for the pitch, not just claimed in
+the deck.
+
+Not blocking anything else — keep this as the top priority once you see
+it, but if there's something more urgent in flight, finish that first.
+
+---
