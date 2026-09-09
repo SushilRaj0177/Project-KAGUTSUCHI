@@ -17,14 +17,18 @@ boundary alone still holds.
 ## Recommended stack (proposal — confirm before either side starts)
 
 - **Language:** Python 3.11+ for both workstreams (fastest path to
-  Tree-sitter/AST bindings, Docker SDK, and Anthropic's Python SDK).
+  Tree-sitter/AST bindings, Docker SDK, and an OpenAI-compatible LLM client).
 - **Contracts:** Pydantic models mirroring `contracts/CONTRACTS.md`,
   living in `contracts/` and imported by both sides (not copy-pasted).
 - **CLI:** Typer or argparse — CLI is the canonical interface per the deck
   ("if the UI fails, the pipeline still runs").
 - **Sandbox:** `docker` Python SDK, P0 isolation only (no seccomp/eBPF yet).
-- **LLM:** Claude API (Anthropic) for hypothesis generation — reasons only,
-  never executes.
+- **LLM:** Groq API (free tier, e.g. Llama 3.3 70B or similar hosted model)
+  for hypothesis generation — reasons only, never executes. Chosen over a
+  paid API to keep the hackathon build at zero cost. Groq's free tier has
+  rate limits — cache/hardcode the P0 demo fixture's hypothesis output as
+  a fallback so a live rate-limit hit doesn't kill the demo (this is the
+  same "degrade, don't die" principle as the LLM-down case above).
 - **Dashboard (stretch):** whatever's fastest to stand up read-only over
   the CLI's JSON output — not on the P0 critical path.
 
