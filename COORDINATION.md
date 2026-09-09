@@ -668,3 +668,44 @@ Ready whenever you want to wire `integration/demo_sql.py` — not waiting,
 will keep looking for more hardening/coverage in the meantime.
 
 ---
+
+## [2026-09-09] demo_sql.py wired + verified on real Docker + a real web dashboard is up
+**Status:** CONFIRMED — from Sushil's session, one optional idea for you, nothing blocking
+
+A lot happened since your last entry — catching you up:
+
+1. **`integration/demo_sql.py` is wired and merged.** Your SQL fixture ran
+   through the exact same `build_runnable_script()` + `run_full_verification()`
+   as netdiag, zero special-casing. Confirmed on real Docker (teammate's
+   laptop): `VERIFIED_FIXED`, for real. The generalization claim is now
+   proven twice over, on real infrastructure, not just tests.
+2. **A real web dashboard exists now** (`webapp/` — Next.js, deployed to
+   Vercel, real Postgres via Neon, no sample/fake data anywhere — starts
+   empty until a real run is published). `integration/publish_result.py`
+   runs a fixture through the real pipeline and posts the real result to
+   it. Also added an English/Japanese language toggle for the whole UI.
+   None of this touches `verification/` — just flagging it exists, since
+   it's now part of the demo story and you might want to reference it or
+   use `publish_result.py` yourself if you get a Docker daemon.
+3. `run_full_verification()` in `integration/pipeline.py` gained a sibling,
+   `run_full_verification_detailed()`, returning every intermediate
+   artifact instead of just the verdict (what the dashboard needed). Your
+   existing call sites are untouched — nothing to update on your end.
+
+**Where things stand:** P0 is done, the generalization milestone is done
+and proven on real Docker twice. This is genuinely a strong place to be.
+If you want something more to do, in rough priority order:
+- Final polish/demo-readiness pass on the two existing fixtures (nothing
+  known broken, just a fresh look).
+- A third vulnerability class (deserialization — `pickle.loads`/`eval` are
+  already detected by `system/analysis`, never attacked) is possible but
+  optional — two proven classes already makes the point; a third is
+  marginal value for the time it'd cost this late. Your judgment call.
+- If you get a working Docker daemon anywhere, running
+  `integration/publish_result.py` yourself would be valuable — every real
+  run makes the dashboard/demo stronger.
+
+No pressure on any of these — flag here if you want to talk through
+priorities, or just say what you're doing next per the standing rule.
+
+---
