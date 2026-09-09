@@ -609,3 +609,62 @@ Not blocking anything else — keep this as the top priority once you see
 it, but if there's something more urgent in flight, finish that first.
 
 ---
+
+## [2026-09-09] Second fixture done: SQL injection, same marker signal, zero regression/verify.py changes
+**Status:** CONFIRMED — from Charanpreet's session, ready for `integration/demo_sql.py`
+
+Pushed to `charanpreet/sql-injection-fixture`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/sql-injection-fixture).
+Good news on the thing you asked me to flag first:
+
+**The observable signal IS marker-file-based, same as netdiag — `regression/verify.py`'s `_marker_created()` needed ZERO changes.**
+`verification/fixtures/sql_injection.py`:
+- `vulnerable()`: string-interpolates `name` into `cursor.executescript()`
+  (sqlite3) — a `'; ...; --` payload chains extra SQL statements onto the
+  intended `SELECT`.
+- **Attack**: `x'; ATTACH DATABASE '/tmp/kagutsuchi_pwned' AS pwn; CREATE
+  TABLE pwn.t(x); --` — SQLite's `ATTACH DATABASE` + `CREATE TABLE`
+  actually creates that file on disk. Deliberately reused netdiag's exact
+  marker path so the same `_marker_created()` check applies unmodified —
+  proof of arbitrary SQL execution, not just data disclosure, and the
+  cleanest way to keep the pipeline genuinely fixture-agnostic rather than
+  inventing a row-count comparator.
+- `fixed()`: single parameterized `cursor.execute("...WHERE name = ?",
+  (name,))` — the payload is bound as an inert literal, never creates the
+  marker, returns 0 rows.
+- `verification/hypothesis/sql_fallback.py`: `SQL_INJECTION_FALLBACK_HYPOTHESIS`,
+  same pattern as `fallback.py`.
+
+**One real gap I found while wiring this in, fixed alongside it**:
+`hypothesis/generate.py`'s fallback path was hardcoded to import and
+return the netdiag fallback specifically — so a second fixture hitting a
+Groq outage/rate-limit would've silently gotten the *wrong* (netdiag)
+hypothesis instead of its own. Generalized `generate()` to take a
+`fallback: AttackHypothesis` parameter, **defaulting to
+`NETDIAG_FALLBACK_HYPOTHESIS`** so `integration/pipeline.py`'s existing
+single-arg `generate_hypothesis(v_finding)` call keeps working unchanged.
+`verification/pipeline.py::score()` got the same optional `fallback=`
+param, threaded through. **For `demo_sql.py`, call `generate(finding,
+fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS)`** (or
+`score(..., fallback=SQL_INJECTION_FALLBACK_HYPOTHESIS)`) — otherwise a
+Groq hiccup during that demo would silently fall back to the netdiag
+payload against the SQL fixture, which would be a bad moment to discover
+this live.
+
+Added a test proving the actual generalization claim end-to-end:
+`test_verify_is_fixture_agnostic_same_check_scores_the_sql_hypothesis` —
+swaps in the SQL hypothesis against the same fake evidence and confirms
+`verify()` scores it correctly with no fixture-specific logic. Also
+sanity-checked `build_runnable_script(sql_injection, "fixed"/"vulnerable")`
+runs correctly as a real subprocess (not just imported directly) —
+your harness generalized cleanly, no changes needed on my end to use it.
+
+Full suite: 61 passed, 9 skipped (all POSIX-only — SQLite's `ATTACH
+DATABASE '/tmp/...'` only resolves on a POSIX filesystem, same reason as
+every other exploit-side skip on this Windows dev box; `fixed()`'s tests
+run everywhere since it never touches that path).
+
+Ready whenever you want to wire `integration/demo_sql.py` — not waiting,
+will keep looking for more hardening/coverage in the meantime.
+
+---
