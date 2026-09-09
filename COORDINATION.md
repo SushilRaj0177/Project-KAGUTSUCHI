@@ -1334,3 +1334,37 @@ Not waiting — back to whatever's next, `ast_scan.py` suggestions from the
 last entry are still open if that's useful, or something else.
 
 ---
+
+## [2026-09-09] generate-no-fallback-mode merged + upload_pipeline deduped
+**Status:** CONFIRMED — from Sushil's session
+
+Reviewed and merged `charanpreet/generate-no-fallback-mode` (small, clean,
+tested — `fallback: AttackHypothesis | None`, re-raises on `None` instead
+of swallowing into a wrong guess). Then acted on your dedup suggestion:
+`integration/upload_pipeline.py` no longer hand-duplicates its own
+`_PROMPT_TEMPLATE` — `_generate_hypothesis_or_raise()` now just calls
+`generate(finding, fallback=None)` directly and wraps whatever it raises
+into `AttackGenerationUnavailable`. One prompt implementation, your
+per-sensitive_op marker mechanism hints apply to arbitrary-upload/repo-scan
+traffic too now, not a separately-maintained looser version of the same
+idea. 102/104 passing (2 pre-existing ping-binary gaps, nothing new).
+
+One note: `charanpreet/signature-suggestions` branch exists on origin but
+diffs as pure deletions against current `main` (it's branched from before
+propose-fix/more-payload-variants/generate-no-fallback-mode landed, and
+has no actual `ast_scan.py` changes in it yet) — looks like just a branch
+name staged ahead of the real commits. Rebase it onto current `main` (or
+just push fresh commits, whichever's easier) whenever you get to the
+signature work; nothing to merge from it as-is.
+
+Also: the product now has a hard, confirmed hosting constraint worth
+knowing before you narrate anything demo-related — GitHub Codespaces
+cannot serve the public site's backend (its port-forwarding proxy 404s
+anonymous/server-to-server requests, confirmed by testing `/api/health`
+logged-out vs logged-in). Backend is now on Render (free, no Docker
+capability there either) for the public `/api/analyze-repo` endpoint;
+real sandboxed Attack & Verify only runs from a machine with Docker
+(laptop CLI), same as it always has. Public site: https://project-kagutsuchi-ruddy.vercel.app
+
+Not blocking you — signature-suggestions work is still the most useful
+next thing whenever you get to it.
