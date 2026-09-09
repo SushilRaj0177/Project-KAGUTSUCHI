@@ -900,3 +900,77 @@ whenever dashboard credentials are ready, whichever you'd rather I do
 next.
 
 ---
+
+## [2026-09-09] Scope change: building the real "upload code, get analyzed and fixed" product
+**Status:** CONFIRMED — from Sushil's session. New task for you below — this is the priority now.
+
+Team decided to go for the actual product vision, not just the 3-fixture
+demo: a public site where someone uploads a Python file and gets a real
+finding, a real demonstrated attack, and a real verified fix — not
+canned. Standing up an always-on backend server (DigitalOcean droplet,
+I'm building the API now) to make this possible; the CLI/3-fixture demo
+path stays as-is, this is additive.
+
+**What's already general enough to reuse as-is:**
+- `system/analysis.scan_source`/`scan_diff` — already works on arbitrary
+  uploaded Python, not just our fixtures.
+- `system/orchestration.build_runnable_script(module, function_name)` —
+  already works on ANY function taking one string argument, not just our
+  three fixtures. That's the load-bearing generalization that makes this
+  possible at all.
+- `verification/hypothesis/generate.py::generate()` — already produces an
+  `AttackHypothesis` from any `SecurityFinding`, no fixture-specific logic.
+
+**What's genuinely missing — this is your new task:** automatic fix
+proposal. Right now every "fixed" version was hand-written by you for
+our 3 demo fixtures. For arbitrary uploaded code, there's no fallback
+option — we need the LLM to actually propose a fix. Please add something
+like:
+
+```python
+# verification/hypothesis/propose_fix.py (or wherever fits your structure best)
+def propose_fix(finding: SecurityFinding, hypothesis: AttackHypothesis) -> str:
+    """Given a vulnerable function (finding.diff_hunk) and the attack that
+    proves it's exploitable (hypothesis), ask the LLM to rewrite the
+    function to eliminate the vulnerability. Must preserve the exact same
+    function name and signature (one string parameter) so
+    build_runnable_script can run it unmodified. Returns the function's
+    full source as a string.
+
+    No hardcoded fallback is possible here (unlike attack fallbacks) -
+    we don't know arbitrary uploaded code ahead of time. On Groq failure,
+    raise clearly (e.g. GroqUnavailable) so the caller can tell the user
+    "couldn't generate a fix right now" rather than silently guessing.
+    """
+```
+
+Whatever this returns gets run through the exact same
+`build_runnable_script` + sandbox + `regression/verify.py` as everything
+else — if the proposed fix doesn't actually work, the verdict comes back
+`STILL_VULNERABLE` and we tell the user honestly, same as always. That's
+actually the safety net that makes trusting an LLM-generated fix okay:
+we never claim success without the sandbox proving it.
+
+Things worth thinking about as you build this:
+- The prompt probably needs the full original function source
+  (`finding.diff_hunk`), the vulnerability class (`finding.sensitive_op`),
+  and ideally the attack payload/`expected_if_safe` from the hypothesis,
+  so the model knows what specifically needs to stop happening.
+- Ask for ONLY the function's source back (or make the prompt
+  JSON-structured like `generate()` does), not prose explanation, so it's
+  directly usable as code.
+- Validate what comes back is at least syntactically valid Python
+  (`ast.parse`) before handing it anywhere, and that it still defines a
+  function with the same name — cheap sanity checks before it ever
+  reaches the sandbox.
+- Tests: you don't need a real Groq call to test this — mock
+  `generate_hypothesis_json`-style at the same layer `generate()`'s tests
+  do, feed in a known-bad fix (wrong function name, syntax error) and a
+  known-good one, assert the validation catches the former.
+
+I'll wire this into the new backend server once it exists on your end —
+post here when you've got something, doesn't need to be perfect first
+try. This is the one new piece standing between what we have and the
+actual vision — everything else genuinely already generalizes.
+
+---
