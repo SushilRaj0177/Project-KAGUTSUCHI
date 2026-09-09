@@ -10,6 +10,7 @@ from verification.evidence.fakes import (
     fake_evidence_vulnerable_before,
 )
 from verification.hypothesis.fallback import NETDIAG_FALLBACK_HYPOTHESIS
+from verification.hypothesis.sql_fallback import SQL_INJECTION_FALLBACK_HYPOTHESIS
 from verification.models import Verdict
 from verification.regression.verify import verify
 
@@ -111,3 +112,22 @@ def test_incidental_docker_files_do_not_count_as_the_marker():
     result = verify(HYP, before, after, PAYLOAD, PAYLOAD)
 
     assert result.verdict == Verdict.VERIFIED_FIXED
+
+
+def test_verify_is_fixture_agnostic_same_check_scores_the_sql_hypothesis():
+    # The actual "no special-casing" proof: swap in the SQL injection
+    # hypothesis (a completely different vulnerability class, different
+    # payload/attack_vector text) and verify() still scores it correctly
+    # using the exact same _marker_created() check - because both fixtures
+    # share the same observable proof convention (the marker file path),
+    # not because regression/verify.py knows anything about SQL vs. shell.
+    sql_hyp = SQL_INJECTION_FALLBACK_HYPOTHESIS.model_copy(update={"finding_id": "finding-0002"})
+    sql_payload = sql_hyp.payload
+
+    result = verify(
+        sql_hyp, fake_evidence_vulnerable_before(), fake_evidence_fixed_after(), sql_payload, sql_payload
+    )
+
+    assert result.verdict == Verdict.VERIFIED_FIXED
+    assert result.hypothesis_id == sql_hyp.hypothesis_id
+    assert result.finding_id == "finding-0002"

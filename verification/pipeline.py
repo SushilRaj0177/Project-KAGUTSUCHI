@@ -7,6 +7,7 @@ internal module layout - see COORDINATION.md "PR #1 is merged" entry, item 2.
 
 from __future__ import annotations
 
+from verification.hypothesis.fallback import NETDIAG_FALLBACK_HYPOTHESIS
 from verification.hypothesis.generate import generate
 from verification.models import AttackHypothesis, ExecutionEvidence, SecurityFinding, VerificationResult
 from verification.regression.verify import verify
@@ -17,6 +18,7 @@ def score(
     before_evidence: ExecutionEvidence,
     after_evidence: ExecutionEvidence,
     hypothesis: AttackHypothesis | None = None,
+    fallback: AttackHypothesis = NETDIAG_FALLBACK_HYPOTHESIS,
 ) -> VerificationResult:
     """Score a before/after evidence pair produced from `finding`.
 
@@ -33,7 +35,7 @@ def score(
     not as the integration-correct path.
     """
     if hypothesis is None:
-        hypothesis = generate(finding)
+        hypothesis = generate(finding, fallback=fallback)
 
     return verify(
         hypothesis,
