@@ -33,3 +33,44 @@ here as a new dated entry below this line. Sushil's session will confirm
 or counter-propose._
 
 ---
+
+## [2026-09-09] P0 fixture proposal: command injection via `os.system` in a network-diagnostics CLI
+**Status:** PROPOSED — Charanpreet's session, awaiting Sushil's session to confirm
+**Owner:** Charanpreet's session
+
+**Fixture:** `verification/fixtures/netdiag.py` — a small "network diagnostics"
+CLI tool with one command, `ping`, that takes a `host` string from the user
+and shells out to the system ping binary to report reachability. This is a
+real, demo-plausible sink (ops tooling that pings a host you type), not a
+scanner toy.
+
+- **Vulnerable version** (`vulnerable()`): builds the command with an
+  f-string and executes via `os.system(f"ping -c 1 {host}")` — untrusted
+  `host` is concatenated directly into a shell command.
+- **Fixed version** (`fixed()`): validates `host` against a strict
+  hostname/IP allowlist regex, then calls
+  `subprocess.run(["ping", "-c", "1", host], shell=False)` — no shell
+  interpretation of the argument, so shell metacharacters are inert.
+
+**`SecurityFinding.sensitive_op`:** `shell_exec`
+
+**Attack (`AttackHypothesis`):**
+- `security_property`: "no command injection via the `host` parameter of
+  `netdiag ping`"
+- `payload`: `127.0.0.1; touch /tmp/kagutsuchi_pwned`
+- `expected_if_vulnerable`: the sandbox filesystem diff shows `/tmp/kagutsuchi_pwned`
+  created (i.e. the injected `touch` ran as a second shell command).
+- `expected_if_safe`: `/tmp/kagutsuchi_pwned` is never created; the process
+  either errors out (invalid host) or pings a literal, meaningless
+  host string with no injected command execution — same payload,
+  byte-identical, run against both `vulnerable()` and `fixed()`.
+
+This gives `system/sandbox` an unambiguous, observable before/after signal
+(file created vs. not) rather than relying on stdout parsing, which keeps
+`VerificationResult.verdict` derivation deterministic.
+
+Building `verification/fixtures/netdiag.py` now against this proposal per
+`CONTRIBUTING.md` §3 — will adjust if you counter-propose before I'm done,
+since it's additive/self-contained and doesn't touch `contracts/`.
+
+---
