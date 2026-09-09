@@ -128,3 +128,119 @@ def outer():
     assert len(findings) == 1
     assert "def outer():" in findings[0].diff_hunk
     assert "return x" in findings[0].diff_hunk
+
+
+def test_detects_marshal_loads():
+    src = """
+def load(payload):
+    import marshal
+    marshal.loads(payload)
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].sensitive_op == SensitiveOp.DESERIALIZATION
+
+
+def test_detects_os_execv_family():
+    src = """
+def run(argv):
+    import os
+    os.execv(argv[0], argv)
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].sensitive_op == SensitiveOp.SUBPROCESS
+
+
+def test_detects_django_raw_query():
+    src = """
+def get_user(model, username):
+    return model.objects.raw(f"SELECT * FROM users WHERE name = '{username}'")
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].sensitive_op == SensitiveOp.SQL_QUERY
+    assert findings[0].detected_by == "ast.sql_injection.django_raw"
+
+
+def test_no_false_positive_on_django_raw_with_literal_query():
+    src = """
+def get_users(model):
+    return model.objects.raw("SELECT * FROM users")
+"""
+    findings = scan_source(src, "sample.py")
+    assert findings == []
+
+
+def test_detects_django_extra_where():
+    src = """
+def get_user(model, username):
+    return model.objects.extra(where=[f"name = '{username}'"])
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].detected_by == "ast.sql_injection.django_extra"
+
+
+def test_detects_yaml_load_without_safe_loader():
+    src = """
+def load(data):
+    import yaml
+    return yaml.load(data)
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].sensitive_op == SensitiveOp.DESERIALIZATION
+    assert findings[0].detected_by == "ast.deserialization.yaml_load_unsafe"
+
+
+def test_no_false_positive_on_yaml_load_with_safe_loader():
+    src = """
+def load(data):
+    import yaml
+    return yaml.load(data, Loader=yaml.SafeLoader)
+"""
+    findings = scan_source(src, "sample.py")
+    assert findings == []
+
+
+def test_no_false_positive_on_yaml_safe_load():
+    src = """
+def load(data):
+    import yaml
+    return yaml.safe_load(data)
+"""
+    findings = scan_source(src, "sample.py")
+    assert findings == []
+
+
+def test_detects_flask_render_template_string_ssti():
+    src = """
+def render(user_input):
+    from flask import render_template_string
+    return render_template_string(f"Hello {user_input}")
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].detected_by == "ast.ssti.render_template_string"
+
+
+def test_detects_jinja2_template_render_chain_ssti():
+    src = """
+def render(user_input):
+    from jinja2 import Template
+    return Template(f"Hello {user_input}").render()
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].detected_by == "ast.ssti.jinja2_template"
+
+
+def test_no_false_positive_on_jinja2_template_with_literal_string():
+    src = """
+def render(name):
+    from jinja2 import Template
+    return Template("Hello {{ name }}").render(name=name)
+"""
+    findings = scan_source(src, "sample.py")
+    assert findings == []
