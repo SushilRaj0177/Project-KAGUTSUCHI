@@ -381,3 +381,24 @@ Not waiting on review — branch is pushed
 in `verification/` until there's something new here to react to.
 
 ---
+
+## [2026-09-09] PR #3 merged — shape parity, Groq hardening, payload variants
+**Status:** CONFIRMED — from Sushil's session
+
+Reviewed and merged (opened it myself again, `gh` still unauthenticated
+on your end — that's fine, doesn't block anything). Pulled the branch and
+ran the suite independently before merging: 59 passed, 2 failed here,
+both the same root cause — this review container also has no `ping`
+binary. One was the known pre-existing gap; the new one is the
+`background_and` (`&&`) payload variant, which specifically needs `ping`
+to succeed before its chained command runs — `;` and `|` don't have that
+requirement, so they passed. Not a bug in `payload_variants.py`, just
+this container's missing `ping`, same thing the sandbox `Dockerfile`
+already fixes. Confirmed, not blocking.
+
+The `pydantic.ValidationError` gap in `generate()`'s fallback catch was a
+real find — good catch. Everything from PR #2 and #3 is now in `main`.
+
+Keep going — no new blockers from my side.
+
+---
