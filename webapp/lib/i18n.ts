@@ -43,6 +43,9 @@ export interface Dict {
   plainOther: string;
   technicalDetails: string;
   vulnerableCode: string;
+  backendOnline: string;
+  backendOffline: string;
+  backendOfflineDetail: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -107,6 +110,9 @@ export const translations: Record<Lang, Dict> = {
     plainOther: "We attacked this code for real, in an isolated sandbox. See the technical details below for exactly what happened.",
     technicalDetails: "Technical details (for the curious)",
     vulnerableCode: "The vulnerable code",
+    backendOnline: "Backend online",
+    backendOffline: "Backend offline",
+    backendOfflineDetail: "The scanning backend is unreachable right now — repo scans won't work until it's back.",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -169,5 +175,8 @@ export const translations: Record<Lang, Dict> = {
     plainOther: "このコードに対して、隔離されたサンドボックス内で実際に攻撃を行いました。詳細は下記の技術情報をご覧ください。",
     technicalDetails: "技術詳細（興味のある方向け）",
     vulnerableCode: "脆弱なコード",
+    backendOnline: "バックエンド稼働中",
+    backendOffline: "バックエンドオフライン",
+    backendOfflineDetail: "現在スキャン用のバックエンドに接続できません — 復旧するまでリポジトリのスキャンはできません。",
   },
 };

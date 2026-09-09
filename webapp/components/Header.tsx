@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { BackendStatus } from "./BackendStatus";
 import { useLanguage } from "./LanguageContext";
 import { LanguageToggle } from "./LanguageToggle";
 
@@ -32,6 +33,7 @@ export function Header() {
             {t.navDashboard}
           </Link>
         </nav>
+        <BackendStatus />
         <LanguageToggle />
       </div>
     </header>
