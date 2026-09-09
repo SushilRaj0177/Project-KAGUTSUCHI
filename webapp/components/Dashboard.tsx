@@ -5,6 +5,13 @@ import type { RunRow } from "@/lib/db";
 import { useLanguage } from "./LanguageContext";
 import { VerdictBadge } from "./VerdictBadge";
 
+const VERDICT_ACCENT: Record<string, string> = {
+  VERIFIED_FIXED: "border-l-temper-500",
+  STILL_VULNERABLE: "border-l-ember-500",
+  FALSE_POSITIVE: "border-l-gold-500",
+  INCONCLUSIVE: "border-l-steel-600",
+};
+
 function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
     year: "numeric",
@@ -67,14 +74,14 @@ function RunDetail({ run }: { run: RunRow }) {
     <div className="space-y-4 border-t border-line bg-void-850 p-5">
       <div className="grid gap-4 md:grid-cols-2">
         <div>
-          <div className={`text-sm font-bold text-paper-50 ${jp}`}>{t.finding}</div>
+          <div className={`bracket-label font-mono text-sm font-bold text-paper-50 ${jp}`}>{t.finding}</div>
           <div className="font-mono text-sm text-paper-50">
             {finding?.file_path ?? "—"} · {finding?.symbol ?? "—"}
           </div>
           <p className="mt-1 text-xs text-steel-400">{finding?.rationale ?? ""}</p>
         </div>
         <div>
-          <div className={`text-sm font-bold text-paper-50 ${jp}`}>{t.hypothesis}</div>
+          <div className={`bracket-label font-mono text-sm font-bold text-paper-50 ${jp}`}>{t.hypothesis}</div>
           <p className="text-xs text-steel-400">{hypothesis?.security_property ?? ""}</p>
           {hypothesis?.payload && (
             <div className="mt-1 inline-block rounded-sm bg-void-950 px-2 py-1 font-mono text-xs text-gold-300">
@@ -118,7 +125,10 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
           {runs.map((run) => {
             const isOpen = openId === run.id;
             return (
-              <div key={run.id} className="border-b border-line last:border-b-0">
+              <div
+                key={run.id}
+                className={`border-b border-l-4 border-line last:border-b-0 ${VERDICT_ACCENT[run.verdict] ?? VERDICT_ACCENT.INCONCLUSIVE}`}
+              >
                 <button
                   onClick={() => setOpenId(isOpen ? null : run.id)}
                   className="flex w-full items-center justify-between gap-4 bg-void-900 px-5 py-4 text-left hover:bg-void-850"
@@ -130,8 +140,8 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
                     <span className="font-display text-base font-bold">
                       {run.fixture_name}
                     </span>
-                    <span className="rounded-sm border border-line-strong px-2 py-0.5 text-[11px] uppercase text-steel-400">
-                      {run.sensitive_op}
+                    <span className="rounded-sm border border-line-strong px-2 py-0.5 font-mono text-[11px] uppercase text-steel-400">
+                      [ {run.sensitive_op} ]
                     </span>
                   </div>
                   <VerdictBadge verdict={run.verdict} />
@@ -158,8 +168,10 @@ function StatTile({
   const { lang } = useLanguage();
   const valueColor =
     tone === "temper" ? "text-temper-300" : tone === "ember" ? "text-ember-300" : "text-paper-50";
+  const topBorder =
+    tone === "temper" ? "border-t-temper-500" : tone === "ember" ? "border-t-ember-500" : "border-t-steel-600";
   return (
-    <div className="bg-void-900 p-5">
+    <div className={`border-t-2 bg-void-900 p-5 ${topBorder}`}>
       <div className={`text-[11px] uppercase tracking-wide text-steel-400 ${lang === "ja" ? "font-jp normal-case" : ""}`}>
         {label}
       </div>

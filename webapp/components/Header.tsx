@@ -18,7 +18,10 @@ export function Header() {
           {/* Always Japanese — a fixed brand mark, not a translated string */}
           <span className="font-jp text-lg text-steel-400">鍛・検証</span>
         </Link>
-        <p className={`mt-1 text-sm text-steel-400 ${jp}`}>{t.tagline}</p>
+        <div className="mt-1 flex items-center gap-2">
+          <span className="status-pulse h-1.5 w-1.5 rounded-full bg-temper-500" />
+          <p className={`text-sm text-steel-400 ${jp}`}>{t.tagline}</p>
+        </div>
       </div>
       <div className="flex items-center gap-6">
         <nav className={`flex items-center gap-4 text-sm text-steel-400 ${jp}`}>

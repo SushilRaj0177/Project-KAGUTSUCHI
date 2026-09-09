@@ -82,3 +82,45 @@ body {
     transition-duration: 0.001ms !important;
   }
 }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(47, 214, 196, 0.5); }
+  50% { opacity: 0.6; box-shadow: 0 0 0 4px rgba(47, 214, 196, 0); }
+}
+
+.status-pulse {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes scan-sweep {
+  0% { background-position: 0 0; }
+  100% { background-position: 0 -200px; }
+}
+
+.scan-sweep::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    180deg,
+    transparent 0,
+    transparent 3px,
+    rgba(47, 214, 196, 0.05) 4px
+  );
+  background-size: 100% 200px;
+  animation: scan-sweep 6s linear infinite;
+}
+
+.glow-ember {
+  box-shadow: 0 0 0 1px rgba(255, 70, 48, 0.25), 0 0 24px -8px rgba(255, 70, 48, 0.35);
+}
+
+.glow-temper {
+  box-shadow: 0 0 0 1px rgba(47, 214, 196, 0.25), 0 0 24px -8px rgba(47, 214, 196, 0.35);
+}
+
+.bracket-label::before {
+  content: "// ";
+  color: var(--steel-600);
+}

@@ -37,6 +37,12 @@ const SEVERITY_STYLE: Record<string, string> = {
   low: "border-steel-400/40 text-steel-400 bg-steel-400/10",
 };
 
+const SEVERITY_ACCENT: Record<string, string> = {
+  high: "border-l-ember-500",
+  medium: "border-l-gold-500",
+  low: "border-l-steel-600",
+};
+
 // Calls our own Next.js API routes (app/api/backend/*), which proxy to the
 // FastAPI backend server-side -- the browser never talks to the backend
 // directly, so no cross-origin/CORS issue exists (see the proxy routes'
@@ -84,7 +90,7 @@ function FindingCard({
   }
 
   return (
-    <div className="border border-line bg-void-900">
+    <div className={`border border-l-4 border-line bg-void-900 ${SEVERITY_ACCENT[finding.severity_hint] ?? SEVERITY_ACCENT.low}`}>
       <button
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between gap-4 px-5 py-4 text-left hover:bg-void-850"
@@ -92,8 +98,8 @@ function FindingCard({
         <div className="flex flex-wrap items-center gap-3">
           <span className="font-mono text-sm text-paper-50">{finding.file_path}</span>
           <span className="font-mono text-xs text-steel-400">{finding.symbol}()</span>
-          <span className="rounded-sm border border-line-strong px-2 py-0.5 text-[11px] uppercase text-steel-400">
-            {finding.sensitive_op}
+          <span className="rounded-sm border border-line-strong px-2 py-0.5 font-mono text-[11px] uppercase text-steel-400">
+            [ {finding.sensitive_op} ]
           </span>
         </div>
         <span
@@ -106,7 +112,7 @@ function FindingCard({
       {open && (
         <div className="space-y-4 border-t border-line p-5">
           <div>
-            <div className={`text-xs font-bold uppercase text-steel-400 ${jp}`}>{t.rationale}</div>
+            <div className={`bracket-label font-mono text-xs font-bold uppercase text-steel-400 ${jp}`}>{t.rationale}</div>
             <p className="mt-1 text-sm text-paper-50">{finding.rationale}</p>
           </div>
           <pre className="max-h-56 overflow-auto border border-line bg-void-950 p-3 font-mono text-xs text-steel-400">
@@ -119,7 +125,7 @@ function FindingCard({
             className={`border px-4 py-2 text-xs font-bold uppercase tracking-wide transition-colors ${jp} ${
               verifying
                 ? "cursor-wait border-line-strong text-steel-400"
-                : "border-ember-500/60 text-ember-300 hover:bg-ember-500/10"
+                : "glow-ember border-ember-500/60 text-ember-300 hover:bg-ember-500/10"
             }`}
           >
             {verifying ? t.verifyingButton : t.verifyButton}
@@ -258,7 +264,7 @@ export function RepoScanner() {
           <button
             type="submit"
             disabled={loading}
-            className={`border border-ember-500 bg-ember-500/10 px-6 py-3 text-sm font-bold uppercase tracking-wide text-ember-300 transition-colors hover:bg-ember-500/20 disabled:cursor-wait disabled:opacity-60 ${jp}`}
+            className={`glow-ember border border-ember-500 bg-ember-500/10 px-6 py-3 text-sm font-bold uppercase tracking-wide text-ember-300 transition-colors hover:bg-ember-500/20 disabled:cursor-wait disabled:opacity-60 disabled:shadow-none ${jp}`}
           >
             {loading ? t.scanningButton : t.scanButton}
           </button>
@@ -303,8 +309,9 @@ export function RepoScanner() {
 function StatTile({ label, value, tone }: { label: string; value: number; tone?: "ember" }) {
   const { lang } = useLanguage();
   const valueColor = tone === "ember" ? "text-ember-300" : "text-paper-50";
+  const topBorder = tone === "ember" ? "border-t-ember-500" : "border-t-steel-600";
   return (
-    <div className="bg-void-900 p-5">
+    <div className={`border-t-2 bg-void-900 p-5 ${topBorder}`}>
       <div className={`text-[11px] uppercase tracking-wide text-steel-400 ${lang === "ja" ? "font-jp normal-case" : ""}`}>
         {label}
       </div>
