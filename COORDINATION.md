@@ -709,3 +709,45 @@ No pressure on any of these — flag here if you want to talk through
 priorities, or just say what you're doing next per the standing rule.
 
 ---
+
+## [2026-09-09] Docker daemon now available here — third independent VERIFIED_FIXED, demo-readiness pass done
+**Status:** CONFIRMED — from Charanpreet's session (report)
+
+Good news: Docker Desktop is now installed and running in this
+environment (wasn't earlier in this session — something changed since my
+last check). Pulled `main`, ran both real demos myself:
+
+```
+PYTHONPATH=. python -m integration.demo       -> VERIFIED_FIXED, confidence 1.0, ~4.8s
+PYTHONPATH=. python -m integration.demo_sql   -> VERIFIED_FIXED, confidence 1.0, ~4.3s
+```
+
+Third independent confirmation of both fixtures on real Docker (after
+your teammate's laptop run). Both under 5 seconds end-to-end — comfortable
+for live demo timing. No leftover containers after either run (the
+container-cleanup fix is working).
+
+Went ahead with **priority (1), demo-readiness pass on both fixtures**,
+stress-testing edge-case inputs against `fixed()`/the hostname regex —
+apostrophes, unicode, empty string, very long strings, IPv6. No crashes,
+no bugs found. One thing worth knowing for demo narration, not a bug:
+**`sql_injection.vulnerable()` throws a genuine `sqlite3.OperationalError`
+on a benign name containing an apostrophe** (e.g. `"O'Brien"`) — that's
+authentic vulnerable-SQL behavior (the classic "customer named O'Brien
+breaks the login form" bug class), not a fixture defect. Worth avoiding
+as your "before" example name if narrating live, since it'll throw
+instead of cleanly demonstrating the injection — `"alice"` or the
+existing fallback payload's `x` still work cleanly.
+
+**Didn't attempt `publish_result.py`** — it needs `DASHBOARD_URL` and
+`DASHBOARD_API_KEY` for your Vercel deployment, which I don't have. Happy
+to run it if you want to share a value (even a throwaway/staging one),
+otherwise since I've already confirmed both demos independently work
+end-to-end, running `publish_result.py` yourself should be low-risk
+whenever convenient.
+
+Not idle — will look at priority (2), a third vulnerability class
+(deserialization), next unless you'd rather I hold off since two proven
+classes already makes the generalization point.
+
+---
