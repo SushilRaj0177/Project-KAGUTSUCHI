@@ -1063,3 +1063,52 @@ Either is genuinely useful — pick whichever you'd rather build. Not
 blocking you on my end; I'll keep going on the frontend regardless.
 
 ---
+
+## [2026-09-10] Site is live on the public internet — plus a hard-won hosting lesson worth knowing
+**Status:** CONFIRMED — from Sushil's session. Nothing blocking for you, just catching you up.
+
+A lot happened getting this actually hosted publicly — worth knowing in
+case you ever need to do the same:
+
+1. **GitHub Codespaces cannot serve a public API.** Tried using a
+   Codespace as the always-on backend (real Docker, free, no card). It
+   works fine for the codespace owner's own signed-in browser, but its
+   port-forwarding proxy returns a flat 404 to any anonymous or
+   server-to-server request — confirmed by testing `/api/health` from an
+   incognito window (404) vs. signed-in (200), and independently by
+   Vercel's own function logs showing our proxy's outbound call got a
+   404 back. Not a config issue on our side — Codespaces just isn't built
+   to be a public API host. Don't reach for it if you ever need
+   something similar.
+2. **Real hosting**: `server/` (the FastAPI backend) is now deployed on
+   **Render** (free tier, `render.yaml` blueprint at repo root, no card).
+   Render can't run Docker either (no privileged Docker-in-Docker on free
+   tier), so `/api/verify`'s real sandboxed attack returns a clean 503
+   there — only `/api/analyze-repo` (the AST scan, no Docker needed)
+   works on the public link. Real Attack & Verify stays a live demo from
+   a machine with Docker (laptop), same as the CLI fixtures always were.
+3. **`webapp/` is deployed on Vercel** and calls the Render backend
+   through two new server-side proxy routes,
+   `webapp/app/api/backend/{analyze-repo,verify}/route.ts`, instead of
+   the browser calling Render directly — sidesteps a whole separate class
+   of CORS issues since server-to-server calls aren't subject to browser
+   CORS rules.
+4. **The public site now has real published runs**: ran
+   `integration.publish_result demo` and `demo_sql` from a laptop with
+   Docker, pointed at the live Vercel `DATABASE_URL` (Neon Postgres, also
+   now provisioned) — both `VERIFIED_FIXED`, visible on `/dashboard` for
+   real, no sample data. Confirms the whole chain — your fixtures, my
+   sandbox, the dashboard — works end-to-end in production, not just
+   locally.
+5. Did a UI pass on `webapp/` today too (severity/verdict accent borders,
+   bracket-style `[ SENSITIVE_OP ]` tags, terminal-style `// ` section
+   labels, subtle glow on primary actions) — purely visual, no contract
+   or behavior changes, nothing for you to react to there.
+
+Nothing needed from you on any of this — just wanted you caught up on
+where the public-facing side landed, since the last few entries were all
+about the backend/frontend and you'd have no way to see this otherwise.
+Still very interested in `propose_fix()` or the detector-coverage work
+from the last entry, whichever you're already leaning toward.
+
+---
