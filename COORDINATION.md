@@ -751,3 +751,63 @@ Not idle — will look at priority (2), a third vulnerability class
 classes already makes the generalization point.
 
 ---
+
+## [2026-09-09] Third fixture done and VERIFIED_FIXED on real Docker: insecure deserialization
+**Status:** CONFIRMED — from Charanpreet's session, ready for an optional `integration/demo_deserialize.py`
+
+Pushed to `charanpreet/deserialization-fixture`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/deserialization-fixture).
+Went with priority (2) since Docker's available here now — figured a real
+third confirmed class is stronger than stopping at two, and I could
+verify it myself immediately rather than handing you an unverified guess.
+
+`verification/fixtures/insecure_deserialization.py`:
+- `vulnerable()`: `pickle.loads()` on base64-decoded, attacker-controlled
+  bytes — a crafted `__reduce__` method calls *any* callable with *any*
+  arguments during unpickling.
+- **Attack**: a pickle stream whose `__reduce__` calls
+  `eval("__import__('os').system('touch /tmp/kagutsuchi_pwned')")` — same
+  marker convention as the other two, so `_marker_created()` needed zero
+  changes again. Three vulnerability classes, one comparator, confirmed.
+- `fixed()`: `json.loads()` instead — no code-execution hook, so the
+  payload either fails to decode (not valid UTF-8/JSON) or deserializes
+  into inert data.
+- `verification/hypothesis/deserialization_fallback.py`: same
+  fallback-hypothesis pattern as the other two.
+
+**A real bug I caught before it ever reached a shared branch**: my first
+attempt built the pickle payload with `__reduce__` returning
+`(os.system, ("touch ...",))` directly. Worked perfectly locally — then
+failed on the real Docker sandbox with `ModuleNotFoundError: No module
+named 'nt'`. Turns out `os.system.__module__` is the *platform-specific*
+submodule Python's `os` re-exports it from (`nt` on Windows, `posix` on
+Linux) — a payload pickled on my Windows dev box embeds a reference to
+`nt.system`, which doesn't exist in the Linux container. Fixed by routing
+through `eval` instead (a builtin, pickled under the stable `builtins`
+module everywhere) — `(eval, ("__import__('os').system(...)",))`. Full
+writeup in the fallback file's docstring. Wanted to flag this one
+specifically since it's a "worked on my machine" class of bug that only a
+real cross-platform Docker run could have caught — exactly the value of
+having Docker locally now instead of only trusting mocked tests.
+
+**Verified `VERIFIED_FIXED` on real Docker myself**, using
+`system.orchestration.run_attack`/`replay_attack` and
+`verification.regression.verify` directly (didn't touch `integration/` —
+just called your existing public functions from a throwaway script to
+confirm before reporting, same as I'd want in your position). Ran three
+times total counting the debug pass: consistent `VERIFIED_FIXED`,
+confidence 1.0, `replay_identical: true`.
+
+Full suite: 69 passed, 10 skipped (all pre-existing POSIX-only gaps, same
+pattern as the other two fixtures — the exploit-side test can't run on
+this Windows dev box for the same reason as always, `fixed()`'s tests run
+everywhere).
+
+Entirely optional whether this becomes a third `integration/demo_*.py` —
+two proven classes already made the generalization point per your last
+message, this is just a bonus third data point since it was easy to
+verify with Docker now available. Not waiting — will go back to (1)
+polish/hardening, or pick up `publish_result.py` if you share dashboard
+credentials, whichever's more useful.
+
+---

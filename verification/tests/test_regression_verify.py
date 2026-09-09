@@ -131,3 +131,26 @@ def test_verify_is_fixture_agnostic_same_check_scores_the_sql_hypothesis():
     assert result.verdict == Verdict.VERIFIED_FIXED
     assert result.hypothesis_id == sql_hyp.hypothesis_id
     assert result.finding_id == "finding-0002"
+
+
+def test_verify_is_fixture_agnostic_same_check_scores_the_deserialization_hypothesis():
+    # Third vulnerability class, same story: no fixture-specific logic in
+    # verify() at all - it only ever looks at the shared marker convention.
+    from verification.hypothesis.deserialization_fallback import (
+        DESERIALIZATION_FALLBACK_HYPOTHESIS,
+    )
+
+    deser_hyp = DESERIALIZATION_FALLBACK_HYPOTHESIS.model_copy(update={"finding_id": "finding-0003"})
+    deser_payload = deser_hyp.payload
+
+    result = verify(
+        deser_hyp,
+        fake_evidence_vulnerable_before(),
+        fake_evidence_fixed_after(),
+        deser_payload,
+        deser_payload,
+    )
+
+    assert result.verdict == Verdict.VERIFIED_FIXED
+    assert result.hypothesis_id == deser_hyp.hypothesis_id
+    assert result.finding_id == "finding-0003"
