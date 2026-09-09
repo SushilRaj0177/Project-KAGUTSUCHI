@@ -66,7 +66,7 @@ function FindingCard({
     setVerifyError(null);
     setVerifyResult(null);
     try {
-      const res = await fetch(apiUrl("/api/verify"), {
+      const res = await fetch(apiUrl("/verify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ source, finding }),
@@ -222,7 +222,7 @@ export function RepoScanner() {
     setError(null);
     setResult(null);
     try {
-      const res = await fetch(apiUrl("/api/analyze-repo"), {
+      const res = await fetch(apiUrl("/analyze-repo"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repo_url: repoUrl.trim() }),
