@@ -149,15 +149,23 @@ def _function_source(source_lines: list[str], func_node: ast.FunctionDef) -> str
     return "\n".join(source_lines[func_node.lineno - 1 : end])
 
 
-def scan_source(source: str, file_path: str) -> list[SecurityFinding]:
+def scan_source(
+    source: str, file_path: str, *, only_symbols: set[str] | None = None
+) -> list[SecurityFinding]:
     """Parse `source`, return one SecurityFinding per sensitive call site
-    found inside any top-level or nested function definition."""
+    found inside any top-level or nested function definition.
+
+    If `only_symbols` is given, restrict findings to functions whose name
+    is in that set — used by scan_diff to report only on changed code.
+    """
     tree = ast.parse(source, filename=file_path)
     source_lines = source.splitlines()
     findings: list[SecurityFinding] = []
 
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if only_symbols is not None and node.name not in only_symbols:
+                continue
             for hit in sensitive_ops_in_function(node):  # type: ignore[arg-type]
                 if hit.op is not None:
                     op, rationale, detector = hit.op, hit.rationale, hit.detector
@@ -174,3 +182,37 @@ def scan_source(source: str, file_path: str) -> list[SecurityFinding]:
                     )
                 )
     return findings
+
+
+def _function_sources(source: str) -> dict[str, str]:
+    """Map function name -> its exact source text, for diffing against
+    another version of the same file."""
+    tree = ast.parse(source)
+    lines = source.splitlines()
+    out: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            out[node.name] = _function_source(lines, node)
+    return out
+
+
+def changed_functions(old_source: str, new_source: str) -> set[str]:
+    """Names of functions that are new in `new_source` or whose body text
+    differs from `old_source` — a lightweight stand-in for a real git-diff
+    hunk mapping, sufficient for isolating the changed function per commit."""
+    old_funcs = _function_sources(old_source)
+    new_funcs = _function_sources(new_source)
+    return {
+        name
+        for name, body in new_funcs.items()
+        if name not in old_funcs or old_funcs[name] != body
+    }
+
+
+def scan_diff(old_source: str, new_source: str, file_path: str) -> list[SecurityFinding]:
+    """The actual "detect" entry point: only report sensitive ops inside
+    functions that changed between `old_source` and `new_source`, not the
+    whole file — this is what keeps a finding scoped to the change under
+    review instead of re-flagging pre-existing code on every commit."""
+    changed = changed_functions(old_source, new_source)
+    return scan_source(new_source, file_path, only_symbols=changed)

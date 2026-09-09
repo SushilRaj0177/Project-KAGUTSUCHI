@@ -1,5 +1,5 @@
 from contracts import SensitiveOp
-from system.analysis import scan_source
+from system.analysis import scan_diff, scan_source
 
 
 def test_detects_os_system_command_injection():
@@ -65,6 +65,54 @@ def add(a, b):
     return a + b
 """
     findings = scan_source(src, "sample.py")
+    assert findings == []
+
+
+def test_scan_diff_only_reports_changed_function():
+    old_src = """
+def safe_existing(x):
+    return x + 1
+
+
+def to_be_changed(hostname):
+    return "unchanged"
+"""
+    new_src = """
+def safe_existing(x):
+    return x + 1
+
+
+def to_be_changed(hostname):
+    import os
+    os.system("ping -c 1 " + hostname)
+"""
+    findings = scan_diff(old_src, new_src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].symbol == "to_be_changed"
+
+
+def test_scan_diff_ignores_preexisting_vulnerability():
+    # os.system call already existed before the change and didn't move —
+    # scan_diff should not re-flag it since it's not part of this diff.
+    old_src = """
+def already_vulnerable(hostname):
+    import os
+    os.system("ping -c 1 " + hostname)
+
+
+def touched(x):
+    return x
+"""
+    new_src = """
+def already_vulnerable(hostname):
+    import os
+    os.system("ping -c 1 " + hostname)
+
+
+def touched(x):
+    return x + 1
+"""
+    findings = scan_diff(old_src, new_src, "sample.py")
     assert findings == []
 
 
