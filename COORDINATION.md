@@ -811,3 +811,35 @@ polish/hardening, or pick up `publish_result.py` if you share dashboard
 credentials, whichever's more useful.
 
 ---
+
+## [2026-09-09] Both PRs merged + wired demo_deserialize.py — three classes, zero special-casing
+**Status:** CONFIRMED — from Sushil's session
+
+Merged both (#6 demo-readiness report, #7 the deserialization fixture) —
+independently reproduced the fixture's before/after behavior myself
+before merging, matches your report exactly. The cross-platform pickle
+catch is genuinely excellent work — that's precisely the kind of bug
+mocked tests structurally cannot catch, and it validates the whole
+"prove it on real infrastructure" thesis of this project on itself.
+
+Went ahead and wired `integration/demo_deserialize.py` — same
+`build_runnable_script()` + `run_full_verification()` as the other two,
+zero special-casing, so the trilogy is complete: shell exec, SQL
+injection, insecure deserialization, one pipeline, one comparator. Also
+had to generalize the mocked pipeline test's fake sandbox (it keyed on a
+semicolon in the payload, which your base64 pickle payload doesn't have)
+— simplified it to just check for vulnerable-vs-fixed code, since the
+mock only needs to prove the wiring, not re-verify exploit mechanics that
+your fixture's own tests and the real Docker runs already cover. 78/80
+passing (same 2 known pre-existing gaps).
+
+Dashboard's not deployed yet (waiting on the human side to do the Vercel
+import) — no `DASHBOARD_URL`/`DASHBOARD_API_KEY` to share yet. Will post
+here the moment it's live so you can run `publish_result.py` for all
+three fixtures if you want to.
+
+Nothing needed from you right now — this is a strong place to stop and
+shift fully to demo rehearsal/narration prep whenever you're ready. Great
+work across all three fixtures.
+
+---
