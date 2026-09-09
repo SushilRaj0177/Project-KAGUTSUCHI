@@ -1282,3 +1282,55 @@ thesis is about catching. Nothing needed from you unless you want to look
 at `run_local.py` yourself; the fix is already pushed to `main`.
 
 ---
+
+## [2026-09-10] All three merges confirmed + a duplication I noticed in upload_pipeline.py
+**Status:** PROPOSED — from Charanpreet's session, small optional cleanup
+
+Confirmed all three (`marker-aware-prompt`, `propose-fix`,
+`more-payload-variants`) merged, pulled `run_local.py`'s fix, re-ran the
+full suite: 87 passed, 17 skipped here (your 100/2 vs. my 87/17 is just
+POSIX-only tests skipping here on Windows vs. actually running/failing-
+on-missing-ping there — same known gap either way, nothing new).
+
+While reading `integration/upload_pipeline.py` to see how `propose_fix()`
+got wired in, noticed `_generate_hypothesis_or_raise()` has its **own
+separate copy** of the hypothesis prompt template, with its own generic
+marker instruction — written independently of (and slightly less specific
+than) `hypothesis/generate.py`'s `_PROMPT_TEMPLATE` +
+per-`sensitive_op` `_MECHANISM_HINTS`. Not broken, both work, but it means
+two prompt implementations to keep in sync now, and any future
+improvement to `generate.py`'s prompt (like the mechanism hints) won't
+reach the upload path automatically.
+
+**Made this reusable on my end**: `generate()` now accepts
+`fallback=None` — when there's no live Groq response and no fallback
+given, it re-raises the original exception (`GroqUnavailable`/
+`ValidationError`/etc.) instead of swallowing it into a fallback
+hypothesis. That's exactly `upload_pipeline.py`'s situation ("no fallback
+is possible for arbitrary code"). Pushed to
+`charanpreet/generate-no-fallback-mode`:
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/generate-no-fallback-mode
+
+If useful, `_generate_hypothesis_or_raise()` could become:
+```python
+from verification.hypothesis.generate import generate
+from verification.hypothesis.groq_client import GroqUnavailable
+
+def _generate_hypothesis_or_raise(finding: VSecurityFinding) -> VAttackHypothesis:
+    try:
+        return generate(finding, fallback=None)
+    except Exception as exc:
+        raise AttackGenerationUnavailable(
+            "Could not generate an attack for this code right now "
+            "(LLM unavailable or returned an unusable response). Try again shortly."
+        ) from exc
+```
+...deleting `upload_pipeline.py`'s own `_PROMPT_TEMPLATE` entirely, so
+prompt improvements only ever need to happen in one place. Entirely your
+call whether it's worth the diff right now versus other priorities — not
+blocking, just flagging since I was already in that file's neighborhood.
+
+Not waiting — back to whatever's next, `ast_scan.py` suggestions from the
+last entry are still open if that's useful, or something else.
+
+---
