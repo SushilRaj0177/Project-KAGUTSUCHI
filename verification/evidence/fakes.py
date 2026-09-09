@@ -20,13 +20,19 @@ _COMMON = dict(
 )
 
 
+def _diff(created: list[str]) -> dict[str, list[str]]:
+    """Matches system/sandbox/docker_runner.py's confirmed shape (see
+    COORDINATION.md): all three buckets always present."""
+    return {"created": created, "modified": [], "deleted": []}
+
+
 def fake_evidence_vulnerable_before() -> ExecutionEvidence:
     """Marker file created: the injected command executed."""
     return ExecutionEvidence(
         evidence_id="fake-evidence-before-vuln",
         phase=ExecutionPhase.BEFORE,
         exit_code=0,
-        filesystem_diff={"created": ["/tmp/kagutsuchi_pwned"]},
+        filesystem_diff=_diff(["/tmp/kagutsuchi_pwned"]),
         **_COMMON,
     )
 
@@ -37,7 +43,7 @@ def fake_evidence_fixed_after() -> ExecutionEvidence:
         evidence_id="fake-evidence-after-fixed",
         phase=ExecutionPhase.AFTER,
         exit_code=-1,
-        filesystem_diff={"created": []},
+        filesystem_diff=_diff([]),
         **_COMMON,
     )
 
@@ -48,7 +54,7 @@ def fake_evidence_still_vulnerable_after() -> ExecutionEvidence:
         evidence_id="fake-evidence-after-still-vuln",
         phase=ExecutionPhase.AFTER,
         exit_code=0,
-        filesystem_diff={"created": ["/tmp/kagutsuchi_pwned"]},
+        filesystem_diff=_diff(["/tmp/kagutsuchi_pwned"]),
         **_COMMON,
     )
 
@@ -59,6 +65,6 @@ def fake_evidence_before_never_vulnerable() -> ExecutionEvidence:
         evidence_id="fake-evidence-before-false-positive",
         phase=ExecutionPhase.BEFORE,
         exit_code=-1,
-        filesystem_diff={"created": []},
+        filesystem_diff=_diff([]),
         **_COMMON,
     )
