@@ -105,12 +105,20 @@ engineered so that, if the exploit succeeds, that exact file is created - \
 otherwise a real, working exploit will be scored as if it failed. \
 {mechanism_hint}
 
+Also include a key "confidence": your own honest estimate, as a float \
+between 0 and 1, of the probability that this EXACT payload will \
+actually succeed against this exact code (not a generic vulnerability- \
+class confidence - specific to this payload and this function). Be \
+calibrated, not falsely certain: if you are genuinely unsure whether this \
+sink is reachable the way you think, say so with a lower number.
+
 Respond with a single JSON object with exactly these keys:
 security_property, attack_vector, payload, expected_if_vulnerable, \
-expected_if_safe. All values must be plain strings. `payload` must be a \
-single concrete input, not a description. `expected_if_vulnerable` must \
-state that {marker_path} is created; `expected_if_safe` must state that \
-it is never created.
+expected_if_safe, confidence. All string values must be plain strings; \
+`confidence` must be a plain number. `payload` must be a single concrete \
+input, not a description. `expected_if_vulnerable` must state that \
+{marker_path} is created; `expected_if_safe` must state that it is never \
+created.
 """
 
 
@@ -124,6 +132,19 @@ def _build_prompt(finding: SecurityFinding) -> str:
         rationale=finding.rationale,
         marker_path=_MARKER_PATH,
         mechanism_hint=mechanism_hint,
+    )
+
+
+def _hypothesis_from_raw(raw: dict, finding: SecurityFinding, model_id: str) -> AttackHypothesis:
+    return AttackHypothesis(
+        hypothesis_id=str(uuid.uuid4()),
+        finding_id=finding.finding_id,
+        security_property=raw["security_property"],
+        attack_vector=raw["attack_vector"],
+        payload=raw["payload"],
+        expected_if_vulnerable=raw["expected_if_vulnerable"],
+        expected_if_safe=raw["expected_if_safe"],
+        generated_by=model_id,
     )
 
 
@@ -148,16 +169,7 @@ def generate(
     """
     try:
         raw = generate_hypothesis_json(_build_prompt(finding))
-        return AttackHypothesis(
-            hypothesis_id=str(uuid.uuid4()),
-            finding_id=finding.finding_id,
-            security_property=raw["security_property"],
-            attack_vector=raw["attack_vector"],
-            payload=raw["payload"],
-            expected_if_vulnerable=raw["expected_if_vulnerable"],
-            expected_if_safe=raw["expected_if_safe"],
-            generated_by=model_id,
-        )
+        return _hypothesis_from_raw(raw, finding, model_id)
     except (GroqUnavailable, KeyError, TypeError, ValidationError):
         # Covers: API down/rate-limited, malformed JSON (raised as
         # GroqUnavailable by groq_client), valid JSON missing expected
@@ -167,3 +179,37 @@ def generate(
         if fallback is None:
             raise
         return fallback.model_copy(update={"finding_id": finding.finding_id})
+
+
+def generate_with_confidence(
+    finding: SecurityFinding,
+    model_id: str = "groq:openai/gpt-oss-120b",
+    fallback: AttackHypothesis | None = NETDIAG_FALLBACK_HYPOTHESIS,
+) -> tuple[AttackHypothesis, float | None]:
+    """Same as generate(), but also returns the model's own stated
+    confidence (0-1) that this exact payload will succeed against this
+    exact code - see verification/calibration.py, which compares this
+    against what the sandbox actually observes (research direction D from
+    the original brief: is the model's confidence trustworthy, not just
+    its answer?).
+
+    The AttackHypothesis contract itself is untouched (confidence is not
+    a contracts/ field - it's verification/-internal calibration data),
+    so this doesn't require a contract change to add.
+
+    Returns `(hypothesis, None)` on the fallback path - a hardcoded
+    fallback has no live confidence estimate to report, and reporting a
+    fake one would corrupt the calibration data it's meant to produce.
+    """
+    try:
+        raw = generate_hypothesis_json(_build_prompt(finding))
+        hypothesis = _hypothesis_from_raw(raw, finding, model_id)
+        confidence = raw.get("confidence")
+        if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
+            confidence = 0.5  # model omitted/malformed it; don't fabricate false precision
+        confidence = max(0.0, min(1.0, float(confidence)))
+        return hypothesis, confidence
+    except (GroqUnavailable, KeyError, TypeError, ValidationError):
+        if fallback is None:
+            raise
+        return fallback.model_copy(update={"finding_id": finding.finding_id}), None
