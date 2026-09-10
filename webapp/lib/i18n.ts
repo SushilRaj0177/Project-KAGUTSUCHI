@@ -35,6 +35,13 @@ export interface Dict {
   attackResult: string;
   proposedFix: string;
   fixUnavailable: string;
+  openPrButton: string;
+  openingPrButton: string;
+  openPrHint: string;
+  openPrTokenPlaceholder: string;
+  openPrSubmit: string;
+  openPrCancel: string;
+  openPrSuccess: string;
   severity: string;
   rationale: string;
   vulnClass: Record<string, string>;
@@ -179,6 +186,13 @@ export const translations: Record<Lang, Dict> = {
     attackResult: "Attack result",
     proposedFix: "Proposed fix",
     fixUnavailable: "Fix not available",
+    openPrButton: "Open a PR with this fix",
+    openingPrButton: "Opening PR…",
+    openPrHint: "Uses a GitHub token with repo write access, sent directly to GitHub for this one request — never stored, never logged.",
+    openPrTokenPlaceholder: "GitHub personal access token (repo scope)",
+    openPrSubmit: "Create pull request",
+    openPrCancel: "Cancel",
+    openPrSuccess: "Pull request opened",
     severity: "Severity",
     rationale: "Why this is dangerous",
     vulnClass: {
@@ -346,6 +360,13 @@ export const translations: Record<Lang, Dict> = {
     attackResult: "攻撃結果",
     proposedFix: "修正案",
     fixUnavailable: "修正案なし",
+    openPrButton: "この修正でPRを作成",
+    openingPrButton: "PR作成中…",
+    openPrHint: "リポジトリへの書き込み権限を持つGitHubトークンを使用します。このリクエストのみに使われ、保存もログ記録もされません。",
+    openPrTokenPlaceholder: "GitHubパーソナルアクセストークン（repoスコープ）",
+    openPrSubmit: "プルリクエストを作成",
+    openPrCancel: "キャンセル",
+    openPrSuccess: "プルリクエストを作成しました",
     severity: "深刻度",
     rationale: "危険な理由",
     vulnClass: {

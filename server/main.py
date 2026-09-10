@@ -26,9 +26,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from contracts import SecurityFinding
+from integration.file_patch import SymbolNotFound, apply_function_fix
+from integration.github_pr import GitHubPrError, open_fix_pr
 from integration.upload_pipeline import AttackGenerationUnavailable, verify_upload
 from server.rate_limit import rate_limit
-from server.repo_scan import CloneFailed, InvalidRepoUrl, scan_repo
+from server.repo_scan import CloneFailed, InvalidRepoUrl, _parse_github_url, scan_repo
 from system.analysis.ast_scan import scan_source
 from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
 from system.sandbox.docker_runner import SandboxUnavailableError
@@ -92,6 +94,22 @@ class VerifyRequest(BaseModel):
 class RepoAnalyzeRequest(BaseModel):
     repo_url: str
     ref: str | None = None  # branch/tag to scan instead of the default branch
+
+
+class OpenPrRequest(BaseModel):
+    repo_url: str
+    file_path: str
+    symbol: str
+    original_source: str
+    fixed_function_source: str
+    finding_summary: str
+    github_token: str
+    base_branch: str | None = None
+
+
+class OpenPrResponse(BaseModel):
+    pr_url: str
+    branch: str
 
 
 class RepoAnalyzeResponse(BaseModel):
@@ -191,3 +209,40 @@ def verify(req: VerifyRequest) -> dict:
         "fix_error": bundle.fix_error,
         "hypothesis_confidence": bundle.confidence,
     }
+
+
+@app.post("/api/open-pr", response_model=OpenPrResponse, dependencies=[Depends(rate_limit)])
+def open_pr(req: OpenPrRequest) -> OpenPrResponse:
+    """Deliver a verified fix as a real GitHub PR, instead of leaving it
+    as a code block the user has to copy-paste themselves. `github_token`
+    is used exactly once, right here, to make the GitHub API calls -
+    never logged, never persisted, never returned in any response.
+
+    `fixed_function_source` must be the SELF-CONTAINED single-function
+    output of verify_upload()/propose_fix() (see integration/file_patch.py's
+    docstring for why this can't just overwrite the whole file)."""
+    try:
+        owner, repo = _parse_github_url(req.repo_url)
+    except InvalidRepoUrl as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    try:
+        patched_file = apply_function_fix(req.original_source, req.symbol, req.fixed_function_source)
+    except SymbolNotFound as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    try:
+        result = open_fix_pr(
+            token=req.github_token,
+            owner=owner,
+            repo=repo,
+            file_path=req.file_path,
+            new_file_content=patched_file,
+            symbol=req.symbol,
+            finding_summary=req.finding_summary,
+            base_branch=req.base_branch,
+        )
+    except GitHubPrError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return OpenPrResponse(pr_url=result.pr_url, branch=result.branch)

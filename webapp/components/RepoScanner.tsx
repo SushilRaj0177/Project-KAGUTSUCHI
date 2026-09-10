@@ -54,10 +54,14 @@ export function FindingCard({
   finding,
   source,
   index,
+  repoOwner,
+  repoName,
 }: {
   finding: SecurityFinding;
   source: string | undefined;
   index: number;
+  repoOwner?: string;
+  repoName?: string;
 }) {
   const { t, lang } = useLanguage();
   const jp = lang === "ja" ? "font-jp" : "";
@@ -66,6 +70,41 @@ export function FindingCard({
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
   const [verifyResult, setVerifyResult] = useState<VerifyResponse | null>(null);
+  const [showPrForm, setShowPrForm] = useState(false);
+  const [githubToken, setGithubToken] = useState("");
+  const [openingPr, setOpeningPr] = useState(false);
+  const [prError, setPrError] = useState<string | null>(null);
+  const [prUrl, setPrUrl] = useState<string | null>(null);
+
+  async function openPr() {
+    if (!source || !repoOwner || !repoName || !verifyResult?.fixed_source || !githubToken.trim()) return;
+    setOpeningPr(true);
+    setPrError(null);
+    try {
+      const res = await fetch(apiUrl("/open-pr"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          repo_url: `https://github.com/${repoOwner}/${repoName}`,
+          file_path: finding.file_path,
+          symbol: finding.symbol,
+          original_source: source,
+          fixed_function_source: verifyResult.fixed_source,
+          finding_summary: finding.rationale,
+          github_token: githubToken,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.detail ?? `Request failed (${res.status})`);
+      setPrUrl(body.pr_url);
+      setGithubToken("");
+      setShowPrForm(false);
+    } catch (err) {
+      setPrError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setOpeningPr(false);
+    }
+  }
 
   async function runVerify() {
     if (!source) return;
@@ -191,6 +230,67 @@ export function FindingCard({
                     <pre className="mt-1 max-h-56 overflow-auto border border-neon-cyan/30 bg-void-950 p-3 font-mono text-xs text-neon-cyan-soft">
                       {verifyResult.fixed_source}
                     </pre>
+
+                    {repoOwner && repoName && verifyResult.result?.verdict === "VERIFIED_FIXED" && (
+                      <div className="mt-3">
+                        {prUrl ? (
+                          <a
+                            href={prUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                            data-cursor="hover"
+                            className="inline-block border border-neon-cyan bg-neon-cyan/10 px-4 py-2 font-mono text-xs font-bold uppercase tracking-wide text-neon-cyan-soft hover:bg-neon-cyan/20"
+                          >
+                            {t.openPrSuccess} ↗
+                          </a>
+                        ) : showPrForm ? (
+                          <div className="space-y-2 border border-line-strong bg-void-950 p-3">
+                            <p className={`text-[11px] leading-relaxed text-steel-400 ${jp}`}>{t.openPrHint}</p>
+                            <input
+                              data-cursor="hover"
+                              type="password"
+                              value={githubToken}
+                              onChange={(e) => setGithubToken(e.target.value)}
+                              placeholder={t.openPrTokenPlaceholder}
+                              className="w-full border border-line-strong bg-void-900 px-3 py-1.5 font-mono text-xs text-paper-50 outline-none placeholder:text-steel-600 focus:border-neon-cyan"
+                            />
+                            <div className="flex gap-2">
+                              <MagneticButton
+                                onClick={openPr}
+                                disabled={openingPr || !githubToken.trim()}
+                                className={`border px-3 py-1.5 text-xs font-bold uppercase tracking-wide transition-colors ${jp} ${
+                                  openingPr
+                                    ? "cursor-wait border-line-strong text-steel-400"
+                                    : "neon-border-pink border-neon-pink text-neon-pink-soft hover:bg-neon-pink/10"
+                                }`}
+                              >
+                                {openingPr ? t.openingPrButton : t.openPrSubmit}
+                              </MagneticButton>
+                              <button
+                                type="button"
+                                data-cursor="hover"
+                                onClick={() => setShowPrForm(false)}
+                                className="border border-line-strong px-3 py-1.5 font-mono text-xs uppercase tracking-wide text-steel-400 hover:border-neon-pink/50"
+                              >
+                                {t.openPrCancel}
+                              </button>
+                            </div>
+                            {prError && (
+                              <p className="border border-neon-pink/40 bg-neon-pink/10 p-2 font-mono text-[11px] text-neon-pink-soft">
+                                {prError}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <MagneticButton
+                            onClick={() => setShowPrForm(true)}
+                            className={`neon-border-cyan border border-neon-cyan bg-neon-cyan/5 px-4 py-2 text-xs font-bold uppercase tracking-wide text-neon-cyan-soft transition-colors hover:bg-neon-cyan/15 ${jp}`}
+                          >
+                            {t.openPrButton}
+                          </MagneticButton>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ) : (
                   verifyResult.fix_error && (
@@ -535,6 +635,8 @@ export function RepoScanner() {
                         finding={finding}
                         source={result.sources[finding.file_path]}
                         index={i}
+                        repoOwner={result.owner}
+                        repoName={result.repo}
                       />
                     ))}
                   </div>
