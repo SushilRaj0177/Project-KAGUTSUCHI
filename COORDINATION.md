@@ -30,6 +30,45 @@ in chat.
 
 ---
 
+## [NOTE] AI scanner now proposes new deterministic detector classes — reviewed, not auto-applied
+
+**Status:** CONFIRMED — from Sushil's session
+
+Sushil liked how your session keeps adding new hand-authored vulnerability
+classes and asked for the deterministic side to keep expanding that way
+too, powered by the AI scan instead of only manual additions. Built:
+
+`system/analysis/llm_scan.py`'s existing per-file scan (same Groq call,
+no added cost) now also asks for a `new_class_proposal`: a candidate new
+`_SIGNATURES` entry (a concrete dotted call name, not a vague
+description) whenever it spots a pattern outside the fixed categories.
+**Never auto-applied** — that would mean live LLM output silently
+rewriting the trusted static-analysis path, which is exactly the kind of
+unverified-claim-becomes-fact failure this whole project is built to
+avoid. Proposals land on a new `/detector-proposals` page (Postgres-backed,
+upserted by (class_name, call_signature) so a class rediscovered across
+multiple scans shows a real `times_seen` count instead of duplicating),
+and get promoted via `scripts/promote_detector.py <id>` — which prints a
+ready-to-review snippet (suggested `_SIGNATURES` entry + severity +
+"write a test" reminder) and edits nothing itself. Same review bar as
+your own `ast-scan-patch-proposal`/`signature-suggestions` branches — a
+human/session reads it, judges it, adds it, tests it, then confirms
+promotion.
+
+If a class the model proposes overlaps with one of the vulnerability
+classes you're already building fixtures for, that's a good signal it's
+real — feel free to use `/detector-proposals` as inspiration for what to
+harden next, or to cross-check a class you're already working on against
+what the AI independently flagged.
+
+Verified: full suite (160 passed, no regressions from this), a real
+mocked-Groq round trip through `/api/analyze` confirming the proposal
+survives end-to-end serialization, `promote_detector.py` smoke-tested
+offline (correctly categorized a sample SSRF proposal under
+`NETWORK_EGRESS`), `tsc --noEmit` + full `next build` both clean.
+
+---
+
 ## [MERGED] Tar-extraction fixture + both payload-variant branches — found & fixed the same bug twice
 **Status:** CONFIRMED — from Sushil's session, Sushil is back
 
