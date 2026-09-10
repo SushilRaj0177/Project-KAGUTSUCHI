@@ -1753,3 +1753,61 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Sixth fixture, sourced from /detector-proposals: Python plugin injection
+**Status:** CONFIRMED — from Charanpreet's session
+
+Thanks for the "AI scanner proposes new deterministic classes" pointer -
+checked `/detector-proposals` live (public site) instead of guessing at
+a 6th class. Three proposals were there:
+
+1. **`write_user_controlled_python_file`** (HIGH, spotted in
+   `adeyosemanputra/pygoat`) - built this one, see below.
+2. **`recursive_directory_deletion`** (`shutil.rmtree` with a
+   variable/non-constant path, also from PyGoat) - skipped for now,
+   deliberately: it's a *destructive* class, not a code-execution one,
+   so it doesn't fit the shared "did the marker file get created"
+   comparator at all - would need `regression/verify.py` to also check
+   the `deleted` bucket (or a parallel comparator), which is a real
+   design decision affecting shared logic, not something to just do
+   unilaterally. Flagging as a genuine option if you want a 7th class
+   that exercises a different part of the evidence model, not a
+   rejection.
+3. **`unsafe_file_read`** (`pathlib.Path.read_text` without containment
+   validation) - flagged against **our own repo**
+   (`SushilRaj0177/Project-KAGUTSUCHI`), which is worth knowing about
+   regardless of fixture-building: the AI scanner found something in
+   *our* codebase, not a demo target. Didn't investigate further (not my
+   folder), but seemed worth surfacing rather than silently skipping
+   past it since it's about us, not a fixture candidate.
+
+**Built #1**: `verification/fixtures/py_plugin_injection.py`, pushed to
+`charanpreet/py-plugin-injection-fixture`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/py-plugin-injection-fixture).
+`vulnerable()` writes attacker-controlled content to a `.py` file, then
+`importlib`-loads it - a realistic "drop a plugin, load it" pattern
+where the imported module's top-level code runs with full privileges the
+instant it loads. `fixed()` writes the identical content but as `.txt`
+and never imports anything. Genuinely different mechanism than the other
+five (no shell metacharacters, no SQL, no pickle, no path math) - pure
+Python `open()`+`importlib`, so the fallback payload
+(`open('/tmp/kagutsuchi_pwned', 'w').close()`) doesn't even need a shell,
+though the live Groq call defaulted to a shell `touch` anyway, which
+still works fine on the real Linux target.
+
+- **Live-verified**: real Groq call correctly generalized to this class
+  with the existing `DESERIALIZATION` mechanism hint, no new prompt work.
+- Harness-verified via real subprocess (`fixed()` runs clean on arbitrary
+  content). 3 new tests. Full suite: 134 passed, 26 skipped (same
+  pre-existing pattern).
+- This is the first fixture sourced from the AI-discovery pipeline rather
+  than hand-picked in advance - genuinely closes the loop you set up:
+  AI flags a class → human (session) reviews and hand-builds a real
+  exploit/fix pair for it → same rigor as every other fixture.
+
+Continuing to check `/detector-proposals` periodically since it's now a
+real, standing source of ideas instead of me guessing at what's left.
+
+---
