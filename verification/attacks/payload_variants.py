@@ -1,5 +1,5 @@
-"""Additional attack payload variants for all three fixtures, beyond the
-single payload in each fixture's confirmed AttackHypothesis (see
+"""Additional attack payload variants per fixture, beyond the single
+payload in each fixture's confirmed AttackHypothesis (see
 COORDINATION.md's fixture entries).
 
 Each confirmed hypothesis's payload is what system/sandbox and
@@ -8,9 +8,9 @@ for the demo's byte-identical replay claim - none of these are alternate
 hypotheses to swap in. They're extra proof that each `vulnerable()` is
 exploitable via more than one technique for its vulnerability class, and
 that `fixed()` closes all of them, not just the one the demo uses. Every
-variant here was confirmed against the real Docker sandbox before being
-added (not just asserted to work), same standard as the fixtures
-themselves - see COORDINATION.md for the confirmation entries.
+variant here was confirmed against the real fixture (real Docker sandbox
+where available, real local execution otherwise) before being added, not
+just asserted to work - see COORDINATION.md for the confirmation entries.
 """
 
 from __future__ import annotations
@@ -63,4 +63,15 @@ DESERIALIZATION_PAYLOAD_VARIANTS: dict[str, str] = {
         "gASVWAAAAAAAAACMCGJ1aWx0aW5zlIwEZXZhbJSTlIw8X19pbXBvcnRfXygnb3MnKS5wb3Bl"
         "bigndG91Y2ggL3RtcC9rYWd1dHN1Y2hpX3B3bmVkJykucmVhZCgplIWUUpQu"
     ),
+}
+
+# tar_extraction.py: each variant is a different relative-traversal shape
+# for the archive member's name - tarfile.extractall() with no filter
+# extracts the member exactly as named, so any of these escape the safe
+# extraction directory the same way, just via a different path string.
+TAR_EXTRACTION_PAYLOAD_VARIANTS: dict[str, str] = {
+    "single_up": "../kagutsuchi_pwned",
+    "double_up_through_tmp": "../../tmp/kagutsuchi_pwned",
+    "subdir_cancel": "subdir/../../kagutsuchi_pwned",
+    "dot_prefixed": "./../kagutsuchi_pwned",
 }
