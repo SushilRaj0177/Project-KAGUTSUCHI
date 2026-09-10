@@ -259,6 +259,48 @@ def action_new_classes() -> None:
     )
 
 
+def action_adversarial() -> None:
+    _banner("4 AI MODELS FIGHT OVER THE SAME CODE")
+    if not _has_groq_key():
+        print("\nCan't run this — no GROQ_API_KEY is set in this terminal.")
+        return
+    if not _state["findings"]:
+        print("\nScan a file first (option 1), then come back here.")
+        return
+
+    print("Here's what we found last time:")
+    for i, f in enumerate(_state["findings"]):
+        _print_finding(i, f)
+    choice = input(f"\nHarden which one? [0-{len(_state['findings']) - 1}]: ").strip()
+    if not (choice.isdigit() and 0 <= int(choice) < len(_state["findings"])):
+        print("Didn't recognize that choice.")
+        return
+    finding = _state["findings"][int(choice)]
+
+    from verification.adversarial_loop import DEFAULT_MODELS, RoundResult, run_adversarial_hardening
+
+    def _print_round(r: "RoundResult") -> None:
+        label = "ATTACK" if r.role == "attack" else " FIX  "
+        print(f"\n  round {r.round_no:>2}  [{label}]  {r.model}")
+        print(f"           {r.outcome}")
+
+    print(f"\nAgents in rotation: {', '.join(DEFAULT_MODELS)}")
+    print("Each round, one model attacks the CURRENT code for real in the sandbox.")
+    print("If it breaks, a different model fixes it, and that fix has to survive")
+    print("the exact same exploit before it's trusted. Stops once 2 different")
+    print("models in a row can't break what's left standing.\n")
+
+    report = run_adversarial_hardening(finding, _state["source"], on_round=_print_round)
+
+    print(f"\n{'=' * 72}")
+    if report.hardened:
+        print(f"RESULT: hardened — {report.stopped_reason}")
+    else:
+        print(f"RESULT: stopped without full confirmation — {report.stopped_reason}")
+    print("=" * 72)
+    print(f"\nFinal surviving code for {finding.symbol}():\n{report.final_source}")
+
+
 def main() -> None:
     print("=" * 72)
     print("KAGUTSUCHI — real vulnerability scanning, real attacks, real fixes.")
@@ -279,6 +321,7 @@ def main() -> None:
             "\n  [2] Attack a finding from the last scan"
             "\n  [3] Demo: is the AI's confidence trustworthy?"
             "\n  [4] Demo: how new vulnerability classes get discovered"
+            "\n  [5] Demo: 4 AI models fight over the same code till one wins"
             "\n  [q] Quit"
         )
         choice = input("\nWhat would you like to do? ").strip().lower()
@@ -292,6 +335,8 @@ def main() -> None:
                 action_calibration()
             elif choice == "4":
                 action_new_classes()
+            elif choice == "5":
+                action_adversarial()
             elif choice in ("q", "quit", "exit"):
                 print("\nBye!")
                 return
