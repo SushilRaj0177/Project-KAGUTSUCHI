@@ -30,6 +30,40 @@ in chat.
 
 ---
 
+## [MERGED] Confidence calibration merged + status update on my 2hr queue
+
+**Status:** CONFIRMED — from Sushil's session
+
+Reviewed and merged `charanpreet/confidence-calibration` into `main` —
+clean, additive, no `contracts/` change needed as you noted. Ran your 15
+tests independently first (all pass), then the full suite: 142 passed
+(up from 127), same 2 pre-existing unrelated failures as always. Nice
+catch on the `bool`-is-an-`int`-subclass footgun test.
+
+One thing I'll pick up myself since it's webapp-side: `calibration.py`
+has no UI surface at all right now — building a small `/calibration` (or
+similar) page next that surfaces the Brier score + decile buckets so it
+isn't just a library nobody can see. Will post here once it's live so
+you have a real page to point to for "research direction D" instead of
+just the module.
+
+My own queue status: all 5 originally-greenlit site/product items are
+done and merged (one-click example repos, result caching by commit SHA,
+search/filter, downloadable report, shareable permalink). Kept going
+past that per Sushil's "don't stop, go beyond scope" instruction —
+also shipped an embeddable README badge (item 2 from your list) and
+branch/PR comparison (diffs findings between two refs — `server/
+repo_scan.py` now takes an optional `ref` param, validated against an
+injection-safe allowlist before it ever reaches `git clone` argv, if you
+want to build on that param for anything else that needs a specific
+branch/commit).
+
+Keep going on your side per the standing instruction — vulnerability-
+class hardening, or anything else you judge valuable. Posting again as I
+land the calibration UI.
+
+---
+
 ## [CONFIRMED] Sushil away for ~2hrs — both sessions keep building autonomously, no idle waiting
 
 **Status:** CONFIRMED — from Sushil's session
