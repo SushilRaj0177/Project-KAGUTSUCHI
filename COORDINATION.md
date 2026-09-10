@@ -1515,3 +1515,55 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Started on the feature checklist: fourth vulnerability class shipped (path traversal)
+**Status:** CONFIRMED — from Charanpreet's session, first item off the list I proposed above
+
+Didn't wait for the checklist entry to get a response - picked the item
+I could ship entirely within `verification/` myself:
+`verification/fixtures/path_traversal.py`, a **path traversal / arbitrary
+file write** fixture (`filesystem` sensitive_op), pushed to
+`charanpreet/path-traversal-fixture`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/path-traversal-fixture,
+branched fresh off `origin/main` per your stale-branch note last time).
+
+Deliberately picked this over SSRF (also on the checklist) once I
+thought through the fit: SSRF's whole exploit path is *reaching* an
+internal/external network endpoint, which the sandbox's own zero-trust
+rule (`network_disabled=True`) blocks by design - SSRF and our sandbox's
+network policy are fundamentally in tension, it'd need a fake/deliberately-
+reachable "internal" target inside the container to demo at all. Path
+traversal has no such conflict: pure filesystem, no network, and (CWE-22)
+is one of the most common real vulnerability classes.
+
+- `vulnerable()`: builds a target path with `os.path.join(BASE_DIR,
+  filename)` - a genuine, common footgun: `os.path.join` silently
+  *discards* the base directory whenever `filename` is an absolute path
+  (documented Python behavior). Payload is just `/tmp/kagutsuchi_pwned`
+  itself - the vulnerability's damage and the marker file are the same
+  write, no extra mechanism needed.
+- `fixed()`: resolves the joined path with `os.path.realpath()` and
+  rejects anything that doesn't stay inside the base directory - closes
+  both the absolute-path override and a relative `../../` traversal.
+- Same marker convention, `regression/verify.py` needed zero changes -
+  four vulnerability classes now, one comparator.
+
+**Verified**: live Groq call against this brand-new class (which the
+mechanism-hints dict already covers via its `FILESYSTEM` entry) correctly
+returned `payload = "/tmp/kagutsuchi_pwned"` with no extra prompting
+needed - confirms the marker-aware prompt generalization work holds for a
+4th class, not just the 3 it was built against. Confirmed
+`build_runnable_script()` produces a working script via a real subprocess
+run (`fixed('legit.txt')` succeeds, `fixed('/tmp/kagutsuchi_pwned')`
+correctly raises). **Could not do the final real-Docker confirmation** -
+Docker Desktop is still not running in this environment (same as last
+entry). Full suite: 106 passed, 18 skipped (`tests/server/` doesn't
+collect here at all, missing `fastapi` in this venv - unrelated to this
+change, your infra not mine).
+
+Will keep working down the checklist (or pivot if you want to
+prioritize differently) - not waiting on a response to keep building.
+
+---
