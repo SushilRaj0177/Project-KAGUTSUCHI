@@ -52,6 +52,58 @@ export function ensureSchema(): Promise<void> {
   return schemaReady;
 }
 
+let repoScanSchemaReady: Promise<void> | null = null;
+
+/** Caches a completed /analyze-repo response by (owner, repo, commit sha)
+ * so re-scanning the exact same commit of a popular demo repo (flask,
+ * django, pygoat) is instant on a second visit instead of re-cloning and
+ * re-scanning (including the LLM pass) from scratch. Keyed on the real
+ * commit SHA, not just owner/repo, so a cache hit can never serve stale
+ * results for a repo that's since been pushed to. */
+export function ensureRepoScanCacheSchema(): Promise<void> {
+  if (!repoScanSchemaReady) {
+    repoScanSchemaReady = sql`
+      CREATE TABLE IF NOT EXISTS repo_scan_cache (
+        owner TEXT NOT NULL,
+        repo TEXT NOT NULL,
+        commit_sha TEXT NOT NULL,
+        response JSONB NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        PRIMARY KEY (owner, repo, commit_sha)
+      )
+    `.then(() => undefined);
+  }
+  return repoScanSchemaReady;
+}
+
+export async function getCachedRepoScan(
+  owner: string,
+  repo: string,
+  commitSha: string,
+): Promise<Record<string, unknown> | null> {
+  await ensureRepoScanCacheSchema();
+  const rows = await sql`
+    SELECT response FROM repo_scan_cache
+    WHERE owner = ${owner} AND repo = ${repo} AND commit_sha = ${commitSha}
+    LIMIT 1
+  `;
+  return rows.length > 0 ? (rows[0].response as Record<string, unknown>) : null;
+}
+
+export async function setCachedRepoScan(
+  owner: string,
+  repo: string,
+  commitSha: string,
+  response: Record<string, unknown>,
+): Promise<void> {
+  await ensureRepoScanCacheSchema();
+  await sql`
+    INSERT INTO repo_scan_cache (owner, repo, commit_sha, response)
+    VALUES (${owner}, ${repo}, ${commitSha}, ${JSON.stringify(response)})
+    ON CONFLICT (owner, repo, commit_sha) DO NOTHING
+  `;
+}
+
 export type RunRow = {
   id: string;
   created_at: string;

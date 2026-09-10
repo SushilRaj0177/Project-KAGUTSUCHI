@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from "@/lib/clientIp";
+import { getCachedRepoScan, setCachedRepoScan } from "@/lib/db";
 
 // Proxies to the FastAPI backend server-side. Browser CORS rules only
 // apply to fetch() calls made FROM the browser -- routing through our own
@@ -9,20 +10,81 @@ import { clientIp } from "@/lib/clientIp";
 // blocks for third-party browser origins.
 export const maxDuration = 60;
 
+const GITHUB_URL_RE = /^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(\.git)?\/?$/;
+
+// Best-effort: looks up the current HEAD commit SHA of the repo's default
+// branch via GitHub's public REST API (no auth, no git binary needed --
+// Vercel's serverless runtime doesn't ship one). Used only to key the
+// scan-result cache; any failure here (rate-limited, private repo,
+// network hiccup) just means "skip the cache," never a request failure.
+async function resolveHeadSha(owner: string, repo: string): Promise<string | null> {
+  try {
+    const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!repoRes.ok) return null;
+    const repoJson = await repoRes.json();
+    const branch = repoJson.default_branch;
+    if (typeof branch !== "string") return null;
+
+    const commitRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/commits/${branch}`, {
+      signal: AbortSignal.timeout(5000),
+      headers: { Accept: "application/vnd.github.sha" },
+    });
+    if (!commitRes.ok) return null;
+    const sha = (await commitRes.text()).trim();
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const backendUrl = process.env.KAGUTSUCHI_API_URL;
   if (!backendUrl) {
     return NextResponse.json({ detail: "Backend not configured" }, { status: 503 });
   }
 
-  const body = await request.text();
+  const bodyText = await request.text();
+  let repoUrl: string | undefined;
+  try {
+    repoUrl = JSON.parse(bodyText)?.repo_url;
+  } catch {
+    // fall through - malformed body, let the backend reject it normally
+  }
+
+  const match = typeof repoUrl === "string" ? GITHUB_URL_RE.exec(repoUrl.trim()) : null;
+  const owner = match?.[1];
+  const repo = match?.[2];
+  const sha = owner && repo ? await resolveHeadSha(owner, repo) : null;
+
+  if (owner && repo && sha) {
+    try {
+      const cached = await getCachedRepoScan(owner, repo, sha);
+      if (cached) {
+        return NextResponse.json({ ...cached, cached: true });
+      }
+    } catch {
+      // cache read failed (e.g. DATABASE_URL not configured) - scan for real instead of failing
+    }
+  }
+
   try {
     const upstream = await fetch(`${backendUrl.replace(/\/$/, "")}/api/analyze-repo`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Client-IP": clientIp(request) },
-      body,
+      body: bodyText,
     });
     const data = await upstream.text();
+
+    if (upstream.ok && owner && repo && sha) {
+      try {
+        await setCachedRepoScan(owner, repo, sha, JSON.parse(data));
+      } catch {
+        // best-effort cache write - never let a caching failure affect the response
+      }
+    }
+
     return new NextResponse(data, {
       status: upstream.status,
       headers: { "Content-Type": "application/json" },

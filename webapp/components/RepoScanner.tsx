@@ -26,6 +26,7 @@ interface RepoAnalyzeResponse {
   findings: SecurityFinding[];
   sources: Record<string, string>;
   truncated: boolean;
+  cached?: boolean;
 }
 
 interface VerifyResponse {
@@ -235,6 +236,15 @@ function EvidenceBox({
   );
 }
 
+// Known-interesting repos for a one-click demo -- no need for a judge to
+// have a repo URL ready. PyGoat is a deliberately-vulnerable Django app
+// (real findings virtually guaranteed); flask is a real popular repo
+// that still surfaces something, per earlier manual testing this session.
+const EXAMPLE_REPOS = [
+  { label: "PyGoat", url: "https://github.com/adeyosemanputra/pygoat" },
+  { label: "Flask", url: "https://github.com/pallets/flask" },
+];
+
 export function RepoScanner() {
   const { t, lang } = useLanguage();
   const jp = lang === "ja" ? "font-jp" : "";
@@ -244,9 +254,10 @@ export function RepoScanner() {
   const [result, setResult] = useState<RepoAnalyzeResponse | null>(null);
   const { ref: resultsRef, inView: resultsInView } = useInView<HTMLDivElement>();
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!repoUrl.trim() || loading) return;
+  async function handleSubmit(e: React.FormEvent | undefined, overrideUrl?: string) {
+    e?.preventDefault();
+    const target = overrideUrl ?? repoUrl;
+    if (!target.trim() || loading) return;
     setLoading(true);
     setError(null);
     setResult(null);
@@ -254,7 +265,7 @@ export function RepoScanner() {
       const res = await fetch(apiUrl("/analyze-repo"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ repo_url: repoUrl.trim() }),
+        body: JSON.stringify({ repo_url: target.trim() }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -311,6 +322,27 @@ export function RepoScanner() {
           >
             {loading ? t.scanningButton : t.scanButton}
           </MagneticButton>
+
+          <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+            <span className={`font-mono text-[10px] tracking-widest text-steel-600 uppercase ${jp}`}>
+              {t.tryExample}
+            </span>
+            {EXAMPLE_REPOS.map((ex) => (
+              <button
+                key={ex.url}
+                type="button"
+                data-cursor="hover"
+                disabled={loading}
+                onClick={() => {
+                  setRepoUrl(ex.url);
+                  handleSubmit(undefined, ex.url);
+                }}
+                className="border border-line-strong px-2 py-1 font-mono text-[10px] tracking-wide text-steel-400 uppercase transition-colors hover:border-neon-cyan hover:text-neon-cyan disabled:cursor-wait disabled:opacity-50"
+              >
+                {ex.label}
+              </button>
+            ))}
+          </div>
         </form>
 
         {error && (
@@ -330,6 +362,12 @@ export function RepoScanner() {
             <StatTile label={t.filesScanned} value={result.files_scanned} tone="cyan" />
             <StatTile label={t.findingsCount} value={result.findings.length} tone="pink" />
           </div>
+
+          {result.cached && (
+            <p className={`mb-6 font-mono text-[10px] tracking-widest text-steel-600 uppercase ${jp}`}>
+              {t.cachedNotice}
+            </p>
+          )}
 
           {result.truncated && (
             <p className={`mb-6 border border-line-strong bg-void-900 p-3 font-mono text-xs text-steel-400 ${jp}`}>

@@ -47,6 +47,8 @@ export interface Dict {
   backendOffline: string;
   backendOfflineDetail: string;
   reducedIsolationNotice: string;
+  tryExample: string;
+  cachedNotice: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -117,6 +119,8 @@ export const translations: Record<Lang, Dict> = {
     backendOfflineDetail: "The scanning backend is unreachable right now — repo scans won't work until it's back.",
     reducedIsolationNotice:
       "This host has no Docker available, so this attack ran with reduced isolation (a locked-down subprocess, not a full container) instead of our usual sandbox.",
+    tryExample: "Try:",
+    cachedNotice: "// served from cache — same commit already scanned",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -185,5 +189,7 @@ export const translations: Record<Lang, Dict> = {
     backendOfflineDetail: "現在スキャン用のバックエンドに接続できません — 復旧するまでリポジトリのスキャンはできません。",
     reducedIsolationNotice:
       "このホストではDockerが利用できないため、通常のサンドボックスの代わりに制限付きサブプロセスで攻撃を実行しました（完全なコンテナ分離ではありません）。",
+    tryExample: "試す：",
+    cachedNotice: "// キャッシュから表示 — 同じコミットは既にスキャン済みです",
   },
 };
