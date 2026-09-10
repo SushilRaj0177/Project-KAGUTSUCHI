@@ -97,6 +97,18 @@ def action_scan() -> None:
     _state["source"] = source
     _state["findings"] = all_findings
 
+    if not all_findings:
+        return
+
+    # Flow straight into the attack instead of dead-ending back at the
+    # menu - scanning without immediately offering to attack is exactly
+    # the confusing dead stop this was rewritten to avoid.
+    choice = input(
+        f"\nAttack which finding right now? [0-{len(all_findings) - 1}], or Enter to skip: "
+    ).strip()
+    if choice.isdigit() and 0 <= int(choice) < len(all_findings):
+        _run_attack(int(choice))
+
 
 def action_attack() -> None:
     if not _state["findings"]:
@@ -111,7 +123,10 @@ def action_attack() -> None:
     if not (choice.isdigit() and 0 <= int(choice) < len(_state["findings"])):
         print("Not a valid choice.")
         return
-    index = int(choice)
+    _run_attack(int(choice))
+
+
+def _run_attack(index: int) -> None:
     target = _state["findings"][index]
 
     print(f"\n{'=' * 72}\nATTACKING finding [{index}]: {target.symbol}() — live Groq call, no fallback")
