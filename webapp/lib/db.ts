@@ -104,6 +104,25 @@ export async function setCachedRepoScan(
   `;
 }
 
+/** Most recent scan of any commit of (owner, repo) -- backs the
+ * shields.io-style embeddable badge, which reflects "last known state",
+ * not one pinned commit the way the permalink page does. */
+export async function getLatestRepoScan(
+  owner: string,
+  repo: string,
+): Promise<{ response: Record<string, unknown>; created_at: string } | null> {
+  await ensureRepoScanCacheSchema();
+  const rows = await sql`
+    SELECT response, created_at FROM repo_scan_cache
+    WHERE owner = ${owner} AND repo = ${repo}
+    ORDER BY created_at DESC
+    LIMIT 1
+  `;
+  return rows.length > 0
+    ? { response: rows[0].response as Record<string, unknown>, created_at: rows[0].created_at as string }
+    : null;
+}
+
 export type RunRow = {
   id: string;
   created_at: string;

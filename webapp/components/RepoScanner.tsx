@@ -295,6 +295,7 @@ export function RepoScanner() {
   const [opFilter, setOpFilter] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
   const [permalinkCopied, setPermalinkCopied] = useState(false);
+  const [badgeCopied, setBadgeCopied] = useState(false);
   const { ref: resultsRef, inView: resultsInView } = useInView<HTMLDivElement>();
 
   async function handleSubmit(e: React.FormEvent | undefined, overrideUrl?: string) {
@@ -482,6 +483,21 @@ export function RepoScanner() {
                     {permalinkCopied ? t.permalinkCopied : t.copyPermalink}
                   </button>
                 )}
+                <button
+                  type="button"
+                  data-cursor="hover"
+                  onClick={() => {
+                    const badgeUrl = `${window.location.origin}/api/badge/${result.owner}/${result.repo}`;
+                    const markdown = `[![kagutsuchi](${badgeUrl})](${window.location.origin})`;
+                    navigator.clipboard.writeText(markdown).then(() => {
+                      setBadgeCopied(true);
+                      setTimeout(() => setBadgeCopied(false), 2000);
+                    });
+                  }}
+                  className="border border-line-strong px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-steel-400 transition-colors hover:border-neon-cyan hover:text-neon-cyan"
+                >
+                  {badgeCopied ? t.permalinkCopied : t.copyBadge}
+                </button>
                 <button
                   type="button"
                   data-cursor="hover"

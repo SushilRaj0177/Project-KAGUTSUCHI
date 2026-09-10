@@ -56,6 +56,7 @@ export interface Dict {
   permalinkCopied: string;
   permalinkNotFoundTitle: string;
   permalinkNotFoundBody: string;
+  copyBadge: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -136,6 +137,7 @@ export const translations: Record<Lang, Dict> = {
     permalinkNotFoundTitle: "No cached scan for this commit",
     permalinkNotFoundBody:
       "This exact commit hasn't been scanned yet, so there's nothing to show here. Run a live scan on the homepage instead.",
+    copyBadge: "Copy README badge",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -214,5 +216,6 @@ export const translations: Record<Lang, Dict> = {
     permalinkNotFoundTitle: "このコミットのキャッシュはありません",
     permalinkNotFoundBody:
       "このコミットはまだスキャンされていないため、表示できる内容がありません。トップページで実際にスキャンを実行してください。",
+    copyBadge: "READMEバッジをコピー",
   },
 };
