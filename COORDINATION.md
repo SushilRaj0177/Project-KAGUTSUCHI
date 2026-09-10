@@ -1515,3 +1515,94 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Feature checklist: what would make the site more useful, not just more proven
+**Status:** PROPOSED — from Charanpreet's session (Sushil's own request, via the human running this session)
+
+Sushil's human asked for a checklist of features to make the public site
+more useful to actual users, ambition allowed — not filtered down to
+"what fits in the time left." Posting the full list here rather than
+picking for you, since scope calls are the team lead's per
+`CONTRIBUTING.md`. Grouped by area, each tagged with rough effort
+(S/M/L) and who it'd naturally fall to, based on what already exists.
+None of this is started — it's all `[ ]` until claimed.
+
+### Verification-core features (would live in `verification/`, I could build these)
+- [ ] **(S) Paste-a-snippet mode**, not just a full repo URL — `verify_upload()`
+  already takes source text, but there's no homepage UI for "paste one
+  function, get attacked and fixed" without needing a whole repo. Fastest
+  path to a much lower-friction demo for a judge who doesn't want to find
+  a GitHub URL.
+- [ ] **(M) Before/after diff mode** — paste two versions of the same file
+  (or a real PR diff) and get back only the security delta: what got
+  safer, what got worse, what's unchanged. This is `scan_diff()` already,
+  just not exposed as its own user-facing flow separate from repo-scan.
+- [ ] **(M) A 4th+ vulnerability class demonstrated live**, not just
+  detected — SSRF (`requests.get(user_url)` reaching internal
+  hosts/metadata endpoints) or hardcoded-secret detection (regex/entropy
+  scan for API keys/passwords committed to source) would both be
+  genuinely new user-facing value, not just another AST signature.
+- [ ] **(L) Regression replay / CI gate** — this is literally the original
+  plan's "scale path" (§16.6 of the brief): preserve every demonstrated
+  attack against a repo, and let a user re-run it against a newer commit
+  of the same repo to prove a fix didn't regress. Foundation is already
+  here (`regression/verify.py`, replay-purity rules) — needs a place to
+  persist "known attacks per repo" and a re-run trigger.
+- [ ] **(M) "Kagutsuchi Verified" badge** — a small SVG/shields.io-style
+  badge a repo README can embed, reflecting that repo's last scan
+  verdict/date. Cheap to build, strong distribution mechanic (any repo
+  that embeds it advertises the product), and matches the brief's "score
+  derived from real outcomes" idea (§20) instead of a vanity number.
+
+### Site/product features (webapp + server, Sushil's domain — proposing, not building)
+- [ ] **(S) One-click example repos** on the homepage ("Try PyGoat",
+  "Try flask") instead of requiring a judge to type/paste a URL — we
+  already know PyGoat gives a genuinely interesting real result.
+- [ ] **(M) Compare two branches/PRs of the same repo** — run the scan
+  against both and diff the findings, directly useful for "did this PR
+  introduce a new vuln class" workflows.
+- [ ] **(M) Shareable permalink per finding/run** — a judge (or a real
+  user) should be able to copy a link to one specific verified result,
+  not just see it live in a session.
+- [ ] **(M) Result caching by repo+commit SHA** — repeated scans of the
+  same commit currently presumably re-clone and re-scan from scratch;
+  caching would make demoing the same popular repo (flask, django)
+  instant on a second visit.
+- [ ] **(S) Search/filter findings** by severity, sensitive_op class, or
+  filename on the results page, once a scan returns more than a handful.
+- [ ] **(L) A real GitHub App / Action** — comment findings directly on a
+  PR, or gate merges on "no new STILL_VULNERABLE class introduced." This
+  is the single biggest "real product, not a demo" feature on this list.
+- [ ] **(M) Job queue for long scans** — a queued/async job model (with a
+  "scan submitted, check back" status) instead of a synchronous request
+  that risks timing out on a big repo, especially once repo-scan stops
+  being capped at 300 files.
+- [ ] **(S) Downloadable report** (PDF or Markdown) per run, for someone
+  who wants to bring a finding to a code review outside the site.
+
+### Ambitious / moonshot (explicitly fine to list even if very unlikely to happen)
+- [ ] **(L) Multi-language support** — JS/TS via a different AST layer,
+  matching the brief's own "out of scope for P0" list, but explicitly
+  called out as something worth naming even if unrealistic short-term.
+- [ ] **(L) Real seccomp enforcement tier** (P1 in the original brief,
+  §11.2) — richer evidence (actual syscall policy violations, not just
+  network-disabled + resource caps) for demos where a judge asks "what
+  actually stops it from escaping the container."
+- [ ] **(L) Org-wide dashboard** — scan every repo under a GitHub org/user
+  in one pass, rank by exposure, matching the brief's original "org-wide
+  regression of security properties" scale-path idea (§16.6.6).
+- [ ] **(M) Confidence calibration view** — the brief's own P1 research
+  direction D: show the LLM's stated confidence in a hypothesis next to
+  whether the sandbox actually proved it, as a running "is the model
+  well-calibrated" chart. More research/pitch value than user value, but
+  cheap once hypothesis generation is already logged.
+
+Not blocking anything — I'll keep hardening/building in `verification/`
+regardless of what (if anything) gets picked up from this list. If you
+want to just pick 2-3 to greenlight and leave the rest as "someday,"
+that's a completely reasonable response to an intentionally
+over-ambitious list.
+
+---
