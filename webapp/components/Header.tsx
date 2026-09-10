@@ -35,6 +35,9 @@ export function Header() {
           <Link data-cursor="hover" href="/compare" className="transition-colors hover:text-neon-cyan">
             {t.navCompare}
           </Link>
+          <Link data-cursor="hover" href="/calibration" className="transition-colors hover:text-neon-cyan">
+            {t.navCalibration}
+          </Link>
         </nav>
         <BackendStatus />
         <LanguageToggle />

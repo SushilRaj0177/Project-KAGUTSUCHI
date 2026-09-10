@@ -14,6 +14,7 @@ interface VerifyBackendResponse {
   result: { verdict: string; confidence: number; replay_identical: boolean; summary: string } | null;
   fixed_source: string | null;
   fix_error: string | null;
+  hypothesis_confidence: number | null;
 }
 
 /** Best-effort: a real website Attack & Verify that reaches a full verdict
@@ -29,13 +30,13 @@ async function persistIfComplete(data: VerifyBackendResponse) {
       INSERT INTO runs (
         id, fixture_name, sensitive_op, finding, hypothesis,
         before_evidence, after_evidence, verdict, confidence,
-        replay_identical, summary
+        replay_identical, summary, hypothesis_confidence
       ) VALUES (
         ${randomUUID()}, ${data.finding.file_path ?? "uploaded"}, ${data.finding.sensitive_op ?? "unknown"},
         ${JSON.stringify(data.finding)}, ${JSON.stringify(data.hypothesis)},
         ${JSON.stringify(data.before)}, ${JSON.stringify(data.after)},
         ${data.result.verdict}, ${data.result.confidence},
-        ${data.result.replay_identical}, ${data.result.summary}
+        ${data.result.replay_identical}, ${data.result.summary}, ${data.hypothesis_confidence ?? null}
       )
     `;
   } catch {

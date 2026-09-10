@@ -70,6 +70,14 @@ export interface Dict {
   compareAddedTitle: string;
   compareRemovedTitle: string;
   compareNoDiff: string;
+  navCalibration: string;
+  calibrationTitle: string;
+  calibrationSubtitle: string;
+  calibrationEmptyTitle: string;
+  calibrationEmptyBody: string;
+  calibrationSampleSize: string;
+  calibrationBrierScore: string;
+  calibrationBuckets: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -165,6 +173,16 @@ export const translations: Record<Lang, Dict> = {
     compareAddedTitle: "Introduced by this branch",
     compareRemovedTitle: "Fixed by this branch",
     compareNoDiff: "No difference in findings between these two refs.",
+    navCalibration: "Calibration",
+    calibrationTitle: "Is the model's confidence trustworthy?",
+    calibrationSubtitle:
+      "Every attack hypothesis includes the model's own stated confidence that its exact payload would succeed. This page compares that confidence against real sandbox outcomes from live site usage — not a mocked test, actual production data.",
+    calibrationEmptyTitle: "No calibration data yet",
+    calibrationEmptyBody:
+      "This fills in as real Attack & Verify runs complete on the site — nothing here is sample data.",
+    calibrationSampleSize: "Samples",
+    calibrationBrierScore: "Brier score (0 = perfect)",
+    calibrationBuckets: "Confidence deciles",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -258,5 +276,15 @@ export const translations: Record<Lang, Dict> = {
     compareAddedTitle: "このブランチで新たに追加された脆弱性",
     compareRemovedTitle: "このブランチで修正された脆弱性",
     compareNoDiff: "この2つのブランチ間で検出結果に差はありません。",
+    navCalibration: "信頼度検証",
+    calibrationTitle: "モデルの自信は信頼できるか？",
+    calibrationSubtitle:
+      "すべての攻撃仮説には、そのペイロードが成功するというモデル自身の信頼度が含まれています。このページでは、その信頼度と実際のサンドボックスでの結果（モックではなく実際の本番データ）を比較します。",
+    calibrationEmptyTitle: "まだ検証データがありません",
+    calibrationEmptyBody:
+      "サイト上で実際の攻撃・検証が完了するたびにここにデータが蓄積されます — サンプルデータは一切ありません。",
+    calibrationSampleSize: "サンプル数",
+    calibrationBrierScore: "ブライアスコア（0が完璧）",
+    calibrationBuckets: "信頼度の分布",
   },
 };

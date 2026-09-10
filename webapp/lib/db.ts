@@ -32,22 +32,33 @@ let schemaReady: Promise<void> | null = null;
  * DDL once per cold start, then reuses the same resolved promise. */
 export function ensureSchema(): Promise<void> {
   if (!schemaReady) {
-    schemaReady = sql`
-      CREATE TABLE IF NOT EXISTS runs (
-        id UUID PRIMARY KEY,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-        fixture_name TEXT NOT NULL,
-        sensitive_op TEXT NOT NULL,
-        finding JSONB NOT NULL,
-        hypothesis JSONB NOT NULL,
-        before_evidence JSONB NOT NULL,
-        after_evidence JSONB NOT NULL,
-        verdict TEXT NOT NULL,
-        confidence DOUBLE PRECISION NOT NULL,
-        replay_identical BOOLEAN NOT NULL,
-        summary TEXT NOT NULL
-      )
-    `.then(() => undefined);
+    schemaReady = (async () => {
+      await sql`
+        CREATE TABLE IF NOT EXISTS runs (
+          id UUID PRIMARY KEY,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+          fixture_name TEXT NOT NULL,
+          sensitive_op TEXT NOT NULL,
+          finding JSONB NOT NULL,
+          hypothesis JSONB NOT NULL,
+          before_evidence JSONB NOT NULL,
+          after_evidence JSONB NOT NULL,
+          verdict TEXT NOT NULL,
+          confidence DOUBLE PRECISION NOT NULL,
+          replay_identical BOOLEAN NOT NULL,
+          summary TEXT NOT NULL
+        )
+      `;
+      // Added later, for verification/calibration.py's research-direction-D
+      // work: the LLM's own stated pre-attack confidence that its payload
+      // would succeed. Deliberately a DIFFERENT column from `confidence`
+      // above, which is VerificationResult's own (currently always 1.0,
+      // deterministic) verdict confidence -- conflating the two would
+      // silently corrupt calibration data with an unrelated number.
+      // Nullable: most existing rows predate this column, and any row
+      // whose stated confidence didn't parse also has no value to store.
+      await sql`ALTER TABLE runs ADD COLUMN IF NOT EXISTS hypothesis_confidence DOUBLE PRECISION`;
+    })();
   }
   return schemaReady;
 }
@@ -134,6 +145,7 @@ export type RunRow = {
   after_evidence: Record<string, unknown>;
   verdict: string;
   confidence: number;
+  hypothesis_confidence: number | null;
   replay_identical: boolean;
   summary: string;
 };

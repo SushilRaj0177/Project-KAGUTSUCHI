@@ -156,4 +156,5 @@ def verify(req: VerifyRequest) -> dict:
         "after": bundle.after.model_dump(mode="json") if bundle.after else None,
         "result": bundle.result.model_dump(mode="json") if bundle.result else None,
         "fix_error": bundle.fix_error,
+        "hypothesis_confidence": bundle.confidence,
     }

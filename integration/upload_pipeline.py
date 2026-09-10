@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from contracts import AttackHypothesis, ExecutionEvidence, SecurityFinding
 from integration.adapters import to_system, to_verification
 from system.orchestration import build_script_from_source, new_run_id, replay_attack, run_attack
-from verification.hypothesis.generate import generate as generate_hypothesis
+from verification.hypothesis.generate import generate_with_confidence
 from verification.models import AttackHypothesis as VAttackHypothesis
 from verification.models import ExecutionEvidence as VExecutionEvidence
 from verification.models import SecurityFinding as VSecurityFinding
@@ -51,15 +51,25 @@ class UploadVerificationBundle:
     after: VExecutionEvidence | None
     result: VerificationResult | None
     fix_error: str | None
+    # The LLM's own stated confidence (0-1) that this exact payload would
+    # succeed, from generate_with_confidence() - see
+    # verification/calibration.py. None only if the model omitted a
+    # parseable value (generate_with_confidence defaults malformed input
+    # to 0.5 rather than None, so a real None here is rare in practice).
+    # Purely additive metadata: nothing else in this bundle depends on it.
+    confidence: float | None
 
 
-def _generate_hypothesis_or_raise(finding: VSecurityFinding) -> VAttackHypothesis:
-    """Delegates to verification.hypothesis.generate() with fallback=None
-    (one prompt implementation, not two that can drift apart -- this used
-    to hand-duplicate the prompt template with a less specific marker
-    instruction than generate()'s per-sensitive_op mechanism hints)."""
+def _generate_hypothesis_or_raise(finding: VSecurityFinding) -> tuple[VAttackHypothesis, float | None]:
+    """Delegates to verification.hypothesis.generate_with_confidence()
+    with fallback=None (one prompt implementation, not two that can drift
+    apart -- this used to hand-duplicate the prompt template with a less
+    specific marker instruction than generate()'s per-sensitive_op
+    mechanism hints). fallback=None means the failure path is identical
+    to the plain generate() this replaced: any failure still raises here,
+    confidence is simply along for the ride on the success path."""
     try:
-        return generate_hypothesis(finding, fallback=None)
+        return generate_with_confidence(finding, fallback=None)
     except Exception as exc:
         raise AttackGenerationUnavailable(
             "Could not generate an attack for this code right now "
@@ -88,7 +98,7 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
     that proves it vulnerable, attempt a fix proposal + replay; otherwise
     stop at the before-evidence (nothing to fix if it wasn't exploitable)."""
     v_finding = to_verification(finding, VSecurityFinding)
-    v_hypothesis = _generate_hypothesis_or_raise(v_finding)
+    v_hypothesis, confidence = _generate_hypothesis_or_raise(v_finding)
     s_hypothesis = to_system(v_hypothesis, AttackHypothesis)
 
     run_id = new_run_id()
@@ -112,6 +122,7 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
             after=None,
             result=None,
             fix_error=None,
+            confidence=confidence,
         )
 
     try:
@@ -125,6 +136,7 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
             after=None,
             result=None,
             fix_error=f"Fix proposal not available yet: {exc}",
+            confidence=confidence,
         )
 
     try:
@@ -139,6 +151,7 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
             after=None,
             result=None,
             fix_error=str(exc),
+            confidence=confidence,
         )
 
     fixed_script = build_script_from_source(fixed_source, finding.symbol)
@@ -162,4 +175,5 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
         after=v_after,
         result=result,
         fix_error=None,
+        confidence=confidence,
     )
