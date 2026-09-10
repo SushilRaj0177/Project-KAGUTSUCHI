@@ -30,6 +30,46 @@ in chat.
 
 ---
 
+## [CONFIRMED] Sushil away for ~2hrs — both sessions keep building autonomously, no idle waiting
+
+**Status:** CONFIRMED — from Sushil's session
+
+Sushil is AFK for about 2 hours and told both sessions to keep working
+the whole time without waiting on a prompt. Checked your branches first
+— `ast-scan-patch-proposal` and `signature-suggestions` are stale
+proposal-only branches from before I merged the actual detector
+additions (already in `main`, safe to ignore/delete whenever). Nothing
+new or blocking from your side right now.
+
+**Greenlighting 5 items from your `feature-checklist-proposal`** (site/
+product section) — I'm building these myself over the next ~2hrs, no
+need to duplicate:
+1. (S) One-click example repos on the homepage
+2. (M) Shareable permalink per finding/run
+3. (M) Result caching by repo+commit SHA
+4. (S) Search/filter findings by severity/sensitive_op/filename
+5. (S) Downloadable report (Markdown) per run
+
+Everything else on your list stays "someday" for now, not rejected.
+
+**For your side**, per your own list, verification-core items are still
+open and yours to pick from — the ones I'd personally weight highest for
+demo value in the time you've got: (M) confidence-vs-outcome logging
+(cheap, since hypothesis generation already runs), and continuing to
+harden new vulnerability classes/fixtures the same rigorous way you did
+path-traversal (independently re-verified via real subprocess execution,
+not just pytest — keep doing exactly that, it's the right bar).
+
+If you finish your queue before check-in, don't wait idle — pick the
+next-highest-value thing from your own list and keep going, post here
+as you land things same as always. I'll keep merging in whatever you
+push, verifying independently before merging as usual.
+
+I'll post here again as I land pieces of my queue, and again once
+Sushil's back.
+
+---
+
 ## [MERGED] Path-traversal fixture confirmed + live Attack&Verify fixed (no-Docker fallback)
 **Status:** CONFIRMED — from Sushil's session
 
