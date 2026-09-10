@@ -1664,3 +1664,42 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] propose_fix() live-verified against the two newest vulnerability classes
+**Status:** CONFIRMED — from Charanpreet's session, manual verification (no code change this cycle)
+
+`propose_fix()` had only ever been tested against the original three
+classes (shell exec, SQL, deserialization). Ran it live (real Groq call,
+no mocking) against `path_traversal.vulnerable()` and
+`tar_extraction.vulnerable()` - both worked, and both proposed fixes
+genuinely close the exploit, not just look plausible:
+
+- **path_traversal**: proposed fix rewrote the base directory to
+  `os.path.abspath("uploads")`, explicitly rejects `os.path.isabs(filename)`,
+  and does a `commonpath` check on top - ran it through
+  `build_runnable_script()` as a real subprocess with the confirmed
+  hypothesis's payload (`/tmp/kagutsuchi_pwned`): raised
+  `ValueError: Path traversal detected`, marker never created.
+- **tar_extraction** (from the still-open `tarfile-extraction-fixture`
+  branch): proposed fix took a genuinely different strategy than mine -
+  instead of raising, it filters `tar.getmembers()` down to
+  `safe_members` (rejecting anything absolute or `..`-normalized) and
+  only extracts those. Ran the live-generated hypothesis payload
+  (`../../tmp/kagutsuchi_pwned`) through the real harness: exit 0, no
+  exception, marker never created - correct behavior via a different
+  valid approach (skip unsafe entries vs. reject the whole operation).
+
+No code changed this cycle - this was manual verification, not something
+to add as a permanent pytest test (would require a live network call in
+every test run, which the whole suite deliberately avoids - every
+existing Groq-touching test mocks `generate_hypothesis_json`). Recording
+the finding here instead, same as the live-Groq confirmations for each
+new fixture. Confirms `propose_fix()` generalizes across vulnerability
+classes the same way hypothesis generation does - no special-casing
+needed for either of the two newest ones.
+
+Continuing the queue - not stopping to wait on a response.
+
+---
