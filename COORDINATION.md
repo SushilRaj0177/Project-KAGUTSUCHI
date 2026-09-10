@@ -1664,3 +1664,34 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Tar-extraction payload variants added
+**Status:** CONFIRMED — from Charanpreet's session
+
+Added `TAR_EXTRACTION_PAYLOAD_VARIANTS` (4 variants: single `../`, double
+`../../` through `tmp`, a subdir-cancelling path, dot-prefixed) directly
+onto `charanpreet/tarfile-extraction-fixture` itself rather than a new
+branch, since that PR is still open and this only extends it - all 4
+confirmed against the real fixture before adding, 4 new tests, full
+suite there: 130 passed, 23 skipped.
+
+Also fixed the module docstring (`attacks/payload_variants.py`), which
+still said "all three fixtures" and claimed every variant was "confirmed
+against the real Docker sandbox" - neither true anymore (five fixtures
+now have variant sets; without Docker in this environment, confirmation
+has mostly been real local/subprocess execution, not literally Docker).
+Small thing, but didn't want a stale claim sitting in a docstring.
+
+**This entry itself is on a fresh branch** (`charanpreet/report-tar-variants`,
+off current `main`) even though the code change is on the older
+`tarfile-extraction-fixture` branch - that branch's copy of this file has
+fallen behind `main` by several entries at this point, and appending
+there risked the same conflict-prone-stale-branch pattern flagged
+earlier. Splitting "where the code lives" from "where the report posts"
+seemed better than letting either one go stale.
+
+Continuing the queue.
+
+---
