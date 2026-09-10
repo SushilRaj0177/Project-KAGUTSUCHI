@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 // Vercel's Postgres storage integration (Neon-backed) injects this env var
@@ -132,6 +133,88 @@ export async function getLatestRepoScan(
   return rows.length > 0
     ? { response: rows[0].response as Record<string, unknown>, created_at: rows[0].created_at as string }
     : null;
+}
+
+let detectorProposalSchemaReady: Promise<void> | null = null;
+
+/** Candidate NEW deterministic detectors, discovered by the LLM scan
+ * (system/analysis/llm_scan.py) finding a vulnerability pattern outside
+ * ast_scan.py's fixed category list -- see that module's docstring for
+ * why a proposal is advisory only, never auto-applied to the real
+ * _SIGNATURES table. This is purely the discovery/aggregation side: a
+ * human (or a session) reviews these on /detector-proposals and
+ * manually promotes one via scripts/promote_detector.py. */
+export function ensureDetectorProposalSchema(): Promise<void> {
+  if (!detectorProposalSchemaReady) {
+    detectorProposalSchemaReady = sql`
+      CREATE TABLE IF NOT EXISTS detector_proposals (
+        id UUID PRIMARY KEY,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+        class_name TEXT NOT NULL,
+        call_signature TEXT NOT NULL,
+        rationale TEXT NOT NULL,
+        severity_hint TEXT NOT NULL,
+        source_file_path TEXT NOT NULL,
+        source_repo TEXT,
+        times_seen INTEGER NOT NULL DEFAULT 1,
+        promoted BOOLEAN NOT NULL DEFAULT false
+      )
+    `.then(() => undefined);
+  }
+  return detectorProposalSchemaReady;
+}
+
+export type DetectorProposalRow = {
+  id: string;
+  created_at: string;
+  class_name: string;
+  call_signature: string;
+  rationale: string;
+  severity_hint: string;
+  source_file_path: string;
+  source_repo: string | null;
+  times_seen: number;
+  promoted: boolean;
+};
+
+/** Upsert-by-signature: the same (class_name, call_signature) pair
+ * proposed again just bumps times_seen instead of creating a duplicate
+ * row - a class the model keeps independently rediscovering across
+ * different scans is a stronger signal than one proposed once. */
+export async function recordDetectorProposal(proposal: {
+  class_name: string;
+  call_signature: string;
+  rationale: string;
+  severity_hint: string;
+  source_file_path: string;
+  source_repo?: string;
+}): Promise<void> {
+  await ensureDetectorProposalSchema();
+  const existing = await sql`
+    SELECT id FROM detector_proposals
+    WHERE class_name = ${proposal.class_name} AND call_signature = ${proposal.call_signature}
+    LIMIT 1
+  `;
+  if (existing.length > 0) {
+    await sql`UPDATE detector_proposals SET times_seen = times_seen + 1 WHERE id = ${existing[0].id}`;
+    return;
+  }
+  await sql`
+    INSERT INTO detector_proposals (
+      id, class_name, call_signature, rationale, severity_hint, source_file_path, source_repo
+    ) VALUES (
+      ${randomUUID()}, ${proposal.class_name}, ${proposal.call_signature}, ${proposal.rationale},
+      ${proposal.severity_hint}, ${proposal.source_file_path}, ${proposal.source_repo ?? null}
+    )
+  `;
+}
+
+export async function listDetectorProposals(): Promise<DetectorProposalRow[]> {
+  await ensureDetectorProposalSchema();
+  const rows = await sql`
+    SELECT * FROM detector_proposals WHERE promoted = false ORDER BY times_seen DESC, created_at DESC
+  `;
+  return rows as DetectorProposalRow[];
 }
 
 export type RunRow = {

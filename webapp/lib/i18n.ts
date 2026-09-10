@@ -79,6 +79,13 @@ export interface Dict {
   calibrationBrierScore: string;
   calibrationBuckets: string;
   modelStatedConfidence: string;
+  navDetectorProposals: string;
+  detectorProposalsTitle: string;
+  detectorProposalsSubtitle: string;
+  detectorProposalsEmptyTitle: string;
+  detectorProposalsEmptyBody: string;
+  detectorProposalsSeenTimes: string;
+  detectorProposalsSpottedIn: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -185,6 +192,15 @@ export const translations: Record<Lang, Dict> = {
     calibrationBrierScore: "Brier score (0 = perfect)",
     calibrationBuckets: "Confidence deciles",
     modelStatedConfidence: "Model's stated confidence in this payload",
+    navDetectorProposals: "New Classes",
+    detectorProposalsTitle: "AI-discovered vulnerability classes",
+    detectorProposalsSubtitle:
+      "Our deterministic scanner only catches a fixed list of patterns. When the AI scan spots a genuinely different, reusable vulnerability signature — not just a one-off guess — it proposes it here as a candidate for the deterministic list. Nothing here is auto-applied: a person reviews each one and promotes it deliberately (scripts/promote_detector.py), the same way every hand-authored detector in this project got added. This is how the deterministic strategy keeps expanding without ever trusting an AI claim outright.",
+    detectorProposalsEmptyTitle: "No new classes proposed yet",
+    detectorProposalsEmptyBody:
+      "This fills in as real scans turn up vulnerability patterns outside the current detector list — nothing here is sample data.",
+    detectorProposalsSeenTimes: "seen {n}×",
+    detectorProposalsSpottedIn: "Spotted in",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -289,5 +305,14 @@ export const translations: Record<Lang, Dict> = {
     calibrationBrierScore: "ブライアスコア（0が完璧）",
     calibrationBuckets: "信頼度の分布",
     modelStatedConfidence: "このペイロードに対するモデルの自己申告信頼度",
+    navDetectorProposals: "新規クラス",
+    detectorProposalsTitle: "AIが発見した脆弱性クラス",
+    detectorProposalsSubtitle:
+      "決定論的スキャナーは固定されたパターンのリストしか検出できません。AIスキャンが単なる思いつきではなく、本当に新しい、再利用可能な脆弱性シグネチャを見つけた場合、ここに決定論的リストへの候補として提案されます。ここに表示されるものは自動適用されません — 人間が個別に確認し、意図的に採用します（scripts/promote_detector.py）。このプロジェクトで手動作成されたすべての検出ルールと同じプロセスです。AIの主張を無条件に信頼することなく、決定論的な検出手法を拡張し続ける仕組みです。",
+    detectorProposalsEmptyTitle: "まだ新しいクラスは提案されていません",
+    detectorProposalsEmptyBody:
+      "実際のスキャンで既存の検出リストにない脆弱性パターンが見つかるたびにここに蓄積されます — サンプルデータは一切ありません。",
+    detectorProposalsSeenTimes: "{n}回検出",
+    detectorProposalsSpottedIn: "検出元",
   },
 };

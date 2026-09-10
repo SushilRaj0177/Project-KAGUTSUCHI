@@ -38,6 +38,9 @@ export function Header() {
           <Link data-cursor="hover" href="/calibration" className="transition-colors hover:text-neon-cyan">
             {t.navCalibration}
           </Link>
+          <Link data-cursor="hover" href="/detector-proposals" className="transition-colors hover:text-neon-cyan">
+            {t.navDetectorProposals}
+          </Link>
         </nav>
         <BackendStatus />
         <LanguageToggle />

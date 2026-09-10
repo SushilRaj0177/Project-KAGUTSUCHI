@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from "@/lib/clientIp";
-import { getCachedRepoScan, setCachedRepoScan } from "@/lib/db";
+import { getCachedRepoScan, recordDetectorProposal, setCachedRepoScan } from "@/lib/db";
 
 // Proxies to the FastAPI backend server-side. Browser CORS rules only
 // apply to fetch() calls made FROM the browser -- routing through our own
@@ -39,6 +39,34 @@ async function resolveHeadSha(owner: string, repo: string): Promise<string | nul
   }
 }
 
+interface DetectorProposal {
+  class_name: string;
+  call_signature: string;
+  rationale: string;
+  severity_hint: string;
+  source_file_path: string;
+}
+
+// Best-effort: never lets a persistence failure affect the scan response
+// the user actually gets, same pattern as setCachedRepoScan below.
+async function persistProposals(proposals: unknown, repoLabel: string): Promise<void> {
+  if (!Array.isArray(proposals)) return;
+  for (const p of proposals) {
+    if (
+      p &&
+      typeof p === "object" &&
+      typeof (p as DetectorProposal).class_name === "string" &&
+      typeof (p as DetectorProposal).call_signature === "string"
+    ) {
+      try {
+        await recordDetectorProposal({ ...(p as DetectorProposal), source_repo: repoLabel });
+      } catch {
+        // swallow - see function docstring
+      }
+    }
+  }
+}
+
 export async function POST(request: NextRequest) {
   const backendUrl = process.env.KAGUTSUCHI_API_URL;
   if (!backendUrl) {
@@ -62,6 +90,7 @@ export async function POST(request: NextRequest) {
     try {
       const cached = await getCachedRepoScan(owner, repo, sha);
       if (cached) {
+        await persistProposals(cached.new_detector_proposals, `${owner}/${repo}`);
         return NextResponse.json({ ...cached, cached: true, commit_sha: sha });
       }
     } catch {
@@ -81,6 +110,7 @@ export async function POST(request: NextRequest) {
       try {
         const parsed = JSON.parse(data);
         await setCachedRepoScan(owner, repo, sha, parsed);
+        await persistProposals(parsed.new_detector_proposals, `${owner}/${repo}`);
         return NextResponse.json({ ...parsed, commit_sha: sha }, { status: upstream.status });
       } catch {
         // best-effort cache write - never let a caching failure affect the response

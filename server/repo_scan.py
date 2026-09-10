@@ -19,7 +19,7 @@ from pathlib import Path
 
 from contracts import SecurityFinding
 from system.analysis.ast_scan import scan_source
-from system.analysis.llm_scan import scan_source_with_llm
+from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
 
 _GITHUB_URL_RE = re.compile(
     r"^https://github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(\.git)?/?$"
@@ -66,6 +66,7 @@ class RepoScanResult:
     findings: list[SecurityFinding]
     sources: dict[str, str]  # file_path -> source, only for files with findings
     truncated: bool  # True if the repo had more matching files than _MAX_FILES
+    new_detector_proposals: list[DetectorProposal]
 
 
 def _parse_github_url(repo_url: str) -> tuple[str, str]:
@@ -159,15 +160,18 @@ def scan_repo(repo_url: str, ref: str | None = None) -> RepoScanResult:
         # call rather than the sum of all of them. Sequential calls here
         # is what caused a live 504 (repo with >1 file blew past the
         # gateway's request timeout).
+        new_detector_proposals: list[DetectorProposal] = []
         if llm_candidates:
             with ThreadPoolExecutor(max_workers=len(llm_candidates)) as pool:
                 llm_results = pool.map(
                     lambda item: scan_source_with_llm(item[1], item[0]), llm_candidates
                 )
-            for (rel_path, source), file_findings in zip(llm_candidates, llm_results):
-                if file_findings:
-                    findings.extend(file_findings)
+            for (rel_path, source), llm_result in zip(llm_candidates, llm_results):
+                if llm_result.findings:
+                    findings.extend(llm_result.findings)
                     sources.setdefault(rel_path, source)
+                if llm_result.proposal is not None:
+                    new_detector_proposals.append(llm_result.proposal)
 
         return RepoScanResult(
             owner=owner,
@@ -176,4 +180,5 @@ def scan_repo(repo_url: str, ref: str | None = None) -> RepoScanResult:
             findings=findings,
             sources=sources,
             truncated=truncated,
+            new_detector_proposals=new_detector_proposals,
         )

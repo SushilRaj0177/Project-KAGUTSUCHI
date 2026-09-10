@@ -30,7 +30,7 @@ from integration.upload_pipeline import AttackGenerationUnavailable, verify_uplo
 from server.rate_limit import rate_limit
 from server.repo_scan import CloneFailed, InvalidRepoUrl, scan_repo
 from system.analysis.ast_scan import scan_source
-from system.analysis.llm_scan import scan_source_with_llm
+from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
 from system.sandbox.docker_runner import SandboxUnavailableError
 
 app = FastAPI(title="KAGUTSUCHI upload API")
@@ -53,8 +53,35 @@ class AnalyzeRequest(BaseModel):
     file_path: str = "uploaded.py"
 
 
+class DetectorProposalOut(BaseModel):
+    """A candidate new deterministic detector, discovered by the LLM scan
+    finding a vulnerability pattern outside ast_scan.py's fixed category
+    list. Advisory only - see system/analysis/llm_scan.py's docstring for
+    why this is never auto-applied to the real _SIGNATURES table, and
+    scripts/promote_detector.py for the reviewed path to actually add one."""
+
+    class_name: str
+    call_signature: str
+    rationale: str
+    severity_hint: str
+    source_file_path: str
+
+
+def _proposal_out(proposal: DetectorProposal | None) -> DetectorProposalOut | None:
+    if proposal is None:
+        return None
+    return DetectorProposalOut(
+        class_name=proposal.class_name,
+        call_signature=proposal.call_signature,
+        rationale=proposal.rationale,
+        severity_hint=proposal.severity_hint,
+        source_file_path=proposal.source_file_path,
+    )
+
+
 class AnalyzeResponse(BaseModel):
     findings: list[SecurityFinding]
+    new_detector_proposal: DetectorProposalOut | None = None
 
 
 class VerifyRequest(BaseModel):
@@ -74,6 +101,7 @@ class RepoAnalyzeResponse(BaseModel):
     findings: list[SecurityFinding]
     sources: dict[str, str]
     truncated: bool
+    new_detector_proposals: list[DetectorProposalOut] = []
 
 
 @app.get("/api/health")
@@ -109,8 +137,12 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
         findings = scan_source(req.source, req.file_path)
     except SyntaxError as exc:
         raise HTTPException(status_code=400, detail=f"Not valid Python: {exc}") from exc
-    findings.extend(scan_source_with_llm(req.source, req.file_path))
-    return AnalyzeResponse(findings=_dedup_findings(findings))
+    llm_result = scan_source_with_llm(req.source, req.file_path)
+    findings.extend(llm_result.findings)
+    return AnalyzeResponse(
+        findings=_dedup_findings(findings),
+        new_detector_proposal=_proposal_out(llm_result.proposal),
+    )
 
 
 @app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse, dependencies=[Depends(rate_limit)])
@@ -134,6 +166,7 @@ def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
         findings=findings,
         sources=result.sources,
         truncated=result.truncated,
+        new_detector_proposals=[p for p in (_proposal_out(p) for p in result.new_detector_proposals) if p],
     )
 
 
