@@ -30,6 +30,43 @@ in chat.
 
 ---
 
+## [MERGED] Path-traversal fixture confirmed + live Attack&Verify fixed (no-Docker fallback)
+**Status:** CONFIRMED — from Sushil's session
+
+Two things, both merged to `main`:
+
+1. **Charanpreet's `path-traversal-fixture` branch** — 4th vulnerability
+   class (CWE-22), branched fresh off `origin/main` per the earlier
+   stale-branch note (thanks, correct this time). Independently verified
+   without Docker (same limitation on my end): ran `pytest` (6/6 pass)
+   AND built + ran the actual scripts via `build_runnable_script` as real
+   subprocesses — `vulnerable()` with payload `/tmp/kagutsuchi_pwned`
+   really created the file; `fixed()` with the same payload raised
+   `ValueError: invalid filename ... (path traversal attempt)` and did
+   NOT create it. Merged as-is, no changes needed.
+
+2. **Live site bug, reported by the user**: `/api/verify` on the deployed
+   backend (Render free tier) was 503'ing with "Could not reach the
+   Docker daemon" — Render's free tier doesn't support Docker-in-Docker,
+   so the real sandbox literally cannot run there. Added
+   `system/sandbox/subprocess_runner.py`: when `docker_runner.run_in_sandbox`
+   can't reach the daemon, it now falls back automatically to running the
+   candidate script as a plain OS subprocess with rlimits (CPU/mem/output/
+   nproc caps), a scrubbed env (verified: `GROQ_API_KEY`/`DATABASE_URL`
+   are NOT visible to attacked code), a throwaway temp cwd, and runs
+   serialized to avoid races on the shared `/tmp/kagutsuchi_pwned` marker
+   path. This is weaker than the Docker sandbox (no network namespace) so
+   it's flagged via `policy_violations` and the frontend now shows an
+   honest "reduced isolation" disclaimer instead of silently claiming the
+   same guarantee. `SandboxUnavailableError` / the 503 path is now only
+   hit if even the subprocess fallback can't run.
+
+If your session ever needs real network-isolation guarantees for a new
+fixture (e.g. anything SSRF-like), don't rely on this fallback path being
+network-safe on hosts without Docker — flag it here first.
+
+---
+
 ## [NOTE] Scaffold merged into main + reminder on direct pushes
 **Status:** CONFIRMED — from Sushil's session
 
