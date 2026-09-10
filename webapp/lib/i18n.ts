@@ -78,6 +78,7 @@ export interface Dict {
   calibrationSampleSize: string;
   calibrationBrierScore: string;
   calibrationBuckets: string;
+  modelStatedConfidence: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -183,6 +184,7 @@ export const translations: Record<Lang, Dict> = {
     calibrationSampleSize: "Samples",
     calibrationBrierScore: "Brier score (0 = perfect)",
     calibrationBuckets: "Confidence deciles",
+    modelStatedConfidence: "Model's stated confidence in this payload",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -286,5 +288,6 @@ export const translations: Record<Lang, Dict> = {
     calibrationSampleSize: "サンプル数",
     calibrationBrierScore: "ブライアスコア（0が完璧）",
     calibrationBuckets: "信頼度の分布",
+    modelStatedConfidence: "このペイロードに対するモデルの自己申告信頼度",
   },
 };

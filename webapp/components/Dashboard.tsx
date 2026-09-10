@@ -107,6 +107,12 @@ function RunDetail({ run }: { run: RunRow }) {
         </div>
 
         <p className="mt-4 border border-line-strong p-3 text-sm text-paper-50">{run.summary}</p>
+
+        {run.hypothesis_confidence != null && (
+          <p className={`mt-3 font-mono text-xs text-steel-400 ${jp}`}>
+            {t.modelStatedConfidence}: <span className="text-paper-50">{Math.round(run.hypothesis_confidence * 100)}%</span>
+          </p>
+        )}
       </div>
     </div>
   );
@@ -116,9 +122,28 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
   const { t, lang } = useLanguage();
   const jp = lang === "ja" ? "font-jp" : "";
   const [openId, setOpenId] = useState<string | null>(runs[0]?.id ?? null);
+  const [verdictFilter, setVerdictFilter] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
 
   const verifiedCount = runs.filter((r) => r.verdict === "VERIFIED_FIXED").length;
   const vulnerableCount = runs.filter((r) => r.verdict === "STILL_VULNERABLE").length;
+
+  const verdicts = Array.from(new Set(runs.map((r) => r.verdict)));
+  const filteredRuns = runs.filter((r) => {
+    if (verdictFilter && r.verdict !== verdictFilter) return false;
+    if (searchText.trim()) {
+      const needle = searchText.trim().toLowerCase();
+      const finding = r.finding as { file_path?: string; symbol?: string };
+      if (
+        !(finding?.file_path ?? "").toLowerCase().includes(needle) &&
+        !(finding?.symbol ?? "").toLowerCase().includes(needle) &&
+        !r.fixture_name.toLowerCase().includes(needle)
+      ) {
+        return false;
+      }
+    }
+    return true;
+  });
 
   return (
     <div>
@@ -131,8 +156,37 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
       {runs.length === 0 ? (
         <EmptyState />
       ) : (
+        <>
+          <div className="mb-4 flex flex-wrap items-center gap-2">
+            <input
+              value={searchText}
+              onChange={(e) => setSearchText(e.target.value)}
+              placeholder={t.filterSearchPlaceholder}
+              className="min-w-[160px] flex-1 border border-line-strong bg-void-950 px-3 py-1.5 font-mono text-xs text-paper-50 outline-none placeholder:text-steel-600 focus:border-neon-cyan"
+            />
+            {verdicts.map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setVerdictFilter(verdictFilter === v ? null : v)}
+                className={`border px-2 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+                  verdictFilter === v
+                    ? "border-neon-cyan text-neon-cyan"
+                    : "border-line-strong text-steel-400 hover:border-neon-cyan/50"
+                }`}
+              >
+                {t.verdict[v] ?? v}
+              </button>
+            ))}
+          </div>
+
+          {filteredRuns.length === 0 ? (
+            <p className={`border border-dashed border-line-strong p-6 text-center text-sm text-steel-400 ${jp}`}>
+              {t.noFindingsMatchFilter}
+            </p>
+          ) : (
         <div className="border border-line">
-          {runs.map((run) => {
+          {filteredRuns.map((run) => {
             const isOpen = openId === run.id;
             const vulnLabel = t.vulnClass[run.sensitive_op] ?? run.sensitive_op;
             return (
@@ -157,6 +211,8 @@ export function Dashboard({ runs }: { runs: RunRow[] }) {
             );
           })}
         </div>
+          )}
+        </>
       )}
     </div>
   );
