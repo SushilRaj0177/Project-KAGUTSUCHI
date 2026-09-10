@@ -22,7 +22,14 @@ from dataclasses import dataclass
 
 from contracts import AttackHypothesis, ExecutionEvidence, SecurityFinding
 from integration.adapters import to_system, to_verification
-from system.orchestration import build_script_from_source, new_run_id, replay_attack, run_attack
+from system.orchestration import (
+    UnsupportedSignature,
+    build_script_from_source,
+    new_run_id,
+    param_count,
+    replay_attack,
+    run_attack,
+)
 from verification.hypothesis.generate import generate_with_confidence
 from verification.models import AttackHypothesis as VAttackHypothesis
 from verification.models import ExecutionEvidence as VExecutionEvidence
@@ -60,7 +67,9 @@ class UploadVerificationBundle:
     confidence: float | None
 
 
-def _generate_hypothesis_or_raise(finding: VSecurityFinding) -> tuple[VAttackHypothesis, float | None]:
+def _generate_hypothesis_or_raise(
+    finding: VSecurityFinding, arg_count: int
+) -> tuple[VAttackHypothesis, float | None]:
     """Delegates to verification.hypothesis.generate_with_confidence()
     with fallback=None (one prompt implementation, not two that can drift
     apart -- this used to hand-duplicate the prompt template with a less
@@ -69,7 +78,7 @@ def _generate_hypothesis_or_raise(finding: VSecurityFinding) -> tuple[VAttackHyp
     to the plain generate() this replaced: any failure still raises here,
     confidence is simply along for the ride on the success path."""
     try:
-        return generate_with_confidence(finding, fallback=None)
+        return generate_with_confidence(finding, fallback=None, arg_count=arg_count)
     except Exception as exc:
         raise AttackGenerationUnavailable(
             "Could not generate an attack for this code right now "
@@ -96,13 +105,29 @@ def _validate_fix(fixed_source: str, function_name: str) -> None:
 def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificationBundle:
     """Detect -> hypothesize -> attack the ORIGINAL uploaded code. If
     that proves it vulnerable, attempt a fix proposal + replay; otherwise
-    stop at the before-evidence (nothing to fix if it wasn't exploitable)."""
+    stop at the before-evidence (nothing to fix if it wasn't exploitable).
+
+    Determines the target function's real arity from `source` up front
+    (see system/orchestration/signature.py) so this works for functions
+    taking more than one argument, not just the single-string-parameter
+    shape every hand-built fixture happens to have - a real limitation
+    that broke live on a real repo (PyGoat's log_code()/api_code()).
+    A signature the harness can't safely drive (a bound method, *args,
+    etc.) surfaces as AttackGenerationUnavailable rather than a confusing
+    crash deeper in the pipeline."""
+    try:
+        arg_count = param_count(source, finding.symbol)
+    except (UnsupportedSignature, SyntaxError) as exc:
+        raise AttackGenerationUnavailable(
+            f"Can't attack {finding.symbol}() automatically: {exc}"
+        ) from exc
+
     v_finding = to_verification(finding, VSecurityFinding)
-    v_hypothesis, confidence = _generate_hypothesis_or_raise(v_finding)
+    v_hypothesis, confidence = _generate_hypothesis_or_raise(v_finding, arg_count)
     s_hypothesis = to_system(v_hypothesis, AttackHypothesis)
 
     run_id = new_run_id()
-    vulnerable_script = build_script_from_source(source, finding.symbol)
+    vulnerable_script = build_script_from_source(source, finding.symbol, arg_count)
     before: ExecutionEvidence = run_attack(
         vulnerable_code=vulnerable_script, hypothesis=s_hypothesis, run_id=run_id
     )
@@ -140,7 +165,7 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
         )
 
     try:
-        fixed_source = propose_fix(v_finding, v_hypothesis)
+        fixed_source = propose_fix(v_finding, v_hypothesis, expected_param_count=arg_count)
         _validate_fix(fixed_source, finding.symbol)
     except Exception as exc:  # noqa: BLE001 - surface any failure as fix_error, don't crash the request
         return UploadVerificationBundle(
@@ -154,7 +179,7 @@ def verify_upload(*, source: str, finding: SecurityFinding) -> UploadVerificatio
             confidence=confidence,
         )
 
-    fixed_script = build_script_from_source(fixed_source, finding.symbol)
+    fixed_script = build_script_from_source(fixed_source, finding.symbol, arg_count)
     after: ExecutionEvidence = replay_attack(
         fixed_code=fixed_script, hypothesis=s_hypothesis, run_id=run_id
     )

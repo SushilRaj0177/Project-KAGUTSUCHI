@@ -27,8 +27,7 @@ from verification.models import AttackHypothesis, SecurityFinding
 
 _PROMPT_TEMPLATE = """You are a security engineer fixing a real vulnerability in the \
 Python function below. Rewrite ONLY this function so the vulnerability is \
-eliminated, while preserving its exact name and its signature (it must \
-still take exactly one string parameter - the same parameter it takes now).
+eliminated, while preserving its exact name and its signature ({signature_requirement}).
 
 sensitive_op: {sensitive_op}
 function name: {symbol}
@@ -66,7 +65,16 @@ class FixValidationError(Exception):
     signature) before it's ever handed to the sandbox."""
 
 
-def _build_prompt(finding: SecurityFinding, hypothesis: AttackHypothesis) -> str:
+def _signature_requirement(param_count: int) -> str:
+    if param_count == 1:
+        return "it must still take exactly one string parameter - the same parameter it takes now"
+    return (
+        f"it must still take exactly {param_count} parameters, in the same order, as the "
+        f"original - do not add, remove, or reorder parameters"
+    )
+
+
+def _build_prompt(finding: SecurityFinding, hypothesis: AttackHypothesis, param_count: int = 1) -> str:
     return _PROMPT_TEMPLATE.format(
         sensitive_op=finding.sensitive_op.value,
         symbol=finding.symbol,
@@ -74,10 +82,31 @@ def _build_prompt(finding: SecurityFinding, hypothesis: AttackHypothesis) -> str
         attack_vector=hypothesis.attack_vector,
         payload=hypothesis.payload,
         expected_if_safe=hypothesis.expected_if_safe,
+        signature_requirement=_signature_requirement(param_count),
     )
 
 
-def _validate(source: str, expected_function_name: str) -> None:
+def _infer_expected_param_count(finding: SecurityFinding) -> int:
+    """Best-effort: parse finding.diff_hunk for finding.symbol's own
+    definition to learn how many parameters the ORIGINAL vulnerable
+    function took, so a fix can be rejected for silently changing arity.
+    Defaults to 1 (this project's long-standing assumption) if diff_hunk
+    isn't a parseable, complete function definition - true for every
+    AST-scanner finding (see system/analysis/ast_scan.py's
+    _function_source), but an LLM-scan finding's diff_hunk is only
+    documented as "the relevant lines," so this degrades safely instead
+    of raising on that shape."""
+    try:
+        tree = ast.parse(finding.diff_hunk)
+    except SyntaxError:
+        return 1
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == finding.symbol:
+            return len(node.args.posonlyargs + node.args.args) or 1
+    return 1
+
+
+def _validate(source: str, expected_function_name: str, expected_param_count: int = 1) -> None:
     """Cheap, fast sanity checks before this ever reaches build_runnable_script
     or the sandbox - not a substitute for the sandbox actually running it."""
     try:
@@ -111,10 +140,15 @@ def _validate(source: str, expected_function_name: str) -> None:
 
     args = functions[0].args
     positional = args.posonlyargs + args.args
-    if len(positional) != 1:
+    if len(positional) != expected_param_count:
+        if expected_param_count == 1:
+            raise FixValidationError(
+                f"{expected_function_name}() must take exactly one parameter, "
+                f"got {len(positional)}"
+            )
         raise FixValidationError(
-            f"{expected_function_name}() must take exactly one parameter, "
-            f"got {len(positional)}"
+            f"{expected_function_name}() must take exactly {expected_param_count} parameters "
+            f"(matching the original), got {len(positional)}"
         )
 
     free_names = _free_names(functions[0])
@@ -176,17 +210,31 @@ def _free_names(func_node: ast.FunctionDef) -> set[str]:
     return loaded - bound - set(dir(_builtins_module))
 
 
-def propose_fix(finding: SecurityFinding, hypothesis: AttackHypothesis) -> str:
+def propose_fix(
+    finding: SecurityFinding,
+    hypothesis: AttackHypothesis,
+    expected_param_count: int | None = None,
+) -> str:
     """Ask the LLM to rewrite `finding`'s vulnerable function so that
     `hypothesis`'s attack no longer works, validate the result is at
     least syntactically plausible, and return its full source.
+
+    `expected_param_count` should be the ORIGINAL function's real
+    parameter count (see system/orchestration/signature.param_count(),
+    computed from the actual source the caller has). Left as None, it's
+    inferred from `finding.diff_hunk` (see _infer_expected_param_count) -
+    a reasonable default for callers that haven't computed it, but the
+    real source is the more reliable signal when available.
 
     Raises GroqUnavailable if the LLM call itself fails, or
     FixValidationError if it returns something that isn't usable
     (invalid syntax, wrong function name, wrong signature). Neither is
     swallowed - there is no fallback fix to degrade to.
     """
-    raw = generate_hypothesis_json(_build_prompt(finding, hypothesis))
+    if expected_param_count is None:
+        expected_param_count = _infer_expected_param_count(finding)
+
+    raw = generate_hypothesis_json(_build_prompt(finding, hypothesis, expected_param_count))
     try:
         fixed_source = raw["fixed_source"]
     except (KeyError, TypeError) as exc:
@@ -196,5 +244,5 @@ def propose_fix(finding: SecurityFinding, hypothesis: AttackHypothesis) -> str:
     if not isinstance(fixed_source, str):
         raise FixValidationError(f"'fixed_source' must be a string, got {type(fixed_source).__name__}")
 
-    _validate(fixed_source, finding.symbol)
+    _validate(fixed_source, finding.symbol, expected_param_count)
     return fixed_source

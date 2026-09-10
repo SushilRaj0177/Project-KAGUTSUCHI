@@ -115,15 +115,40 @@ sink is reachable the way you think, say so with a lower number.
 Respond with a single JSON object with exactly these keys:
 security_property, attack_vector, payload, expected_if_vulnerable, \
 expected_if_safe, confidence. All string values must be plain strings; \
-`confidence` must be a plain number. `payload` must be a single concrete \
-input, not a description. `expected_if_vulnerable` must state that \
+`confidence` must be a plain number. {payload_shape_hint} \
+`expected_if_vulnerable` must state that \
 {marker_path} is created; `expected_if_safe` must state that it is never \
 created.
 """
 
+# {symbol}() takes exactly one argument in every hand-built fixture, so
+# `payload` has always just been that one argument's value as a plain
+# string. Real-world functions frequently take more than one (this
+# harness limitation broke live on PyGoat's log_code()/api_code() -
+# see COORDINATION.md) - for those, `payload` is instead a
+# JSON-ENCODED ARRAY of that many values, still delivered as a plain
+# string field (AttackHypothesis.payload is always a str), which
+# system/orchestration/harness.py's build_script_from_source() then
+# json.loads()s and unpacks positionally into the call. Only the
+# instruction text changes based on arg_count; the JSON schema Groq is
+# asked for is identical either way.
+_SINGLE_ARG_PAYLOAD_HINT = "`payload` must be a single concrete input, not a description."
 
-def _build_prompt(finding: SecurityFinding) -> str:
+
+def _multi_arg_payload_hint(arg_count: int) -> str:
+    return (
+        f"This function takes {arg_count} positional arguments, in order. `payload` must be a "
+        f"JSON-encoded array (as a string) of exactly {arg_count} concrete argument values, in "
+        f"that same order - not a description, and not the array itself, but a STRING containing "
+        f"valid JSON like \"[\\\"value1\\\", \\\"value2\\\"]\"."
+    )
+
+
+def _build_prompt(finding: SecurityFinding, arg_count: int = 1) -> str:
     mechanism_hint = _MECHANISM_HINTS.get(finding.sensitive_op, _GENERIC_MECHANISM_HINT)
+    payload_shape_hint = (
+        _SINGLE_ARG_PAYLOAD_HINT if arg_count == 1 else _multi_arg_payload_hint(arg_count)
+    )
     return _PROMPT_TEMPLATE.format(
         sensitive_op=finding.sensitive_op.value,
         symbol=finding.symbol,
@@ -132,6 +157,7 @@ def _build_prompt(finding: SecurityFinding) -> str:
         rationale=finding.rationale,
         marker_path=_MARKER_PATH,
         mechanism_hint=mechanism_hint,
+        payload_shape_hint=payload_shape_hint,
     )
 
 
@@ -152,6 +178,8 @@ def generate(
     finding: SecurityFinding,
     model_id: str = "groq:openai/gpt-oss-120b",
     fallback: AttackHypothesis | None = NETDIAG_FALLBACK_HYPOTHESIS,
+    *,
+    arg_count: int = 1,
 ) -> AttackHypothesis:
     """`fallback` defaults to the netdiag hypothesis for backward
     compatibility with existing call sites (e.g. integration/pipeline.py's
@@ -166,9 +194,14 @@ def generate(
     `KeyError`, etc.) propagates uncaught instead of being swallowed, so
     the caller can surface "couldn't generate an attack right now" rather
     than silently running an unrelated payload.
+
+    `arg_count` defaults to 1, reproducing the exact prompt this has
+    always sent. Pass the real value from
+    system/orchestration/signature.param_count() for a function taking
+    more than one argument - see that module's docstring.
     """
     try:
-        raw = generate_hypothesis_json(_build_prompt(finding))
+        raw = generate_hypothesis_json(_build_prompt(finding, arg_count))
         return _hypothesis_from_raw(raw, finding, model_id)
     except (GroqUnavailable, KeyError, TypeError, ValidationError):
         # Covers: API down/rate-limited, malformed JSON (raised as
@@ -185,6 +218,8 @@ def generate_with_confidence(
     finding: SecurityFinding,
     model_id: str = "groq:openai/gpt-oss-120b",
     fallback: AttackHypothesis | None = NETDIAG_FALLBACK_HYPOTHESIS,
+    *,
+    arg_count: int = 1,
 ) -> tuple[AttackHypothesis, float | None]:
     """Same as generate(), but also returns the model's own stated
     confidence (0-1) that this exact payload will succeed against this
@@ -200,9 +235,11 @@ def generate_with_confidence(
     Returns `(hypothesis, None)` on the fallback path - a hardcoded
     fallback has no live confidence estimate to report, and reporting a
     fake one would corrupt the calibration data it's meant to produce.
+
+    See generate()'s docstring for `arg_count`.
     """
     try:
-        raw = generate_hypothesis_json(_build_prompt(finding))
+        raw = generate_hypothesis_json(_build_prompt(finding, arg_count))
         hypothesis = _hypothesis_from_raw(raw, finding, model_id)
         confidence = raw.get("confidence")
         if not isinstance(confidence, (int, float)) or isinstance(confidence, bool):
