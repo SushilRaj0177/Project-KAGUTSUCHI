@@ -1,7 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
-from server.rate_limit import _MAX_REQUESTS, _hits, rate_limit
+from server.rate_limit import _DAILY_MAX_REQUESTS, _MAX_REQUESTS, _hits, daily_rate_limit, rate_limit
 
 
 class _FakeClient:
@@ -60,3 +60,25 @@ def test_falls_back_to_request_client_host_without_x_client_ip_header():
         rate_limit(req)
     with pytest.raises(HTTPException):
         rate_limit(req)
+
+
+def test_daily_limit_allows_more_requests_than_the_short_one():
+    req = _FakeRequest()
+    # exhaust the short-window budget, then keep going under the daily
+    # one -- they must be tracked independently (see bucket= in _check),
+    # not share one counter that the short limiter would already trip.
+    for _ in range(_DAILY_MAX_REQUESTS):
+        daily_rate_limit(req)
+    with pytest.raises(HTTPException) as exc_info:
+        daily_rate_limit(req)
+    assert exc_info.value.status_code == 429
+
+
+def test_short_and_daily_limits_are_independent_counters():
+    req = _FakeRequest()
+    for _ in range(_MAX_REQUESTS):
+        rate_limit(req)
+    with pytest.raises(HTTPException):
+        rate_limit(req)
+    # the short limit tripping must not affect the separate daily budget
+    daily_rate_limit(req)

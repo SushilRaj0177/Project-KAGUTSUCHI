@@ -30,7 +30,7 @@ from integration.file_patch import SymbolNotFound, apply_function_fix
 from integration.github_pr import GitHubPrError, open_fix_pr
 from integration.upload_pipeline import AttackGenerationUnavailable, verify_upload
 from server.jobs import get_job, start_job
-from server.rate_limit import rate_limit
+from server.rate_limit import daily_rate_limit, rate_limit
 from server.repo_scan import CloneFailed, InvalidRepoUrl, _parse_github_url, scan_repo
 from system.analysis.ast_scan import scan_source
 from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
@@ -143,7 +143,7 @@ def _dedup_findings(findings: list[SecurityFinding]) -> list[SecurityFinding]:
     return deduped
 
 
-@app.post("/api/analyze", response_model=AnalyzeResponse)
+@app.post("/api/analyze", response_model=AnalyzeResponse, dependencies=[Depends(rate_limit), Depends(daily_rate_limit)])
 def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     """AST scan (deterministic, fixed pattern list) PLUS an LLM pass that
     reads the source for vulnerability classes the AST rules don't know
@@ -178,7 +178,7 @@ def _repo_analyze_response(result) -> RepoAnalyzeResponse:
     )
 
 
-@app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse, dependencies=[Depends(rate_limit)])
+@app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse, dependencies=[Depends(rate_limit), Depends(daily_rate_limit)])
 def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
     """Clone a public GitHub repo and AST-scan every .py file in it.
     Never imports or executes anything from the repo.
@@ -207,7 +207,7 @@ class RepoAnalyzeJobStatus(BaseModel):
     error: str | None = None
 
 
-@app.post("/api/analyze-repo/start", response_model=JobStartedResponse, dependencies=[Depends(rate_limit)])
+@app.post("/api/analyze-repo/start", response_model=JobStartedResponse, dependencies=[Depends(rate_limit), Depends(daily_rate_limit)])
 def analyze_repo_start(req: RepoAnalyzeRequest) -> JobStartedResponse:
     """Same scan as /api/analyze-repo, run in a background thread (see
     server/jobs.py). Returns a job id almost instantly regardless of how
@@ -235,7 +235,7 @@ def analyze_repo_job_status(job_id: str) -> RepoAnalyzeJobStatus:
     return RepoAnalyzeJobStatus(status="done", result=job.result)
 
 
-@app.post("/api/verify", dependencies=[Depends(rate_limit)])
+@app.post("/api/verify", dependencies=[Depends(rate_limit), Depends(daily_rate_limit)])
 def verify(req: VerifyRequest) -> dict:
     """Attack the finding for real, in the Docker sandbox, then (if it
     lands) attempt and replay a fix. Only endpoint that executes anything."""
@@ -258,7 +258,7 @@ def verify(req: VerifyRequest) -> dict:
     }
 
 
-@app.post("/api/open-pr", response_model=OpenPrResponse, dependencies=[Depends(rate_limit)])
+@app.post("/api/open-pr", response_model=OpenPrResponse, dependencies=[Depends(rate_limit), Depends(daily_rate_limit)])
 def open_pr(req: OpenPrRequest) -> OpenPrResponse:
     """Deliver a verified fix as a real GitHub PR, instead of leaving it
     as a code block the user has to copy-paste themselves. `github_token`
