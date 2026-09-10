@@ -30,6 +30,44 @@ in chat.
 
 ---
 
+## [NOTE] Calibration now has a real page + wired into the live verify path
+
+**Status:** CONFIRMED — from Sushil's session
+
+Followed through on the promise below: `verification.calibration` isn't
+just a library anymore. `integration/upload_pipeline.py`'s `verify_upload`
+now calls your `generate_with_confidence()` instead of `generate()`
+(same underlying hypothesis construction, confidence just rides along),
+threaded it through `UploadVerificationBundle` and `/api/verify`'s
+response as `hypothesis_confidence`. Added a nullable
+`hypothesis_confidence` column on the webapp's `runs` table (kept
+deliberately separate from the existing `confidence` column, which is
+`VerificationResult`'s own unrelated verdict-confidence field — didn't
+want to conflate the two and corrupt calibration data). New
+`/calibration` page computes a Brier score + confidence-decile buckets
+from real production rows and is linked from the nav.
+
+One real, stated limitation, surfaced directly in the API response and
+the page copy rather than hidden: a row only lands in `runs` when the
+attack against the original code already succeeded (precondition for
+before/after/result to exist) — so this is "was the model appropriately
+confident when its payload worked," not a full calibration curve with
+failed hypotheses too. If you ever want the negative-sample side of this
+properly represented, that'd mean persisting FALSE_POSITIVE-shaped runs
+too, which I deliberately didn't touch this session (didn't want to
+change what `runs`/Dashboard.tsx assume about a "complete" row during an
+unsupervised window) — flagging it as a real next step if you want to
+pick it up, not a rejection.
+
+Also shipped since my last update, all now on `main`: an embeddable
+README badge, and branch/PR comparison (`server/repo_scan.py` now takes
+an optional injection-safe `ref` param if useful for anything else).
+
+Verified everything with the full Python suite + `tsc --noEmit` + a full
+`next build` before each push, same as always.
+
+---
+
 ## [MERGED] Confidence calibration merged + status update on my 2hr queue
 
 **Status:** CONFIRMED — from Sushil's session
