@@ -396,20 +396,49 @@ export function RepoScanner() {
   const [searchText, setSearchText] = useState("");
   const [permalinkCopied, setPermalinkCopied] = useState(false);
   const [badgeCopied, setBadgeCopied] = useState(false);
+  const [polling, setPolling] = useState(false);
   const { ref: resultsRef, inView: resultsInView } = useInView<HTMLDivElement>();
+
+  // Large repos can take longer to scan than a single serverless request
+  // is allowed to run (this is what caused a live 504) -- the scan now
+  // starts as a background job and this polls for the result instead of
+  // holding one request open. See app/api/backend/analyze-repo/start and
+  // .../jobs/[jobId].
+  const _MAX_POLLS = 240; // ~8 minutes at 2s each
+
+  async function pollJob(jobId: string, owner?: string, repo?: string, sha?: string | null): Promise<RepoAnalyzeResponse> {
+    const params = new URLSearchParams();
+    if (owner) params.set("owner", owner);
+    if (repo) params.set("repo", repo);
+    if (sha) params.set("sha", sha);
+
+    for (let attempt = 0; attempt < _MAX_POLLS; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      const res = await fetch(apiUrl(`/analyze-repo/jobs/${jobId}?${params.toString()}`));
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail ?? `Request failed (${res.status})`);
+      }
+      const body = await res.json();
+      if (body.status === "error") throw new Error(body.error ?? "Scan failed");
+      if (body.status === "done") return body.result as RepoAnalyzeResponse;
+    }
+    throw new Error("This scan is taking unusually long — try again in a bit, or try a smaller repo.");
+  }
 
   async function handleSubmit(e: React.FormEvent | undefined, overrideUrl?: string) {
     e?.preventDefault();
     const target = overrideUrl ?? repoUrl;
     if (!target.trim() || loading) return;
     setLoading(true);
+    setPolling(false);
     setError(null);
     setResult(null);
     setSeverityFilter(null);
     setOpFilter(null);
     setSearchText("");
     try {
-      const res = await fetch(apiUrl("/analyze-repo"), {
+      const res = await fetch(apiUrl("/analyze-repo/start"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ repo_url: target.trim() }),
@@ -418,11 +447,20 @@ export function RepoScanner() {
         const body = await res.json().catch(() => ({}));
         throw new Error(body.detail ?? `Request failed (${res.status})`);
       }
-      setResult(await res.json());
+      const body = await res.json();
+      if (body.cached && body.result) {
+        setResult({ ...body.result, cached: true, commit_sha: body.commit_sha });
+        return;
+      }
+      if (!body.job_id) throw new Error("Unexpected response starting the scan.");
+      setPolling(true);
+      const result = await pollJob(body.job_id, body.owner, body.repo, body.commit_sha);
+      setResult(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
+      setPolling(false);
     }
   }
 
@@ -491,6 +529,12 @@ export function RepoScanner() {
             ))}
           </div>
         </form>
+
+        {polling && (
+          <p className={`relative z-10 mt-4 font-mono text-[11px] tracking-wide text-steel-400 ${jp}`}>
+            {t.scanPollingNotice}
+          </p>
+        )}
 
         {error && (
           <p className="relative z-10 mt-4 max-w-md border border-neon-pink/40 bg-neon-pink/10 p-3 font-mono text-xs text-neon-pink-soft">

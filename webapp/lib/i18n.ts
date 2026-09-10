@@ -25,6 +25,7 @@ export interface Dict {
   repoPlaceholder: string;
   scanButton: string;
   scanningButton: string;
+  scanPollingNotice: string;
   filesScanned: string;
   findingsCount: string;
   truncatedNotice: string;
@@ -175,6 +176,7 @@ export const translations: Record<Lang, Dict> = {
     repoPlaceholder: "https://github.com/owner/repo",
     scanButton: "Analyze",
     scanningButton: "Scanning…",
+    scanPollingNotice: "Still scanning — larger repos can take a minute or two.",
     filesScanned: "Python files scanned",
     findingsCount: "Findings",
     truncatedNotice:
@@ -349,6 +351,7 @@ export const translations: Record<Lang, Dict> = {
     repoPlaceholder: "https://github.com/owner/repo",
     scanButton: "解析する",
     scanningButton: "スキャン中…",
+    scanPollingNotice: "スキャン中です — 大きなリポジトリは1〜2分かかることがあります。",
     filesScanned: "スキャンしたPythonファイル数",
     findingsCount: "検出件数",
     truncatedNotice:
