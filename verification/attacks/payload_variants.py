@@ -39,6 +39,28 @@ SQL_PAYLOAD_VARIANTS: dict[str, str] = {
     "quote_balanced": f"x'; ATTACH DATABASE '{MARKER}' AS pwn; CREATE TABLE pwn.t(x); SELECT '",
 }
 
+# path_traversal.py: each variant escapes the safe upload directory a
+# different way - an absolute-path override (os.path.join's documented
+# footgun) vs. plain relative '../' traversal from a few different
+# starting shapes.
+#
+# A "subdir_relative_traversal" variant ("subdir/../../../../tmp/...")
+# was dropped here after independent verification: it does NOT actually
+# work against vulnerable(). POSIX path resolution requires each named
+# component to exist as it's traversed left-to-right - "subdir" has to
+# be a real directory before ".." can back out of it - and vulnerable()
+# never creates a "subdir" under _BASE_DIR, only _BASE_DIR itself. Every
+# clean run raises FileNotFoundError instead of writing the marker
+# (reproduced deterministically). fixed() would still correctly reject
+# it (its check is pure path arithmetic, done before any file access),
+# but a variant that can't even complete the exploit against vulnerable()
+# isn't a real confirmed variant - kept the other 3, dropped this one.
+PATH_TRAVERSAL_PAYLOAD_VARIANTS: dict[str, str] = {
+    "absolute_override": MARKER,
+    "relative_traversal": "../../../../tmp/kagutsuchi_pwned",
+    "dot_prefixed_traversal": "./../../../tmp/kagutsuchi_pwned",
+}
+
 # insecure_deserialization.py: each variant is a base64-encoded pickle
 # stream whose __reduce__ reaches the marker via a different callable/
 # code-execution technique (not just a different string) - see
