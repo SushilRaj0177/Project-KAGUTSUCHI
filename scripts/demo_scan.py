@@ -58,6 +58,8 @@ def _run_attack(source: str, target: SecurityFinding, index: int) -> None:
         bundle = verify_upload(source=source, finding=target)
     except AttackGenerationUnavailable as exc:
         print(f"\nCould not generate a live attack: {exc}", file=sys.stderr)
+        if exc.__cause__ is not None:
+            print(f"Underlying cause: {exc.__cause__!r}", file=sys.stderr)
         sys.exit(1)
 
     print(f"\nGenerated attack payload : {bundle.hypothesis.payload}")
