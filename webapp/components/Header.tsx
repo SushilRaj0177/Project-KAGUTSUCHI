@@ -34,6 +34,9 @@ export function Header() {
 
         <nav className={`flex flex-wrap items-center gap-x-5 gap-y-1 text-xs tracking-wide text-steel-400 uppercase ${jp}`}>
           <Link data-cursor="hover" href="/" className="whitespace-nowrap transition-colors hover:text-neon-cyan">
+            {t.navHome}
+          </Link>
+          <Link data-cursor="hover" href="/scan" className="whitespace-nowrap transition-colors hover:text-neon-cyan">
             {t.navScan}
           </Link>
           <Link data-cursor="hover" href="/dashboard" className="whitespace-nowrap transition-colors hover:text-neon-cyan">

@@ -3,6 +3,7 @@ export type Lang = "en" | "ja";
 export interface Dict {
   tagline: string;
   logLabelEn: string;
+  navHome: string;
   navScan: string;
   navDashboard: string;
   statTotal: string;
@@ -86,6 +87,53 @@ export interface Dict {
   detectorProposalsEmptyBody: string;
   detectorProposalsSeenTimes: string;
   detectorProposalsSpottedIn: string;
+
+  // Landing page
+  landingBadge: string;
+  landingTitleLine1: string;
+  landingTitleLine1Accent: string;
+  landingTitleLine2: string;
+  landingTitleLine2Accent: string;
+  landingSubtitle: string;
+  landingCtaScan: string;
+  landingCtaDashboard: string;
+  landingStat1Value: string;
+  landingStat1Label: string;
+  landingStat2Value: string;
+  landingStat2Label: string;
+  landingStat3Value: string;
+  landingStat3Label: string;
+  landingStat4Value: string;
+  landingStat4Label: string;
+  nameEyebrow: string;
+  nameTitle: string;
+  nameBodyPart1: string;
+  nameBodyPart2: string;
+  nameBodyPart3: string;
+  featuresEyebrow: string;
+  featuresTitle: string;
+  featuresSubtitle: string;
+  feature1Kanji: string;
+  feature1Title: string;
+  feature1Body: string;
+  feature2Kanji: string;
+  feature2Title: string;
+  feature2Body: string;
+  feature3Kanji: string;
+  feature3Title: string;
+  feature3Body: string;
+  feature4Kanji: string;
+  feature4Title: string;
+  feature4Body: string;
+  flowEyebrow: string;
+  flowTitle: string;
+  flowSubtitle: string;
+  flowStep1: string;
+  flowStep2: string;
+  flowStep3: string;
+  flowStep4: string;
+  landingFooterTitle: string;
+  landingFooterCta: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -111,6 +159,7 @@ export const translations: Record<Lang, Dict> = {
     emptyTitle: "No runs recorded yet",
     emptyBody:
       "This dashboard only shows real verification runs — nothing here is sample data. Run the pipeline and publish a result to see it appear:",
+    navHome: "Home",
     navScan: "Scan",
     navDashboard: "Live Runs",
     heroKanji: "鍛・刀",
@@ -201,6 +250,60 @@ export const translations: Record<Lang, Dict> = {
       "This fills in as real scans turn up vulnerability patterns outside the current detector list — nothing here is sample data.",
     detectorProposalsSeenTimes: "seen {n}×",
     detectorProposalsSpottedIn: "Spotted in",
+
+    landingBadge: "Autonomous code security verification",
+    landingTitleLine1: "Exploits you can",
+    landingTitleLine1Accent: "prove.",
+    landingTitleLine2: "Fixes you can",
+    landingTitleLine2Accent: "trust.",
+    landingSubtitle:
+      "KAGUTSUCHI finds vulnerabilities with static rules and an AI scan, then actually attacks your code in an isolated sandbox to prove it — and proves the fix the same way, by attacking it again. No guesses, no canned demos.",
+    landingCtaScan: "> Run a scan",
+    landingCtaDashboard: "> See live runs",
+    landingStat1Value: "5",
+    landingStat1Label: "Vulnerability classes",
+    landingStat2Value: "2",
+    landingStat2Label: "Detection engines",
+    landingStat3Value: "100%",
+    landingStat3Label: "Sandboxed execution",
+    landingStat4Value: "0",
+    landingStat4Label: "Unverified verdicts",
+    nameEyebrow: "The name",
+    nameTitle: "Why “Kagutsuchi”?",
+    nameBodyPart1:
+      "Kagutsuchi (迦具土) is the Shinto god of fire in Japanese mythology — born in fire so fierce it fatally burned his own mother, and later slain by his own father in grief. Fire, in that story, is never gentle: it's the same force that forges a blade and the one that destroys what touches it carelessly.",
+    nameBodyPart2:
+      "That duality is why we borrowed the name. This engine doesn't guess whether your code is safe — it puts it in the fire. A real attack, run for real, against the real code. What survives that fire is verified. What doesn't was never safe to begin with.",
+    nameBodyPart3:
+      "A proposed fix goes through the same fire a second time, with the identical payload. “Verified Fixed” only ever means one thing here: we attacked it again, and this time it held.",
+    featuresEyebrow: "What it actually does",
+    featuresTitle: "Every layer is real, not simulated.",
+    featuresSubtitle: "Static rules and an AI scan surface candidates. Nothing is trusted until it's watched happening.",
+    feature1Kanji: "検",
+    feature1Title: "Two detection engines",
+    feature1Body:
+      "A deterministic scanner matches known dangerous call patterns; an AI pass reads the code for meaning and catches classes the fixed list doesn't know about yet — command injection, SQL injection, insecure deserialization, path traversal, unsafe archive extraction, and more.",
+    feature2Kanji: "攻",
+    feature2Title: "Real sandboxed attacks",
+    feature2Body:
+      "Every finding gets an actual exploit attempt in an isolated, network-disabled sandbox. If it doesn't create real, observable proof of compromise, it's marked a false positive — not a hunch dressed up as a verdict.",
+    feature3Kanji: "治",
+    feature3Title: "Fixes verified, not assumed",
+    feature3Body:
+      "A proposed fix gets attacked with the exact same payload before anyone calls it fixed. “Verified Fixed” means the exploit was tried again against the fix and it failed — an outcome, not a claim.",
+    feature4Kanji: "拡",
+    feature4Title: "The detector list keeps growing",
+    feature4Body:
+      "When the AI spots a vulnerability pattern outside the known list, it's queued for human review as a New Class — never auto-trusted, but never silently missed either.",
+    flowEyebrow: "The pipeline",
+    flowTitle: "From a repo URL to a proven verdict.",
+    flowSubtitle: "Scan → hypothesize → attack → fix → verify.",
+    flowStep1: "Paste a public GitHub repo URL — a deterministic scanner and an AI pass both look for real vulnerabilities.",
+    flowStep2: "Pick a finding — an attack payload is generated specifically for that code, not a generic template.",
+    flowStep3: "The payload runs for real, in an isolated sandbox — the result is observed, not asserted.",
+    flowStep4: "If it worked, a fix is proposed and attacked with the same payload again — the verdict is whatever actually happened.",
+    landingFooterTitle: "Paste a repo. Watch it happen.",
+    landingFooterCta: "> Run a scan",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -224,6 +327,7 @@ export const translations: Record<Lang, Dict> = {
     emptyTitle: "検証記録なし",
     emptyBody:
       "このダッシュボードは実際の検証結果のみを表示します。サンプルデータは一切ありません。パイプラインを実行し、結果を公開してください：",
+    navHome: "ホーム",
     navScan: "スキャン",
     navDashboard: "検証記録",
     heroKanji: "鍛・刀",
@@ -314,5 +418,59 @@ export const translations: Record<Lang, Dict> = {
       "実際のスキャンで既存の検出リストにない脆弱性パターンが見つかるたびにここに蓄積されます — サンプルデータは一切ありません。",
     detectorProposalsSeenTimes: "{n}回検出",
     detectorProposalsSpottedIn: "検出元",
+
+    landingBadge: "自律型コードセキュリティ検証",
+    landingTitleLine1: "証明できる",
+    landingTitleLine1Accent: "攻撃。",
+    landingTitleLine2: "信頼できる",
+    landingTitleLine2Accent: "修正。",
+    landingSubtitle:
+      "KAGUTSUCHIは静的ルールとAIスキャンで脆弱性を発見し、隔離されたサンドボックス内で実際にコードを攻撃して証明します。そして同じ方法で — もう一度攻撃して — 修正を証明します。推測も、台本通りのデモもありません。",
+    landingCtaScan: "> スキャンを実行",
+    landingCtaDashboard: "> 検証記録を見る",
+    landingStat1Value: "5",
+    landingStat1Label: "脆弱性クラス",
+    landingStat2Value: "2",
+    landingStat2Label: "検出エンジン",
+    landingStat3Value: "100%",
+    landingStat3Label: "サンドボックス実行",
+    landingStat4Value: "0",
+    landingStat4Label: "未検証の判定",
+    nameEyebrow: "名前の由来",
+    nameTitle: "なぜ「カグツチ」なのか",
+    nameBodyPart1:
+      "カグツチ（迦具土）は日本神話に登場する火の神です。その誕生の炎は母を焼き死なせるほど激しく、後に父の手によって、悲しみと怒りの中で斬られました。この物語における火は決して穏やかなものではありません — 刀を鍛える力であると同時に、不用意に触れたものを焼き尽くす力でもあるのです。",
+    nameBodyPart2:
+      "この二面性こそ、私たちがこの名前を選んだ理由です。本エンジンはコードが安全かどうかを推測しません — 実際に火の中に投げ込みます。実際のコードに対する、実際の攻撃です。その火に耐えたものだけが検証済みとなります。耐えられなかったものは、そもそも安全ではなかったのです。",
+    nameBodyPart3:
+      "提案された修正も、まったく同じペイロードで再びその火にさらされます。「修正確認」がここで意味するのはただ一つ — もう一度攻撃し、今度は耐えたということです。",
+    featuresEyebrow: "実際に何をするか",
+    featuresTitle: "すべての層が本物であり、模擬ではない。",
+    featuresSubtitle: "静的ルールとAIスキャンが候補を洗い出します。実際に起きたことを確認するまで、何も信用されません。",
+    feature1Kanji: "検",
+    feature1Title: "2つの検出エンジン",
+    feature1Body:
+      "決定論的スキャナーは既知の危険な呼び出しパターンに一致するものを検出し、AIパスはコードの意味を読み取り、固定リストがまだ知らないクラス — コマンドインジェクション、SQLインジェクション、安全でないデシリアライゼーション、パストラバーサル、安全でないアーカイブ展開など — を捉えます。",
+    feature2Kanji: "攻",
+    feature2Title: "実際のサンドボックス攻撃",
+    feature2Body:
+      "すべての検出結果に対して、隔離されたネットワーク遮断済みのサンドボックスで実際の攻撃が試みられます。実際に観測可能な侵害の証拠が作られなければ、それは誤検知としてマークされます — 判定を装った勘ではありません。",
+    feature3Kanji: "治",
+    feature3Title: "推測ではなく検証された修正",
+    feature3Body:
+      "提案された修正は、修正済みと呼ばれる前に、まったく同じペイロードで攻撃されます。「修正確認」とは、修正に対して再び攻撃を試み、それが失敗したという意味です — 主張ではなく、結果です。",
+    feature4Kanji: "拡",
+    feature4Title: "検出リストは拡大し続ける",
+    feature4Body:
+      "AIが既知のリストにない脆弱性パターンを発見すると、それは「新規クラス」として人間のレビュー待ちになります — 自動的に信頼されることはありませんが、静かに見逃されることもありません。",
+    flowEyebrow: "パイプライン",
+    flowTitle: "リポジトリのURLから、証明された判定へ。",
+    flowSubtitle: "スキャン → 仮説生成 → 攻撃 → 修正 → 検証。",
+    flowStep1: "公開GitHubリポジトリのURLを貼り付けると、決定論的スキャナーとAIパスの両方が実際の脆弱性を探します。",
+    flowStep2: "検出結果を選択すると、そのコードに特化した攻撃ペイロードが生成されます — 汎用テンプレートではありません。",
+    flowStep3: "ペイロードは隔離されたサンドボックス内で実際に実行されます — 結果は主張ではなく観測されたものです。",
+    flowStep4: "攻撃が成功した場合、修正が提案され、同じペイロードで再び攻撃されます — 判定は実際に起きたことがすべてです。",
+    landingFooterTitle: "リポジトリを貼り付けて、実際に見てみましょう。",
+    landingFooterCta: "> スキャンを実行",
   },
 };
