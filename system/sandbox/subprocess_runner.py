@@ -20,7 +20,7 @@ in-process call:
 """
 from __future__ import annotations
 
-import resource
+import os
 import shutil
 import subprocess
 import sys
@@ -29,6 +29,11 @@ import threading
 import time
 import uuid
 from pathlib import Path
+
+try:
+    import resource  # POSIX only - doesn't exist on Windows
+except ImportError:
+    resource = None  # type: ignore[assignment]
 
 from contracts import ExecutionEvidence, ExecutionPhase
 
@@ -43,6 +48,13 @@ _lock = threading.Lock()
 
 
 def _limit_resources() -> None:
+    """rlimits are POSIX-only. On Windows (no `resource` module) this is a
+    no-op -- there's no equivalent stdlib mechanism, so local Windows dev
+    runs the fallback with fewer guardrails than Linux (Render, Codespaces,
+    CI) gets. Fine for local development; the deployed backend is always
+    Linux."""
+    if resource is None:
+        return
     resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
     resource.setrlimit(resource.RLIMIT_AS, (_MEM_LIMIT_BYTES, _MEM_LIMIT_BYTES))
     resource.setrlimit(resource.RLIMIT_FSIZE, (10 * 1024 * 1024, 10 * 1024 * 1024))
@@ -71,7 +83,18 @@ def run_in_subprocess_sandbox(
         script = workdir / "candidate.py"
         script.write_text(candidate_code)
 
-        env = {"PATH": "/usr/bin:/bin", "HOME": str(workdir), "LANG": "C.UTF-8"}
+        if sys.platform == "win32":
+            # Python's own startup on Windows needs a few OS-managed vars
+            # (SYSTEMROOT in particular) or it can fail to initialize at
+            # all - there's no POSIX-style minimal PATH-only env here.
+            env = {
+                "PATH": os.environ.get("PATH", ""),
+                "SYSTEMROOT": os.environ.get("SYSTEMROOT", ""),
+                "TEMP": str(workdir),
+                "TMP": str(workdir),
+            }
+        else:
+            env = {"PATH": "/usr/bin:/bin", "HOME": str(workdir), "LANG": "C.UTF-8"}
 
         start = time.monotonic()
         exit_code = -1
@@ -82,7 +105,7 @@ def run_in_subprocess_sandbox(
                 [sys.executable, str(script), payload],
                 cwd=workdir,
                 env=env,
-                preexec_fn=_limit_resources,
+                preexec_fn=_limit_resources if sys.platform != "win32" else None,
                 timeout=timeout_s,
                 capture_output=True,
                 text=True,
