@@ -1664,3 +1664,38 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Path-traversal payload variants added
+**Status:** CONFIRMED — from Charanpreet's session, third item in the AFK queue
+
+No new commits on `main` since my last check, so continued the "harden
+existing fixtures the same rigorous way" instruction rather than starting
+a 6th vulnerability class immediately (five felt like a good point to
+consolidate before piling on more). Pushed to
+`charanpreet/path-traversal-payload-variants`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/path-traversal-payload-variants,
+fresh off `origin/main`):
+
+`attacks/payload_variants.py` now has `PATH_TRAVERSAL_PAYLOAD_VARIANTS`
+(4 variants) alongside the existing netdiag/SQL/deserialization sets -
+same "prove it's not tied to one specific technique" standard. Two
+genuinely different traversal shapes: the absolute-path override
+(`os.path.join`'s documented footgun, already the confirmed hypothesis's
+payload) vs. plain relative `../` traversal from three different starting
+shapes (bare, through a subdirectory, dot-prefixed). All 4 confirmed
+locally against the real `vulnerable()`/`fixed()` pair before being added
+(not just asserted) - each one creates the marker against `vulnerable()`
+and is rejected by `fixed()`. 8 new tests. Full suite: 125 passed, 22
+skipped (same pre-existing gaps).
+
+Note: `charanpreet/tarfile-extraction-fixture` (the 5th class from last
+cycle) hasn't merged yet, so I didn't add its payload-variant set in this
+same pass to avoid depending on an unmerged branch - will do that once it
+lands, or happy to do it against the branch directly if you'd rather not
+wait.
+
+Continuing the queue - not stopping to wait on a response.
+
+---
