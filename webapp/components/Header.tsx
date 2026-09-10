@@ -32,6 +32,9 @@ export function Header() {
           <Link data-cursor="hover" href="/dashboard" className="transition-colors hover:text-neon-cyan">
             {t.navDashboard}
           </Link>
+          <Link data-cursor="hover" href="/compare" className="transition-colors hover:text-neon-cyan">
+            {t.navCompare}
+          </Link>
         </nav>
         <BackendStatus />
         <LanguageToggle />

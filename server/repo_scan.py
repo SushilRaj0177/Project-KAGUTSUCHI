@@ -24,6 +24,12 @@ from system.analysis.llm_scan import scan_source_with_llm
 _GITHUB_URL_RE = re.compile(
     r"^https://github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(\.git)?/?$"
 )
+# Deliberately conservative: real git ref names allow more characters than
+# this, but the only thing that matters here is ruling out anything that
+# could be interpreted as a git/shell flag (e.g. a leading "-") when
+# interpolated into a `git clone --branch <ref>` argv list - not full RFC
+# compliance with every legal git ref.
+_SAFE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
 
 _SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "env", "site-packages", "__pycache__", "dist", "build"}
 _MAX_FILES = 300
@@ -71,10 +77,16 @@ def _parse_github_url(repo_url: str) -> tuple[str, str]:
     return match.group("owner"), match.group("repo")
 
 
-def _clone(repo_url: str, dest: Path) -> None:
+def _clone(repo_url: str, dest: Path, ref: str | None = None) -> None:
+    if ref is not None and not _SAFE_REF_RE.match(ref):
+        raise InvalidRepoUrl(f"Not a valid branch/tag name: {ref!r}")
+    cmd = ["git", "clone", "--depth", "1", "--single-branch"]
+    if ref is not None:
+        cmd += ["--branch", ref]
+    cmd += [repo_url, str(dest)]
     try:
         subprocess.run(
-            ["git", "clone", "--depth", "1", "--single-branch", repo_url, str(dest)],
+            cmd,
             check=True,
             capture_output=True,
             timeout=_CLONE_TIMEOUT_S,
@@ -82,7 +94,7 @@ def _clone(repo_url: str, dest: Path) -> None:
         )
     except subprocess.CalledProcessError as exc:
         raise CloneFailed(
-            f"git clone failed (repo may be private, deleted, or the URL is wrong): {exc.stderr.strip()}"
+            f"git clone failed (repo/branch may be private, deleted, or wrong): {exc.stderr.strip()}"
         ) from exc
     except subprocess.TimeoutExpired as exc:
         raise CloneFailed("git clone timed out — repo is too large for a live scan.") from exc
@@ -105,12 +117,12 @@ def _iter_python_files(root: Path):
         yield None  # sentinel: more matching files existed than the cap
 
 
-def scan_repo(repo_url: str) -> RepoScanResult:
+def scan_repo(repo_url: str, ref: str | None = None) -> RepoScanResult:
     owner, repo = _parse_github_url(repo_url)
 
     with tempfile.TemporaryDirectory(prefix="kagutsuchi-repo-") as tmp:
         root = Path(tmp)
-        _clone(repo_url, root)
+        _clone(repo_url, root, ref)
 
         findings: list[SecurityFinding] = []
         sources: dict[str, str] = {}

@@ -57,6 +57,19 @@ export interface Dict {
   permalinkNotFoundTitle: string;
   permalinkNotFoundBody: string;
   copyBadge: string;
+  navCompare: string;
+  compareTitle: string;
+  compareSubtitle: string;
+  baseRefPlaceholder: string;
+  headRefPlaceholder: string;
+  compareButton: string;
+  comparingButton: string;
+  compareAdded: string;
+  compareRemoved: string;
+  compareUnchanged: string;
+  compareAddedTitle: string;
+  compareRemovedTitle: string;
+  compareNoDiff: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -138,6 +151,20 @@ export const translations: Record<Lang, Dict> = {
     permalinkNotFoundBody:
       "This exact commit hasn't been scanned yet, so there's nothing to show here. Run a live scan on the homepage instead.",
     copyBadge: "Copy README badge",
+    navCompare: "Compare",
+    compareTitle: "Compare two branches",
+    compareSubtitle:
+      "Scan two refs of the same repo and see exactly which findings a branch or PR added or fixed — real for gating merges on new vulnerabilities, not just eyeballing two separate scans.",
+    baseRefPlaceholder: "base branch, e.g. main",
+    headRefPlaceholder: "head branch / PR branch",
+    compareButton: "Compare",
+    comparingButton: "Scanning both…",
+    compareAdded: "New findings",
+    compareRemoved: "Fixed findings",
+    compareUnchanged: "Unchanged",
+    compareAddedTitle: "Introduced by this branch",
+    compareRemovedTitle: "Fixed by this branch",
+    compareNoDiff: "No difference in findings between these two refs.",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -217,5 +244,19 @@ export const translations: Record<Lang, Dict> = {
     permalinkNotFoundBody:
       "このコミットはまだスキャンされていないため、表示できる内容がありません。トップページで実際にスキャンを実行してください。",
     copyBadge: "READMEバッジをコピー",
+    navCompare: "比較",
+    compareTitle: "2つのブランチを比較",
+    compareSubtitle:
+      "同じリポジトリの2つのブランチをスキャンし、そのブランチやPRが追加または修正した検出結果を正確に把握できます。2つのスキャン結果を目で見比べるのではなく、新しい脆弱性でマージをブロックする用途に使えます。",
+    baseRefPlaceholder: "ベースブランチ（例: main）",
+    headRefPlaceholder: "比較対象のブランチ / PRブランチ",
+    compareButton: "比較する",
+    comparingButton: "両方スキャン中…",
+    compareAdded: "新規検出",
+    compareRemoved: "修正された検出",
+    compareUnchanged: "変化なし",
+    compareAddedTitle: "このブランチで新たに追加された脆弱性",
+    compareRemovedTitle: "このブランチで修正された脆弱性",
+    compareNoDiff: "この2つのブランチ間で検出結果に差はありません。",
   },
 };

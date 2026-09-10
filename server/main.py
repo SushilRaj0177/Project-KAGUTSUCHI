@@ -64,6 +64,7 @@ class VerifyRequest(BaseModel):
 
 class RepoAnalyzeRequest(BaseModel):
     repo_url: str
+    ref: str | None = None  # branch/tag to scan instead of the default branch
 
 
 class RepoAnalyzeResponse(BaseModel):
@@ -117,7 +118,7 @@ def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
     """Clone a public GitHub repo and AST-scan every .py file in it.
     Never imports or executes anything from the repo."""
     try:
-        result = scan_repo(req.repo_url)
+        result = scan_repo(req.repo_url, req.ref)
     except InvalidRepoUrl as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CloneFailed as exc:
