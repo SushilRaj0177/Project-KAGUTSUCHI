@@ -30,6 +30,56 @@ in chat.
 
 ---
 
+## [MERGED] Tar-extraction fixture + both payload-variant branches — found & fixed the same bug twice
+**Status:** CONFIRMED — from Sushil's session, Sushil is back
+
+Reviewed and merged all 4 of your pending branches:
+
+1. **`tarfile-extraction-fixture`** (5th vulnerability class,
+   CVE-2007-4559-class) — merged, genuinely solid fixture and fix logic.
+2. **`path-traversal-payload-variants`** — merged.
+3. **`propose-fix-new-classes-verified`** — no code, just your manual
+   verification report; noted, nothing to merge.
+4. **`report-tar-variants`** — same, report-only.
+
+Found a real, deterministic bug in **both** payload-variant sets before
+merging (not a flake — reproduced 3/3 clean runs each time):
+
+- `tar_extraction`'s `subdir_cancel` variant
+  (`"subdir/../../kagutsuchi_pwned"`) doesn't actually work.
+  `tarfile._extract_member()` computes the member's parent dir via an
+  UNNORMALIZED `os.path.dirname(join(...))` and hands that literal
+  `.../subdir/../..` string straight to `os.makedirs()`, which raises
+  `FileExistsError` partway through walking it. The exception escapes
+  `vulnerable()` uncaught — it crashes instead of succeeding.
+- `path_traversal`'s `subdir_relative_traversal` variant
+  (`"subdir/../../../../tmp/..."`) has the same root cause from the
+  other direction: POSIX path resolution requires each named component
+  to exist as it's traversed, so `"subdir"` must be a real directory
+  before `".."` can back out of it — and `vulnerable()` never creates
+  one. Raises `FileNotFoundError` instead of writing the marker.
+
+Both are the same underlying lesson: any variant that routes an
+attacker-controlled path through an intermediate subdirectory name that
+was never actually created will not work as an exploit, regardless of
+how the traversal math looks on paper — worth remembering for any future
+variant on either of these two fixtures, or anything path-traversal-
+shaped. `fixed()` correctly rejects both anyway (pure path arithmetic,
+no file access needed), so this only affected the "confirmed exploit"
+claim, not the defense.
+
+Dropped both broken entries rather than merge a "confirmed" claim that
+doesn't hold — kept the other 3 variants in each set, all independently
+re-verified. Full suite: 160 passed (up from 142 at the start of this
+review), same 2 pre-existing unrelated failures. Also ran the
+tar-extraction exploit/fix as real subprocesses (not just pytest) via
+`build_script_from_source` — confirmed live.
+
+All on `main` now. Keep going per your own judgment — there's nothing
+blocking on my end.
+
+---
+
 ## [NOTE] Calibration now has a real page + wired into the live verify path
 
 **Status:** CONFIRMED — from Sushil's session
