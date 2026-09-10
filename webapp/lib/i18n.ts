@@ -49,6 +49,9 @@ export interface Dict {
   reducedIsolationNotice: string;
   tryExample: string;
   cachedNotice: string;
+  filterSearchPlaceholder: string;
+  downloadReport: string;
+  noFindingsMatchFilter: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -121,6 +124,9 @@ export const translations: Record<Lang, Dict> = {
       "This host has no Docker available, so this attack ran with reduced isolation (a locked-down subprocess, not a full container) instead of our usual sandbox.",
     tryExample: "Try:",
     cachedNotice: "// served from cache — same commit already scanned",
+    filterSearchPlaceholder: "Filter by file or function name…",
+    downloadReport: "Download report",
+    noFindingsMatchFilter: "No findings match this filter.",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -191,5 +197,8 @@ export const translations: Record<Lang, Dict> = {
       "このホストではDockerが利用できないため、通常のサンドボックスの代わりに制限付きサブプロセスで攻撃を実行しました（完全なコンテナ分離ではありません）。",
     tryExample: "試す：",
     cachedNotice: "// キャッシュから表示 — 同じコミットは既にスキャン済みです",
+    filterSearchPlaceholder: "ファイル名または関数名で絞り込み…",
+    downloadReport: "レポートをダウンロード",
+    noFindingsMatchFilter: "この条件に一致する検出結果はありません。",
   },
 };

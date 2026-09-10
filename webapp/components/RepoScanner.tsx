@@ -245,6 +245,44 @@ const EXAMPLE_REPOS = [
   { label: "Flask", url: "https://github.com/pallets/flask" },
 ];
 
+function downloadReport(result: RepoAnalyzeResponse) {
+  const lines = [
+    `# KAGUTSUCHI scan report — ${result.owner}/${result.repo}`,
+    "",
+    `- Files scanned: ${result.files_scanned}`,
+    `- Findings: ${result.findings.length}`,
+    result.truncated ? "- Note: repo exceeded the per-scan file cap; not every file was scanned." : "",
+    "",
+    "## Findings",
+    "",
+  ];
+  for (const f of result.findings) {
+    lines.push(
+      `### ${f.symbol} — ${f.sensitive_op} (${f.severity_hint})`,
+      "",
+      `**File:** \`${f.file_path}\``,
+      "",
+      `**Why this is dangerous:** ${f.rationale}`,
+      "",
+      "```python",
+      f.diff_hunk,
+      "```",
+      "",
+    );
+  }
+  const blob = new Blob([lines.join("\n")], { type: "text/markdown" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `kagutsuchi-${result.owner}-${result.repo}.md`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+const SEVERITIES = ["high", "medium", "low"] as const;
+
 export function RepoScanner() {
   const { t, lang } = useLanguage();
   const jp = lang === "ja" ? "font-jp" : "";
@@ -252,6 +290,9 @@ export function RepoScanner() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<RepoAnalyzeResponse | null>(null);
+  const [severityFilter, setSeverityFilter] = useState<string | null>(null);
+  const [opFilter, setOpFilter] = useState<string | null>(null);
+  const [searchText, setSearchText] = useState("");
   const { ref: resultsRef, inView: resultsInView } = useInView<HTMLDivElement>();
 
   async function handleSubmit(e: React.FormEvent | undefined, overrideUrl?: string) {
@@ -261,6 +302,9 @@ export function RepoScanner() {
     setLoading(true);
     setError(null);
     setResult(null);
+    setSeverityFilter(null);
+    setOpFilter(null);
+    setSearchText("");
     try {
       const res = await fetch(apiUrl("/analyze-repo"), {
         method: "POST",
@@ -381,16 +425,88 @@ export function RepoScanner() {
               <p className={`mx-auto mt-2 max-w-md text-sm text-steel-400 ${jp}`}>{t.noFindingsBody}</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {result.findings.map((finding, i) => (
-                <FindingCard
-                  key={finding.finding_id}
-                  finding={finding}
-                  source={result.sources[finding.file_path]}
-                  index={i}
+            <>
+              <div className="mb-4 flex flex-wrap items-center gap-2">
+                <input
+                  data-cursor="hover"
+                  value={searchText}
+                  onChange={(e) => setSearchText(e.target.value)}
+                  placeholder={t.filterSearchPlaceholder}
+                  className="min-w-[160px] flex-1 border border-line-strong bg-void-950 px-3 py-1.5 font-mono text-xs text-paper-50 outline-none placeholder:text-steel-600 focus:border-neon-cyan"
                 />
-              ))}
-            </div>
+                {SEVERITIES.map((sev) => (
+                  <button
+                    key={sev}
+                    type="button"
+                    data-cursor="hover"
+                    onClick={() => setSeverityFilter(severityFilter === sev ? null : sev)}
+                    className={`border px-2 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+                      severityFilter === sev
+                        ? "border-neon-pink text-neon-pink-soft"
+                        : "border-line-strong text-steel-400 hover:border-neon-pink/50"
+                    }`}
+                  >
+                    {sev}
+                  </button>
+                ))}
+                {Array.from(new Set(result.findings.map((f) => f.sensitive_op))).map((op) => (
+                  <button
+                    key={op}
+                    type="button"
+                    data-cursor="hover"
+                    onClick={() => setOpFilter(opFilter === op ? null : op)}
+                    className={`border px-2 py-1 font-mono text-[10px] uppercase tracking-wide transition-colors ${
+                      opFilter === op
+                        ? "border-neon-cyan text-neon-cyan"
+                        : "border-line-strong text-steel-400 hover:border-neon-cyan/50"
+                    }`}
+                  >
+                    {t.vulnClass[op] ?? op}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  data-cursor="hover"
+                  onClick={() => downloadReport(result)}
+                  className="ml-auto border border-line-strong px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-steel-400 transition-colors hover:border-neon-cyan hover:text-neon-cyan"
+                >
+                  {t.downloadReport}
+                </button>
+              </div>
+
+              {(() => {
+                const filtered = result.findings.filter((f) => {
+                  if (severityFilter && f.severity_hint !== severityFilter) return false;
+                  if (opFilter && f.sensitive_op !== opFilter) return false;
+                  if (searchText.trim()) {
+                    const needle = searchText.trim().toLowerCase();
+                    if (!f.file_path.toLowerCase().includes(needle) && !f.symbol.toLowerCase().includes(needle)) {
+                      return false;
+                    }
+                  }
+                  return true;
+                });
+                if (filtered.length === 0) {
+                  return (
+                    <p className={`border border-dashed border-line-strong p-6 text-center text-sm text-steel-400 ${jp}`}>
+                      {t.noFindingsMatchFilter}
+                    </p>
+                  );
+                }
+                return (
+                  <div className="space-y-3">
+                    {filtered.map((finding, i) => (
+                      <FindingCard
+                        key={finding.finding_id}
+                        finding={finding}
+                        source={result.sources[finding.file_path]}
+                        index={i}
+                      />
+                    ))}
+                  </div>
+                );
+              })()}
+            </>
           )}
         </section>
       )}
