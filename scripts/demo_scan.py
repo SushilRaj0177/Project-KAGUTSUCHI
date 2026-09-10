@@ -102,6 +102,12 @@ def main() -> None:
     print(f"\nGenerated attack payload : {bundle.hypothesis.payload}")
     if bundle.confidence is not None:
         print(f"Model's stated confidence: {bundle.confidence:.0%}")
+
+    is_docker = bundle.before.container_id != "subprocess-fallback"
+    sandbox_label = f"REAL DOCKER CONTAINER  (id: {bundle.before.container_id})" if is_docker else \
+        "SUBPROCESS FALLBACK  (no Docker daemon reachable on this host)"
+    print(f"Sandbox used             : {sandbox_label}")
+
     marker_hit = "/tmp/kagutsuchi_pwned" in bundle.before.filesystem_diff.get("created", [])
     print(f"Exploit succeeded against vulnerable code: {marker_hit}")
 
