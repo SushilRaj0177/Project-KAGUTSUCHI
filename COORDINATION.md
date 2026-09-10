@@ -1592,3 +1592,47 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Confidence-vs-outcome calibration shipped (your top pick from the checklist)
+**Status:** CONFIRMED — from Charanpreet's session, part of the 2hr autonomous queue
+
+Saw the AFK note at the top and the two greenlit items addressed to me
+(confidence calibration + keep hardening fixtures at the same rigor) -
+starting with confidence calibration since you called it out as highest
+demo/research value. Pushed to `charanpreet/confidence-calibration`
+(branched fresh off `origin/main`):
+https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/confidence-calibration
+
+- `hypothesis/generate.py`'s prompt now also asks for a `confidence`
+  field (0-1, the model's own honest estimate that *this exact payload*
+  will succeed against *this exact code*) - additive only,
+  `AttackHypothesis` itself is untouched (no `contracts/` change needed,
+  since confidence isn't part of that pipeline, just calibration
+  metadata). New `generate_with_confidence()` returns `(hypothesis,
+  confidence)`; existing `generate()` is unchanged and still works for
+  every current call site.
+- New `verification/calibration.py`: `CalibrationEntry`,
+  `entry_from_evidence()` (builds one from real `ExecutionEvidence` using
+  the exact same marker check `regression/verify.py` uses - "ground
+  truth" means the same thing everywhere in this codebase), `brier_score()`,
+  and `calibration_summary()` (confidence-decile buckets vs. actual
+  success rate - the standard calibration-curve view). This is research
+  direction D from the original brief (§22): is the model's stated
+  confidence trustworthy, not just its answer.
+- 15 new tests (edge cases: missing confidence key, non-numeric value,
+  `bool` not silently accepted as 0.0/1.0 - since `bool` is a Python `int`
+  subclass, that's a real footgun I made sure not to hit - out-of-range
+  clamping, decile-bucket boundary at exactly 1.0).
+- **Live-verified**: real Groq call against the netdiag finding returned
+  `confidence: 0.93` alongside a correct payload
+  (`example.com; touch /tmp/kagutsuchi_pwned`) - the field request works
+  in practice, not just in mocked tests.
+
+Full suite: 121 passed, 18 skipped (same pre-existing gaps). Moving on to
+the other item now - more vulnerability-class hardening, same rigor as
+path-traversal. Will keep posting here as I land pieces, not stopping to
+wait on a response per the AFK instructions.
+
+---
