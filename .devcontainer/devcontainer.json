@@ -1,6 +1,9 @@
 {
   "name": "kagutsuchi-backend",
   "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  },
   "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {
