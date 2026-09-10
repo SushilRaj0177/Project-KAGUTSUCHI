@@ -18,6 +18,16 @@ result, not a claim.
   sample data), `/compare` (diff two branches), `/calibration` (is the AI's
   confidence trustworthy?), `/detector-proposals` (AI-discovered
   vulnerability classes awaiting review).
+- **One click to actually fix it**: a verified fix isn't just a code block —
+  `/scan` can open a real GitHub pull request carrying it, straight from the
+  browser (see `integration/github_pr.py`).
+- **Repo scanning is asynchronous**: a large repo scan runs as a background
+  job instead of one blocking request, so it can't 504 on a slow connection
+  or a big codebase (see `server/jobs.py`).
+- **Real-world function signatures**: the attack/fix harness handles
+  functions taking more than one argument, not just the single-string-arg
+  shape every hand-built fixture happens to have (see
+  `system/orchestration/signature.py`).
 - **Backend**: FastAPI, hosted on Render (falls back to a locked-down
   subprocess sandbox when Docker isn't reachable on the host — disclosed
   honestly in the UI whenever that's what ran).
@@ -64,6 +74,7 @@ Plus whatever the AI scanner discovers beyond this list — see
 | `system/analysis/ast_scan.py` | Deterministic AST scanner — the fixed-signature detection engine. |
 | `system/analysis/llm_scan.py` | AI scanner — reads code for meaning, proposes new detector classes. |
 | `system/orchestration/` | Builds a runnable script from a fixture/source + a target function, drives attack/replay through the sandbox. |
+| `system/orchestration/signature.py` | Determines a function's real parameter count from source, so the harness can drive functions taking more than one argument instead of assuming exactly one. |
 | `system/sandbox/docker_runner.py` | Real Docker sandbox — network-disabled, memory-capped, destroyed per run. |
 | `system/sandbox/subprocess_runner.py` | Fallback sandbox (resource-limited subprocess, scrubbed env) used only when Docker isn't reachable. |
 | `system/cli/main.py` | Typer CLI: `analyze`, `analyze-diff`, `ingest`, `verify`. |
@@ -78,9 +89,12 @@ Plus whatever the AI scanner discovers beyond this list — see
 | `integration/pipeline.py` | The fixture-demo path: known vulnerable/fixed pair → full verification, used by `integration/demo*.py`. |
 | `integration/demo.py`, `demo_sql.py`, `demo_deserialize.py` | One-shot end-to-end demos per fixture, fallback-hypothesis based (no API key needed). |
 | `integration/publish_result.py` | Publishes a real pipeline run to the live dashboard's database. |
-| `server/main.py` | FastAPI app — `/api/analyze`, `/api/analyze-repo`, `/api/verify`, `/api/health`. |
+| `integration/file_patch.py` | Splices a verified fix's self-contained function back into its original file, preserving everything else (imports, decorators, other functions). |
+| `integration/github_pr.py` | Opens a real GitHub PR carrying a verified fix — the only place in the codebase that talks to GitHub's write API. |
+| `server/main.py` | FastAPI app — `/api/analyze`, `/api/analyze-repo` (+ `/start` and `/jobs/{id}` for the async version), `/api/verify`, `/api/open-pr`, `/api/health`. |
 | `server/repo_scan.py` | Clones a public GitHub repo and scans every `.py` file (AST on all, AI on a capped concurrent subset). |
-| `server/rate_limit.py` | Per-IP, per-endpoint sliding-window rate limiting. |
+| `server/jobs.py` | In-memory background job runner backing `/api/analyze-repo/start` — turns a slow scan into a poll instead of one long blocking request. |
+| `server/rate_limit.py` | Per-IP, per-endpoint rate limiting — a short window (stops a retry storm) and a daily one (stops a script quietly burning the whole day's Groq quota). |
 | `webapp/app/page.tsx` | Landing page — what the project is, why the name, what it does. |
 | `webapp/app/scan/` | The scanning tool itself (paste a repo, see findings, attack one). |
 | `webapp/app/dashboard/` | Live Runs — real completed verifications from actual site usage. |
@@ -92,7 +106,7 @@ Plus whatever the AI scanner discovers beyond this list — see
 | `scripts/demo_scan.py` | Interactive CLI demo console — scan, attack, calibration, and discovery, all from one menu. |
 | `scripts/promote_detector.py` | Turns an accepted AI-proposed detector into a ready-to-review `ast_scan.py` code snippet. |
 | `scripts/start_live_demo.sh` | Runs the backend with real Docker + a Cloudflare Tunnel, for environments (like Codespaces) where you want the real sandbox instead of the fallback. |
-| `tests/`, `verification/tests/` | The automated test suite (160 passing as of this build). |
+| `tests/`, `verification/tests/` | The automated test suite (176 passing as of this build). |
 | `COORDINATION.md` | Append-only cross-session build log — every merge, every bug found, every design decision, in order. |
 
 ## Try it
