@@ -19,7 +19,7 @@ interface SecurityFinding {
   severity_hint: "low" | "medium" | "high";
 }
 
-interface RepoAnalyzeResponse {
+export interface RepoAnalyzeResponse {
   owner: string;
   repo: string;
   files_scanned: number;
@@ -27,6 +27,7 @@ interface RepoAnalyzeResponse {
   sources: Record<string, string>;
   truncated: boolean;
   cached?: boolean;
+  commit_sha?: string;
 }
 
 interface VerifyResponse {
@@ -49,7 +50,7 @@ function apiUrl(path: string): string {
   return `/api/backend${path}`;
 }
 
-function FindingCard({
+export function FindingCard({
   finding,
   source,
   index,
@@ -245,7 +246,7 @@ const EXAMPLE_REPOS = [
   { label: "Flask", url: "https://github.com/pallets/flask" },
 ];
 
-function downloadReport(result: RepoAnalyzeResponse) {
+export function downloadReport(result: RepoAnalyzeResponse) {
   const lines = [
     `# KAGUTSUCHI scan report — ${result.owner}/${result.repo}`,
     "",
@@ -293,6 +294,7 @@ export function RepoScanner() {
   const [severityFilter, setSeverityFilter] = useState<string | null>(null);
   const [opFilter, setOpFilter] = useState<string | null>(null);
   const [searchText, setSearchText] = useState("");
+  const [permalinkCopied, setPermalinkCopied] = useState(false);
   const { ref: resultsRef, inView: resultsInView } = useInView<HTMLDivElement>();
 
   async function handleSubmit(e: React.FormEvent | undefined, overrideUrl?: string) {
@@ -464,11 +466,27 @@ export function RepoScanner() {
                     {t.vulnClass[op] ?? op}
                   </button>
                 ))}
+                {result.commit_sha && (
+                  <button
+                    type="button"
+                    data-cursor="hover"
+                    onClick={() => {
+                      const url = `${window.location.origin}/scan/${result.owner}/${result.repo}/${result.commit_sha}`;
+                      navigator.clipboard.writeText(url).then(() => {
+                        setPermalinkCopied(true);
+                        setTimeout(() => setPermalinkCopied(false), 2000);
+                      });
+                    }}
+                    className="ml-auto border border-line-strong px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-steel-400 transition-colors hover:border-neon-cyan hover:text-neon-cyan"
+                  >
+                    {permalinkCopied ? t.permalinkCopied : t.copyPermalink}
+                  </button>
+                )}
                 <button
                   type="button"
                   data-cursor="hover"
                   onClick={() => downloadReport(result)}
-                  className="ml-auto border border-line-strong px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-steel-400 transition-colors hover:border-neon-cyan hover:text-neon-cyan"
+                  className={`border border-line-strong px-2 py-1 font-mono text-[10px] uppercase tracking-wide text-steel-400 transition-colors hover:border-neon-cyan hover:text-neon-cyan ${result.commit_sha ? "" : "ml-auto"}`}
                 >
                   {t.downloadReport}
                 </button>
@@ -514,7 +532,7 @@ export function RepoScanner() {
   );
 }
 
-function StatTile({ label, value, tone }: { label: string; value: number; tone: "cyan" | "pink" }) {
+export function StatTile({ label, value, tone }: { label: string; value: number; tone: "cyan" | "pink" }) {
   const { lang } = useLanguage();
   const border = tone === "cyan" ? "border-t-neon-cyan" : "border-t-neon-pink";
   return (

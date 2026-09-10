@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     try {
       const cached = await getCachedRepoScan(owner, repo, sha);
       if (cached) {
-        return NextResponse.json({ ...cached, cached: true });
+        return NextResponse.json({ ...cached, cached: true, commit_sha: sha });
       }
     } catch {
       // cache read failed (e.g. DATABASE_URL not configured) - scan for real instead of failing
@@ -79,7 +79,9 @@ export async function POST(request: NextRequest) {
 
     if (upstream.ok && owner && repo && sha) {
       try {
-        await setCachedRepoScan(owner, repo, sha, JSON.parse(data));
+        const parsed = JSON.parse(data);
+        await setCachedRepoScan(owner, repo, sha, parsed);
+        return NextResponse.json({ ...parsed, commit_sha: sha }, { status: upstream.status });
       } catch {
         // best-effort cache write - never let a caching failure affect the response
       }

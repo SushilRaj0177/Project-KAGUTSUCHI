@@ -52,6 +52,10 @@ export interface Dict {
   filterSearchPlaceholder: string;
   downloadReport: string;
   noFindingsMatchFilter: string;
+  copyPermalink: string;
+  permalinkCopied: string;
+  permalinkNotFoundTitle: string;
+  permalinkNotFoundBody: string;
 }
 
 export const translations: Record<Lang, Dict> = {
@@ -127,6 +131,11 @@ export const translations: Record<Lang, Dict> = {
     filterSearchPlaceholder: "Filter by file or function name…",
     downloadReport: "Download report",
     noFindingsMatchFilter: "No findings match this filter.",
+    copyPermalink: "Copy permalink",
+    permalinkCopied: "Copied!",
+    permalinkNotFoundTitle: "No cached scan for this commit",
+    permalinkNotFoundBody:
+      "This exact commit hasn't been scanned yet, so there's nothing to show here. Run a live scan on the homepage instead.",
   },
   ja: {
     tagline: "自律型コード整合性検証 — 意見ではなく、証明。",
@@ -200,5 +209,10 @@ export const translations: Record<Lang, Dict> = {
     filterSearchPlaceholder: "ファイル名または関数名で絞り込み…",
     downloadReport: "レポートをダウンロード",
     noFindingsMatchFilter: "この条件に一致する検出結果はありません。",
+    copyPermalink: "リンクをコピー",
+    permalinkCopied: "コピーしました！",
+    permalinkNotFoundTitle: "このコミットのキャッシュはありません",
+    permalinkNotFoundBody:
+      "このコミットはまだスキャンされていないため、表示できる内容がありません。トップページで実際にスキャンを実行してください。",
   },
 };
