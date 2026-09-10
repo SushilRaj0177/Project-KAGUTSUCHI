@@ -102,6 +102,7 @@ export const translations: Record<Lang, Dict> = {
       filesystem: "Path Traversal",
       auth_change: "Authentication Bypass",
       network_egress: "Unsafe Network Access",
+      other: "Security Vulnerability",
     },
     whatHappened: "What happened",
     plainVerifiedFixed:
@@ -169,6 +170,7 @@ export const translations: Record<Lang, Dict> = {
       filesystem: "パストラバーサル",
       auth_change: "認証バイパス",
       network_egress: "危険なネットワークアクセス",
+      other: "セキュリティ脆弱性",
     },
     whatHappened: "何が起きたか",
     plainVerifiedFixed:

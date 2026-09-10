@@ -18,6 +18,7 @@ from pathlib import Path
 
 from contracts import SecurityFinding
 from system.analysis.ast_scan import scan_source
+from system.analysis.llm_scan import scan_source_with_llm
 
 _GITHUB_URL_RE = re.compile(
     r"^https://github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(\.git)?/?$"
@@ -27,6 +28,12 @@ _SKIP_DIRS = {".git", "node_modules", "venv", ".venv", "env", "site-packages", "
 _MAX_FILES = 300
 _MAX_FILE_BYTES = 300_000
 _CLONE_TIMEOUT_S = 30
+# The AST pass is free and instant so it runs on every file up to
+# _MAX_FILES; the LLM pass is a real network call per file, so it's
+# capped separately to keep a repo scan from firing hundreds of Groq
+# calls and blowing past latency/rate limits. Still covers the files most
+# likely to matter, since findings.py sorts by severity afterward anyway.
+_MAX_LLM_FILES = 15
 
 
 class InvalidRepoUrl(ValueError):
@@ -122,6 +129,8 @@ def scan_repo(repo_url: str) -> RepoScanResult:
                 file_findings = scan_source(source, rel_path)
             except SyntaxError:
                 continue
+            if files_scanned <= _MAX_LLM_FILES:
+                file_findings = file_findings + scan_source_with_llm(source, rel_path)
             if file_findings:
                 findings.extend(file_findings)
                 sources[rel_path] = source

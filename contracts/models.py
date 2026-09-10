@@ -30,6 +30,7 @@ class SensitiveOp(str, Enum):
     DESERIALIZATION = "deserialization"
     AUTH_CHANGE = "auth_change"
     NETWORK_EGRESS = "network_egress"
+    OTHER = "other"
 
 
 class Severity(str, Enum):

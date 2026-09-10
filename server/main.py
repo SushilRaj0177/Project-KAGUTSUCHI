@@ -30,6 +30,7 @@ from integration.upload_pipeline import AttackGenerationUnavailable, verify_uplo
 from server.rate_limit import rate_limit
 from server.repo_scan import CloneFailed, InvalidRepoUrl, scan_repo
 from system.analysis.ast_scan import scan_source
+from system.analysis.llm_scan import scan_source_with_llm
 from system.sandbox.docker_runner import SandboxUnavailableError
 
 app = FastAPI(title="KAGUTSUCHI upload API")
@@ -79,14 +80,36 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+def _dedup_findings(findings: list[SecurityFinding]) -> list[SecurityFinding]:
+    """ast_scan and llm_scan can both flag the same call site - keep the
+    first (ast_scan's, since it runs first below and is the cheaper,
+    deterministic signal) when they agree on file/symbol/sensitive_op."""
+    seen: set[tuple[str, str, str]] = set()
+    deduped: list[SecurityFinding] = []
+    for finding in findings:
+        key = (finding.file_path, finding.symbol, finding.sensitive_op.value)
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(finding)
+    return deduped
+
+
 @app.post("/api/analyze", response_model=AnalyzeResponse)
 def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
-    """Pure AST scan. Never imports or executes the uploaded source."""
+    """AST scan (deterministic, fixed pattern list) PLUS an LLM pass that
+    reads the source for vulnerability classes the AST rules don't know
+    about. Neither scan executes the uploaded source - only /api/verify
+    ever runs anything, and only in the sandbox. The LLM's findings are
+    not trusted on their own say-so: they flow into the same
+    hypothesize -> attack -> verify pipeline as everything else, so a
+    wrong LLM hunch comes back FALSE_POSITIVE rather than a false claim."""
     try:
         findings = scan_source(req.source, req.file_path)
     except SyntaxError as exc:
         raise HTTPException(status_code=400, detail=f"Not valid Python: {exc}") from exc
-    return AnalyzeResponse(findings=findings)
+    findings.extend(scan_source_with_llm(req.source, req.file_path))
+    return AnalyzeResponse(findings=_dedup_findings(findings))
 
 
 @app.post("/api/analyze-repo", response_model=RepoAnalyzeResponse, dependencies=[Depends(rate_limit)])
@@ -101,7 +124,7 @@ def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     severity_rank = {"high": 0, "medium": 1, "low": 2}
-    findings = sorted(result.findings, key=lambda f: severity_rank.get(f.severity_hint.value, 3))
+    findings = sorted(_dedup_findings(result.findings), key=lambda f: severity_rank.get(f.severity_hint.value, 3))
 
     return RepoAnalyzeResponse(
         owner=result.owner,
