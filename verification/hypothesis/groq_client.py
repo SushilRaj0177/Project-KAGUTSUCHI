@@ -20,11 +20,19 @@ class GroqUnavailable(Exception):
     """Raised when the Groq API can't be reached or is rate-limited."""
 
 
+_REQUEST_TIMEOUT_S = 20.0
+
+
 def _client() -> Groq:
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
         raise GroqUnavailable("GROQ_API_KEY is not set")
-    return Groq(api_key=api_key)
+    # Bound the worst case explicitly - a slow/hanging Groq call (rather
+    # than a clean failure) shouldn't be able to blow a caller's own
+    # gateway/function timeout (see COORDINATION.md's repo-scan 504 note:
+    # server/repo_scan.py runs several of these concurrently and needs
+    # each one capped, not just retried on outright failure).
+    return Groq(api_key=api_key, timeout=_REQUEST_TIMEOUT_S)
 
 
 def generate_hypothesis_json(prompt: str, model: str = DEFAULT_MODEL) -> dict:

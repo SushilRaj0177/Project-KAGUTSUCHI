@@ -13,6 +13,7 @@ from __future__ import annotations
 import re
 import subprocess
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -29,11 +30,12 @@ _MAX_FILES = 300
 _MAX_FILE_BYTES = 300_000
 _CLONE_TIMEOUT_S = 30
 # The AST pass is free and instant so it runs on every file up to
-# _MAX_FILES; the LLM pass is a real network call per file, so it's
-# capped separately to keep a repo scan from firing hundreds of Groq
-# calls and blowing past latency/rate limits. Still covers the files most
-# likely to matter, since findings.py sorts by severity afterward anyway.
-_MAX_LLM_FILES = 15
+# _MAX_FILES; the LLM pass is a real network call per file. These run
+# concurrently (see scan_repo below), so the wall-clock cost is roughly
+# one Groq call's latency, not N of them - but each worker still counts
+# against Groq's own per-account rate limit, so this stays capped rather
+# than firing one request per file in a 300-file repo.
+_MAX_LLM_FILES = 10
 
 
 class InvalidRepoUrl(ValueError):
@@ -114,7 +116,11 @@ def scan_repo(repo_url: str) -> RepoScanResult:
         sources: dict[str, str] = {}
         files_scanned = 0
         truncated = False
+        llm_candidates: list[tuple[str, str]] = []  # (rel_path, source), capped below
 
+        # Pass 1: AST scan every file - this is free and instant (no
+        # network call), so it stays fully sequential and covers all
+        # _MAX_FILES files regardless of the LLM cap below.
         for path in _iter_python_files(root):
             if path is None:
                 truncated = True
@@ -129,11 +135,27 @@ def scan_repo(repo_url: str) -> RepoScanResult:
                 file_findings = scan_source(source, rel_path)
             except SyntaxError:
                 continue
-            if files_scanned <= _MAX_LLM_FILES:
-                file_findings = file_findings + scan_source_with_llm(source, rel_path)
             if file_findings:
                 findings.extend(file_findings)
                 sources[rel_path] = source
+            if len(llm_candidates) < _MAX_LLM_FILES:
+                llm_candidates.append((rel_path, source))
+
+        # Pass 2: LLM scan, one real network call per file - run these
+        # concurrently (they're I/O-bound, not CPU-bound) instead of one
+        # at a time, so the wall-clock cost is close to the SLOWEST single
+        # call rather than the sum of all of them. Sequential calls here
+        # is what caused a live 504 (repo with >1 file blew past the
+        # gateway's request timeout).
+        if llm_candidates:
+            with ThreadPoolExecutor(max_workers=len(llm_candidates)) as pool:
+                llm_results = pool.map(
+                    lambda item: scan_source_with_llm(item[1], item[0]), llm_candidates
+                )
+            for (rel_path, source), file_findings in zip(llm_candidates, llm_results):
+                if file_findings:
+                    findings.extend(file_findings)
+                    sources.setdefault(rel_path, source)
 
         return RepoScanResult(
             owner=owner,
