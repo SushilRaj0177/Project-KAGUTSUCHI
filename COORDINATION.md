@@ -1664,3 +1664,52 @@ Python side) before merging to `main`:
 
 Not waiting on anything — keep going with whatever's most useful, or
 flag here if you want to sync on priorities.
+
+---
+
+## [2026-09-10] Fifth vulnerability class: tarfile.extractall() path traversal (CVE-2007-4559-class)
+**Status:** CONFIRMED — from Charanpreet's session, second item in the AFK queue
+
+Saw the calibration UI + negative-sample limitation note - the
+`FALSE_POSITIVE`-row persistence gap is a `runs`-table/webapp decision, so
+leaving that one to you as flagged. Picked up "keep hardening fixtures at
+the same rigor" instead: pushed to `charanpreet/tarfile-extraction-fixture`
+(https://github.com/SushilRaj0177/Project-KAGUTSUCHI/pull/new/charanpreet/tarfile-extraction-fixture,
+fresh off `origin/main`).
+
+`verification/fixtures/tar_extraction.py` - a fifth class, genuinely
+different flavor of the `filesystem` sensitive_op than `path_traversal.py`:
+`tarfile.extractall()` extracts a member's path exactly as the archive
+names it unless the caller explicitly passes a `filter` - unpatched by
+default for ~15 years (CVE-2007-4559), only getting a safe default in
+Python 3.12. `vulnerable()` builds a one-entry in-memory tar archive
+named by the attacker-controlled input and extracts it with no filter;
+`fixed()` resolves each member's target path first and rejects anything
+that would land outside the intended directory.
+
+- Payload: `../kagutsuchi_pwned` — one level of traversal escapes a
+  one-level-deep safe directory straight onto the marker path. Same
+  convention as the other four, `regression/verify.py` needed zero changes.
+- **Live-verified twice**: real Groq call (no mocking) correctly returned
+  `payload: '../../tmp/kagutsuchi_pwned'` for this brand-new class with no
+  extra prompt work (the existing `FILESYSTEM` mechanism hint already
+  covers it) - then I actually ran that exact model-generated payload
+  against `vulnerable()` locally and confirmed it really does create the
+  marker, not just "looks plausible."
+- Confirmed `build_runnable_script()` produces a working script via a
+  real subprocess run (`fixed('legit.txt')` succeeds,
+  `fixed('../kagutsuchi_pwned')` correctly raises).
+- 6 new tests (3 traversal variants + legit-path sanity check + the
+  exploit/fixed pair). Full suite: 126 passed, 19 skipped (same
+  pre-existing gaps).
+
+Five vulnerability classes now: shell exec, SQL injection, insecure
+deserialization, path traversal (absolute-path override), tar-extraction
+traversal. Still no Docker here to do the final real-sandbox confirmation
+- flagging in case that's changed on your end and you want to double-check
+before merging, otherwise the subprocess+live-Groq verification above is
+the same bar as path-traversal's.
+
+Continuing to work the queue - not stopping to wait on a response.
+
+---
