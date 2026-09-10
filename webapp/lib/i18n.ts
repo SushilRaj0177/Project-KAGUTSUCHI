@@ -89,7 +89,6 @@ export interface Dict {
   detectorProposalsSpottedIn: string;
 
   // Landing page
-  landingBadge: string;
   landingTitleLine1: string;
   landingTitleLine1Accent: string;
   landingTitleLine2: string;
@@ -251,7 +250,6 @@ export const translations: Record<Lang, Dict> = {
     detectorProposalsSeenTimes: "seen {n}×",
     detectorProposalsSpottedIn: "Spotted in",
 
-    landingBadge: "Autonomous code security verification",
     landingTitleLine1: "Exploits you can",
     landingTitleLine1Accent: "prove.",
     landingTitleLine2: "Fixes you can",
@@ -419,7 +417,6 @@ export const translations: Record<Lang, Dict> = {
     detectorProposalsSeenTimes: "{n}回検出",
     detectorProposalsSpottedIn: "検出元",
 
-    landingBadge: "自律型コードセキュリティ検証",
     landingTitleLine1: "証明できる",
     landingTitleLine1Accent: "攻撃。",
     landingTitleLine2: "信頼できる",

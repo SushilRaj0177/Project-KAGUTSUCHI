@@ -68,12 +68,7 @@ export function LandingPage() {
 
       {/* Hero */}
       <section className="py-10 md:py-16">
-        <div className={`inline-flex items-center gap-2 border border-line-strong px-3 py-1.5 font-mono text-[11px] tracking-wide text-steel-400 uppercase ${jp}`}>
-          <span className="h-1.5 w-1.5 rounded-full bg-neon-cyan cursor-blink" />
-          {t.landingBadge}
-        </div>
-
-        <h1 className={`font-display mt-6 max-w-3xl text-5xl leading-[1.05] font-extrabold tracking-tight text-paper-50 md:text-7xl ${jp}`}>
+        <h1 className={`font-display max-w-3xl text-5xl leading-[1.05] font-extrabold tracking-tight text-paper-50 md:text-7xl ${jp}`}>
           {t.landingTitleLine1} <span className="neon-text-pink">{t.landingTitleLine1Accent}</span>
           <br />
           {t.landingTitleLine2} <span className="neon-text-cyan">{t.landingTitleLine2Accent}</span>
