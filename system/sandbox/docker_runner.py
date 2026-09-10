@@ -17,6 +17,7 @@ from pathlib import Path
 import docker
 
 from contracts import ExecutionEvidence, ExecutionPhase
+from system.sandbox.subprocess_runner import run_in_subprocess_sandbox
 
 _IMAGE = "kagutsuchi-sandbox:latest"
 _DOCKERFILE_DIR = Path(__file__).parent
@@ -90,8 +91,24 @@ def run_in_sandbox(
     """Run `candidate_code` (a Python script that reads the attack payload
     from sys.argv[1]) inside an isolated, network-disabled container and
     return the recorded ExecutionEvidence.
+
+    Falls back to system.sandbox.subprocess_runner (reduced isolation,
+    flagged via policy_violations) when no Docker daemon is reachable --
+    e.g. on hosts like Render's free tier that don't support
+    Docker-in-Docker. Only raises SandboxUnavailableError if that
+    fallback itself can't run either.
     """
-    client = _client()
+    try:
+        client = _client()
+    except SandboxUnavailableError:
+        return run_in_subprocess_sandbox(
+            candidate_code=candidate_code,
+            payload=payload,
+            hypothesis_id=hypothesis_id,
+            run_id=run_id,
+            phase=phase,
+            timeout_s=timeout_s,
+        )
     _ensure_image(client)
     container = client.containers.create(
         image=_IMAGE,

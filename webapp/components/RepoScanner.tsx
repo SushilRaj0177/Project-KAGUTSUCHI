@@ -30,7 +30,7 @@ interface RepoAnalyzeResponse {
 
 interface VerifyResponse {
   hypothesis: { payload: string; security_property: string };
-  before: { exit_code: number; filesystem_diff: { created?: string[] } };
+  before: { exit_code: number; filesystem_diff: { created?: string[] }; policy_violations?: string[] };
   fixed_source: string | null;
   after: { exit_code: number; filesystem_diff: { created?: string[] } } | null;
   result: { verdict: string; summary: string } | null;
@@ -163,6 +163,12 @@ function FindingCard({
                   </p>
                 )}
               </div>
+
+              {verifyResult.before.policy_violations && verifyResult.before.policy_violations.length > 0 && (
+                <p className={`border border-line-strong bg-void-900 p-3 font-mono text-xs text-steel-400 ${jp}`}>
+                  {t.reducedIsolationNotice}
+                </p>
+              )}
 
               <div>
                 <div className={`bracket-label mb-2 font-mono text-xs font-bold text-steel-400 uppercase ${jp}`}>
