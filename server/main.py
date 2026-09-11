@@ -35,6 +35,7 @@ from server.repo_scan import CloneFailed, InvalidRepoUrl, _parse_github_url, sca
 from system.analysis.ast_scan import scan_source
 from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
 from system.sandbox.docker_runner import SandboxUnavailableError
+from system.sandbox.isolation_probe import run_isolation_probe
 
 app = FastAPI(title="KAGUTSUCHI upload API")
 
@@ -126,6 +127,24 @@ class RepoAnalyzeResponse(BaseModel):
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/api/debug/isolation-probe", dependencies=[Depends(rate_limit)])
+def isolation_probe() -> dict:
+    """TEMPORARY diagnostic - see system/sandbox/isolation_probe.py and
+    scripts/probe_isolation.py. Answers one question: can THIS deployed
+    host build a bespoke namespace/cgroup-based sandbox runtime, or does
+    it hit the same wall Docker-in-Docker already hits here? Every check
+    is side-effect-free (spawns short-lived child processes, cleans up
+    any scratch files it creates) - safe to hit on a live deployment.
+
+    Remove this route once you have your answer; it's meant to be
+    curled once from the live URL, not to stay in the shipped API
+    surface indefinitely. Rate-limited like every other endpoint, but
+    deliberately not behind any secret - the information it reveals
+    (which kernel namespaces/cgroups this process can touch) has
+    reconnaissance value but isn't a secret in itself."""
+    return run_isolation_probe().as_dict()
 
 
 def _dedup_findings(findings: list[SecurityFinding]) -> list[SecurityFinding]:
