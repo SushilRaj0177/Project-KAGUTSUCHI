@@ -1,4 +1,4 @@
-import { recordDetectorProposal } from "@/lib/db";
+import { listApprovedLearnedSignatures, recordDetectorProposal } from "@/lib/db";
 
 // Shared between the synchronous scan route (analyze-repo/route.ts) and
 // the async job-based one (analyze-repo/start + analyze-repo/jobs/[jobId])
@@ -40,6 +40,29 @@ export async function resolveHeadSha(owner: string, repo: string): Promise<strin
     return /^[0-9a-f]{40}$/.test(sha) ? sha : null;
   } catch {
     return null;
+  }
+}
+
+/** Injects every approved-but-not-yet-hand-promoted detector proposal
+ * into an outgoing scan request body as `learned_signatures`, so an
+ * approval on /detector-proposals starts actually being checked for on
+ * the very next scan - the closed loop, not just a discovery feed. Best-
+ * effort: a lookup failure (e.g. DATABASE_URL not configured) just means
+ * the request goes out with no learned signatures, same as before this
+ * existed, never a failed scan. */
+export async function withLearnedSignatures(bodyText: string): Promise<string> {
+  let signatures: unknown[] = [];
+  try {
+    signatures = await listApprovedLearnedSignatures();
+  } catch {
+    return bodyText;
+  }
+  if (signatures.length === 0) return bodyText;
+  try {
+    const parsed = JSON.parse(bodyText);
+    return JSON.stringify({ ...parsed, learned_signatures: signatures });
+  } catch {
+    return bodyText;
   }
 }
 

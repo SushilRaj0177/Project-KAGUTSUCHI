@@ -116,6 +116,26 @@ class _CallSite:
     op: SensitiveOp | None = None
     rationale: str | None = None
     detector: str | None = None
+    severity: Severity | None = None
+
+
+@dataclass(frozen=True)
+class LearnedSignature:
+    """A detector proposal a human has approved on /detector-proposals,
+    fed back into the scan as a live check - the closed loop referenced in
+    system/analysis/llm_scan.py's docstring.
+
+    Deliberately the same trust model as a hand-written _SIGNATURES entry:
+    matched purely on dotted call name, gated through the exact same
+    `_call_is_tainted` check as everything else. This is data, produced by
+    a human clicking Approve, not code an LLM ever gets to write or run -
+    the actual signature-matching logic here is identical to what already
+    runs for every built-in detector."""
+
+    op: SensitiveOp
+    rationale: str
+    detector: str
+    severity: Severity
 
 
 def _is_string_built(node: ast.expr) -> bool:
@@ -340,7 +360,9 @@ def _call_is_tainted(node: ast.Call, tainted: set[str]) -> bool:
     return _expr_references(node, tainted)
 
 
-def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
+def sensitive_ops_in_function(
+    func_node: ast.FunctionDef, *, extra_signatures: dict[str, LearnedSignature] | None = None
+) -> list[_CallSite]:
     hits: list[_CallSite] = []
     tainted = _tainted_names(func_node)
     for node in ast.walk(func_node):
@@ -351,6 +373,20 @@ def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
         name = _dotted_call_name(node)
         if name in _SIGNATURES:
             hits.append(_CallSite(func_node.name, name, node.lineno))
+            continue
+        learned = extra_signatures.get(name) if extra_signatures and name else None
+        if learned is not None:
+            hits.append(
+                _CallSite(
+                    func_node.name,
+                    name,
+                    node.lineno,
+                    op=learned.op,
+                    rationale=learned.rationale,
+                    detector=learned.detector,
+                    severity=learned.severity,
+                )
+            )
             continue
         for heuristic in (_sql_call_hit, _django_sql_call_hit, _yaml_load_hit, _ssti_hit):
             hit = heuristic(node)
@@ -367,13 +403,21 @@ def _function_source(source_lines: list[str], func_node: ast.FunctionDef) -> str
 
 
 def scan_source(
-    source: str, file_path: str, *, only_symbols: set[str] | None = None
+    source: str,
+    file_path: str,
+    *,
+    only_symbols: set[str] | None = None,
+    extra_signatures: dict[str, LearnedSignature] | None = None,
 ) -> list[SecurityFinding]:
     """Parse `source`, return one SecurityFinding per sensitive call site
     found inside any top-level or nested function definition.
 
     If `only_symbols` is given, restrict findings to functions whose name
     is in that set — used by scan_diff to report only on changed code.
+
+    If `extra_signatures` is given (dotted call name -> LearnedSignature),
+    those are checked for too, on top of the built-in _SIGNATURES table -
+    see LearnedSignature's docstring for what feeds this.
     """
     tree = ast.parse(source, filename=file_path)
     source_lines = source.splitlines()
@@ -383,11 +427,13 @@ def scan_source(
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
             if only_symbols is not None and node.name not in only_symbols:
                 continue
-            for hit in sensitive_ops_in_function(node):  # type: ignore[arg-type]
+            for hit in sensitive_ops_in_function(node, extra_signatures=extra_signatures):  # type: ignore[arg-type]
                 if hit.op is not None:
                     op, rationale, detector = hit.op, hit.rationale, hit.detector
+                    severity = hit.severity or _SEVERITY_BY_OP.get(op, Severity.MEDIUM)
                 else:
                     op, rationale, detector = _SIGNATURES[hit.call_name]
+                    severity = _SEVERITY_BY_OP.get(op, Severity.MEDIUM)
                 findings.append(
                     SecurityFinding(
                         file_path=file_path,
@@ -396,7 +442,7 @@ def scan_source(
                         sensitive_op=op,
                         rationale=f"{rationale} (call: {hit.call_name}, line {hit.lineno})",
                         detected_by=detector,
-                        severity_hint=_SEVERITY_BY_OP.get(op, Severity.MEDIUM),
+                        severity_hint=severity,
                     )
                 )
     return findings

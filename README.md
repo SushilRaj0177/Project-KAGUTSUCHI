@@ -46,8 +46,13 @@ Two detection engines feed the same pipeline:
    signatures. Instant, no network, no false negatives on what it knows.
 2. **AI scan** — reads the code for *meaning*, catches classes the fixed
    list doesn't know about yet, and can propose a brand-new detector
-   signature for human review (never auto-applied — see
-   `/detector-proposals`).
+   signature for human review at `/detector-proposals`. Never
+   auto-applied: a human clicking Approve is what makes a proposal start
+   being checked for on every future scan (as plain data — a dotted call
+   name, matched through the exact same taint-gated logic as every
+   built-in detector, never AI-authored code running unreviewed), and a
+   human hand-writing it into `ast_scan.py` (see
+   `scripts/promote_detector.py`) is what makes it permanent.
 
 Every finding — from either engine — flows into the same
 hypothesize → attack → verify loop. A wrong AI guess comes back

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from "@/lib/clientIp";
 import { getCachedRepoScan } from "@/lib/db";
-import { GITHUB_URL_RE, persistProposals, resolveHeadSha } from "@/lib/repoScanShared";
+import { GITHUB_URL_RE, persistProposals, resolveHeadSha, withLearnedSignatures } from "@/lib/repoScanShared";
 
 // Kicks off a repo scan as a background job on the backend and returns
 // almost instantly with a job_id -- see server/jobs.py and
@@ -49,7 +49,7 @@ export async function POST(request: NextRequest) {
     const upstream = await fetch(`${backendUrl.replace(/\/$/, "")}/api/analyze-repo/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Client-IP": clientIp(request) },
-      body: bodyText,
+      body: await withLearnedSignatures(bodyText),
     });
     const data = await upstream.text();
     if (!upstream.ok) {

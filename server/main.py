@@ -25,14 +25,14 @@ from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-from contracts import SecurityFinding
+from contracts import SecurityFinding, Severity, SensitiveOp
 from integration.file_patch import SymbolNotFound, apply_function_fix
 from integration.github_pr import GitHubPrError, open_fix_pr
 from integration.upload_pipeline import AttackGenerationUnavailable, verify_upload
 from server.jobs import get_job, start_job
 from server.rate_limit import daily_rate_limit, rate_limit
 from server.repo_scan import CloneFailed, InvalidRepoUrl, _parse_github_url, scan_repo
-from system.analysis.ast_scan import scan_source
+from system.analysis.ast_scan import LearnedSignature, scan_source
 from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
 from system.sandbox.docker_runner import SandboxUnavailableError
 from system.sandbox.isolation_probe import run_isolation_probe
@@ -52,9 +52,41 @@ app.add_middleware(
 )
 
 
+class LearnedSignatureIn(BaseModel):
+    """An approved detector proposal, sent along with a scan request by
+    the webapp (see webapp/lib/db.ts's listApprovedLearnedSignatures) so
+    a human's Approve click on /detector-proposals starts actually being
+    checked for immediately. Plain data - a dotted call name plus a
+    rationale and severity - converted below into the same LearnedSignature
+    shape ast_scan.py matches through its normal, taint-gated call-name
+    lookup. Nothing here is ever executed as code."""
+
+    class_name: str
+    call_signature: str
+    rationale: str
+    severity_hint: str = "medium"
+
+
+def _severity_from_hint(hint: str) -> Severity:
+    return {"low": Severity.LOW, "high": Severity.HIGH}.get(hint.lower(), Severity.MEDIUM)
+
+
+def _extra_signatures(items: list[LearnedSignatureIn]) -> dict[str, LearnedSignature]:
+    return {
+        item.call_signature: LearnedSignature(
+            op=SensitiveOp.OTHER,
+            rationale=f"{item.rationale} (community-approved detector: {item.class_name})",
+            detector=f"learned.{item.class_name}",
+            severity=_severity_from_hint(item.severity_hint),
+        )
+        for item in items
+    }
+
+
 class AnalyzeRequest(BaseModel):
     source: str
     file_path: str = "uploaded.py"
+    learned_signatures: list[LearnedSignatureIn] = []
 
 
 class DetectorProposalOut(BaseModel):
@@ -96,6 +128,7 @@ class VerifyRequest(BaseModel):
 class RepoAnalyzeRequest(BaseModel):
     repo_url: str
     ref: str | None = None  # branch/tag to scan instead of the default branch
+    learned_signatures: list[LearnedSignatureIn] = []
 
 
 class OpenPrRequest(BaseModel):
@@ -172,7 +205,7 @@ def analyze(req: AnalyzeRequest) -> AnalyzeResponse:
     hypothesize -> attack -> verify pipeline as everything else, so a
     wrong LLM hunch comes back FALSE_POSITIVE rather than a false claim."""
     try:
-        findings = scan_source(req.source, req.file_path)
+        findings = scan_source(req.source, req.file_path, extra_signatures=_extra_signatures(req.learned_signatures))
     except SyntaxError as exc:
         raise HTTPException(status_code=400, detail=f"Not valid Python: {exc}") from exc
     llm_result = scan_source_with_llm(req.source, req.file_path)
@@ -207,7 +240,7 @@ def analyze_repo(req: RepoAnalyzeRequest) -> RepoAnalyzeResponse:
     COORDINATION.md). /api/analyze-repo/start below is the same scan run
     as a background job instead, for callers that can poll."""
     try:
-        result = scan_repo(req.repo_url, req.ref)
+        result = scan_repo(req.repo_url, req.ref, extra_signatures=_extra_signatures(req.learned_signatures))
     except InvalidRepoUrl as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except CloneFailed as exc:
@@ -234,7 +267,7 @@ def analyze_repo_start(req: RepoAnalyzeRequest) -> JobStartedResponse:
     the result."""
 
     def _do_scan() -> RepoAnalyzeResponse:
-        result = scan_repo(req.repo_url, req.ref)
+        result = scan_repo(req.repo_url, req.ref, extra_signatures=_extra_signatures(req.learned_signatures))
         return _repo_analyze_response(result)
 
     job_id = start_job(_do_scan)

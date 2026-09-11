@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from contracts import SecurityFinding
-from system.analysis.ast_scan import scan_source
+from system.analysis.ast_scan import LearnedSignature, scan_source
 from system.analysis.llm_scan import DetectorProposal, scan_source_with_llm
 
 _GITHUB_URL_RE = re.compile(
@@ -118,7 +118,9 @@ def _iter_python_files(root: Path):
         yield None  # sentinel: more matching files existed than the cap
 
 
-def scan_repo(repo_url: str, ref: str | None = None) -> RepoScanResult:
+def scan_repo(
+    repo_url: str, ref: str | None = None, extra_signatures: dict[str, LearnedSignature] | None = None
+) -> RepoScanResult:
     owner, repo = _parse_github_url(repo_url)
 
     with tempfile.TemporaryDirectory(prefix="kagutsuchi-repo-") as tmp:
@@ -145,7 +147,7 @@ def scan_repo(repo_url: str, ref: str | None = None) -> RepoScanResult:
                 continue
             files_scanned += 1
             try:
-                file_findings = scan_source(source, rel_path)
+                file_findings = scan_source(source, rel_path, extra_signatures=extra_signatures)
             except SyntaxError:
                 continue
             if file_findings:

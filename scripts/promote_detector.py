@@ -4,15 +4,23 @@ Turns an AI-discovered detector proposal (see system/analysis/llm_scan.py
 and the /detector-proposals page) into a ready-to-review code snippet for
 ast_scan.py's deterministic _SIGNATURES table.
 
-Deliberately does NOT edit ast_scan.py itself. Auto-applying live,
-LLM-derived output to the trusted static-analysis code path would be a
-real self-modifying-code risk (a crafted repo could try to trick the
-model into proposing a bogus or overly broad signature) - this project's
-whole design principle is "the AI proposes, something deterministic and
-reviewed disposes." A human (or a session acting on a human's behalf)
-reads the printed snippet, judges whether the signature is real and
-correctly scoped, adds it themselves, writes a test the same way every
-other detector in this file has one, and only then confirms promotion.
+Note this is the SLOW, permanent path, not the only one: clicking Approve
+on /detector-proposals now also works, and immediately - see
+ast_scan.py's LearnedSignature and webapp/lib/db.ts's
+listApprovedLearnedSignatures. That path is still safe from the same
+self-modifying-code risk this script's design avoids (a crafted repo
+trying to trick the model into proposing a bogus or overly broad
+signature): an approved proposal is sent to every scan as plain data (a
+dotted call name + rationale + severity) and matched through the exact
+same taint-gated call-name lookup as every hand-written signature -
+nothing about approving one ever executes AI-authored code. What
+Approve does NOT do is add a real, tested entry to this file, which is
+why this script and its slower, fully-reviewed path still exist: a human
+(or a session acting on a human's behalf) reads the printed snippet,
+judges whether the signature is real and correctly scoped, adds it
+themselves, writes a test the same way every other detector in this file
+has one, and only then confirms promotion - at which point the approved
+row stops being sent as a learned signature (see `promoted`).
 
 Usage:
     # fetch a proposal from the live site by id (shown on /detector-proposals)

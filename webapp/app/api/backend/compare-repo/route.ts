@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { clientIp } from "@/lib/clientIp";
+import { listApprovedLearnedSignatures } from "@/lib/db";
 
 // Runs two full repo scans (one per ref) and diffs the findings -- lets
 // someone answer "did this PR/branch introduce a new vulnerability
@@ -49,11 +50,12 @@ export async function POST(request: NextRequest) {
   }
 
   const ip = clientIp(request);
+  const learnedSignatures = await listApprovedLearnedSignatures().catch(() => []);
   const scanRef = async (ref: string): Promise<ScanResult> => {
     const res = await fetch(`${backendUrl.replace(/\/$/, "")}/api/analyze-repo`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Client-IP": ip },
-      body: JSON.stringify({ repo_url, ref }),
+      body: JSON.stringify({ repo_url, ref, learned_signatures: learnedSignatures }),
     });
     if (!res.ok) {
       const errBody = await res.json().catch(() => ({}));

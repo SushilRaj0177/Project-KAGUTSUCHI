@@ -1,5 +1,5 @@
-from contracts import SensitiveOp
-from system.analysis import scan_diff, scan_source
+from contracts import Severity, SensitiveOp
+from system.analysis import LearnedSignature, scan_diff, scan_source
 
 
 def test_detects_os_system_command_injection():
@@ -273,3 +273,62 @@ def load(data):
     findings = scan_source(src, "sample.py")
     assert len(findings) == 1
     assert findings[0].sensitive_op == SensitiveOp.DESERIALIZATION
+
+
+def test_extra_signatures_are_matched_like_a_builtin_detector():
+    # An approved detector proposal (see webapp's detector-proposals
+    # review flow) is checked for exactly like a hand-written _SIGNATURES
+    # entry - same taint gate, same finding shape.
+    src = """
+def fetch(url):
+    import requests
+    return requests.get(url)
+"""
+    learned = {
+        "requests.get": LearnedSignature(
+            op=SensitiveOp.NETWORK_EGRESS,
+            rationale="requests.get with an attacker-influenced URL is server-side request forgery.",
+            detector="learned.ssrf",
+            severity=Severity.HIGH,
+        )
+    }
+    findings = scan_source(src, "sample.py", extra_signatures=learned)
+    assert len(findings) == 1
+    assert findings[0].sensitive_op == SensitiveOp.NETWORK_EGRESS
+    assert findings[0].detected_by == "learned.ssrf"
+    assert findings[0].severity_hint == Severity.HIGH
+
+
+def test_extra_signatures_still_require_taint():
+    src = """
+def fetch():
+    import requests
+    return requests.get("https://example.com/health")
+"""
+    learned = {
+        "requests.get": LearnedSignature(
+            op=SensitiveOp.NETWORK_EGRESS,
+            rationale="...",
+            detector="learned.ssrf",
+            severity=Severity.HIGH,
+        )
+    }
+    findings = scan_source(src, "sample.py", extra_signatures=learned)
+    assert findings == []
+
+
+def test_builtin_signature_wins_over_a_same_named_extra_signature():
+    src = """
+def run(cmd):
+    import os
+    os.system(cmd)
+"""
+    learned = {
+        "os.system": LearnedSignature(
+            op=SensitiveOp.OTHER, rationale="bogus override", detector="learned.bogus", severity=Severity.LOW
+        )
+    }
+    findings = scan_source(src, "sample.py", extra_signatures=learned)
+    assert len(findings) == 1
+    assert findings[0].detected_by == "ast.shell_exec.os_system"
+    assert findings[0].sensitive_op == SensitiveOp.SHELL_EXEC

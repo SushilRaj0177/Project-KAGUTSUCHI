@@ -139,11 +139,21 @@ let detectorProposalSchemaReady: Promise<void> | null = null;
 
 /** Candidate NEW deterministic detectors, discovered by the LLM scan
  * (system/analysis/llm_scan.py) finding a vulnerability pattern outside
- * ast_scan.py's fixed category list -- see that module's docstring for
- * why a proposal is advisory only, never auto-applied to the real
- * _SIGNATURES table. This is purely the discovery/aggregation side: a
- * human (or a session) reviews these on /detector-proposals and
- * manually promotes one via scripts/promote_detector.py. */
+ * ast_scan.py's fixed category list.
+ *
+ * Two review outcomes, deliberately distinct:
+ *  - `approved` is the fast, closed-loop path: a human clicks Approve on
+ *    /detector-proposals, and the signature (a plain dotted call name +
+ *    rationale + severity - data, never code) starts getting sent to the
+ *    backend's scan calls immediately (see getApprovedLearnedSignatures
+ *    below and RepoAnalyzeRequest.learned_signatures on the Python side).
+ *    Every scan still goes through the exact same taint-gated matching
+ *    logic as a hand-written _SIGNATURES entry - nothing here executes
+ *    AI-authored code.
+ *  - `promoted` is the slower, permanent path: a human has actually
+ *    hand-written the equivalent entry (plus a test) into ast_scan.py's
+ *    real _SIGNATURES table, per scripts/promote_detector.py, so it no
+ *    longer needs to be sent as a learned signature on every request. */
 export function ensureDetectorProposalSchema(): Promise<void> {
   if (!detectorProposalSchemaReady) {
     detectorProposalSchemaReady = sql`
@@ -159,7 +169,10 @@ export function ensureDetectorProposalSchema(): Promise<void> {
         times_seen INTEGER NOT NULL DEFAULT 1,
         promoted BOOLEAN NOT NULL DEFAULT false
       )
-    `.then(() => undefined);
+    `.then(async () => {
+      await sql`ALTER TABLE detector_proposals ADD COLUMN IF NOT EXISTS approved BOOLEAN NOT NULL DEFAULT false`;
+      await sql`ALTER TABLE detector_proposals ADD COLUMN IF NOT EXISTS rejected BOOLEAN NOT NULL DEFAULT false`;
+    });
   }
   return detectorProposalSchemaReady;
 }
@@ -175,6 +188,8 @@ export type DetectorProposalRow = {
   source_repo: string | null;
   times_seen: number;
   promoted: boolean;
+  approved: boolean;
+  rejected: boolean;
 };
 
 /** Upsert-by-signature: the same (class_name, call_signature) pair
@@ -212,9 +227,42 @@ export async function recordDetectorProposal(proposal: {
 export async function listDetectorProposals(): Promise<DetectorProposalRow[]> {
   await ensureDetectorProposalSchema();
   const rows = await sql`
-    SELECT * FROM detector_proposals WHERE promoted = false ORDER BY times_seen DESC, created_at DESC
+    SELECT * FROM detector_proposals WHERE promoted = false AND rejected = false
+    ORDER BY approved DESC, times_seen DESC, created_at DESC
   `;
   return rows as DetectorProposalRow[];
+}
+
+export type LearnedSignature = {
+  class_name: string;
+  call_signature: string;
+  rationale: string;
+  severity_hint: string;
+};
+
+/** Approved-but-not-yet-hand-promoted proposals -- sent along with every
+ * scan request as RepoAnalyzeRequest.learned_signatures so an approved
+ * class starts actually getting checked for immediately, without waiting
+ * for someone to hand-write it into ast_scan.py. Stops being sent once
+ * `promoted` flips true, since the real _SIGNATURES table covers it from
+ * then on. */
+export async function listApprovedLearnedSignatures(): Promise<LearnedSignature[]> {
+  await ensureDetectorProposalSchema();
+  const rows = await sql`
+    SELECT class_name, call_signature, rationale, severity_hint
+    FROM detector_proposals
+    WHERE approved = true AND promoted = false AND rejected = false
+  `;
+  return rows as LearnedSignature[];
+}
+
+export async function setDetectorProposalReview(id: string, review: "approve" | "reject"): Promise<void> {
+  await ensureDetectorProposalSchema();
+  if (review === "approve") {
+    await sql`UPDATE detector_proposals SET approved = true, rejected = false WHERE id = ${id}`;
+  } else {
+    await sql`UPDATE detector_proposals SET rejected = true, approved = false WHERE id = ${id}`;
+  }
 }
 
 export type RunRow = {
