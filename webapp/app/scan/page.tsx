@@ -1,11 +1,8 @@
-import { Header } from "@/components/Header";
-import { RepoScanner } from "@/components/RepoScanner";
-
+// Placeholder only - see webapp/app/page.tsx.
 export default function ScanPage() {
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <Header />
-      <RepoScanner />
+    <main className="p-8">
+      <p>Scan — front-end rebuild in progress.</p>
     </main>
   );
 }
