@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { SiteNav } from "@/components/SiteNav";
 
 interface Finding {
   finding_id: string;
@@ -56,14 +56,7 @@ export default function ComparePage() {
   return (
     <main className="min-h-screen bg-slate-950 px-6 py-8 text-slate-100 sm:px-10">
       <div className="mx-auto max-w-4xl">
-        <nav className="mb-16 flex items-center justify-between">
-          <Link href="/" className="text-sm font-semibold tracking-wide">
-            KAGUTSUCHI
-          </Link>
-          <Link href="/scan" className="text-sm text-slate-400 hover:text-white">
-            Scan
-          </Link>
-        </nav>
+        <SiteNav />
 
         <h1 className="text-3xl font-bold sm:text-4xl">Compare two branches</h1>
         <p className="mt-2 max-w-lg text-slate-400">
