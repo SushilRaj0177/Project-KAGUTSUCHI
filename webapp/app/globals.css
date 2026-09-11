@@ -15,42 +15,89 @@
    generous negative space -- never a centered SaaS-card layout.
    ============================================================ */
 :root {
-  /* Layered dark canvas -- never a flat single black. Each step has a
-     faint warm/cool drift, not a pure luminance ramp. */
-  --ink-950: #0a0a0c;
-  --ink-900: #101013;
-  --ink-850: #16171b;
-  --ink-800: #1d1e23;
-  --ink-700: #2a2c33;
+  /* Cold, oppressive, mostly-dark register -- dystopian instrument
+     panel, not editorial poster. Warm beige/soft icy panels read as a
+     design-agency landing page; this is a colder, harsher, more
+     damaged palette: blue-black voids, hazard steel, sodium-amber
+     warning light as the only "warm" color in the entire system. */
 
-  /* Icy light surfaces -- used as inset panels/cards floating in the
-     dark canvas (the light-grey blocks in the reference), not as a
-     separate "light mode." */
-  --mist-50: #f3f4f2;
-  --mist-100: #e7e9e6;
-  --mist-200: #d3d6d2;
+  /* Void register -- the dominant register now, not one band among three. */
+  --deep-950: #05060a;
+  --deep-900: #0a0c12;
+  --deep-850: #10131a;
+  --deep-800: #171b24;
 
-  /* Text */
-  --paper: #eceeec;
-  --steel-300: #9a9d9f;
-  --steel-500: #6b6e72;
-  --steel-700: #45474b;
+  /* Cold hazard-steel register (replaces the old warm beige band) --
+     desaturated blue-grey, industrial, not friendly. */
+  --steel-mid-500: #4d535c;
+  --steel-mid-400: #5d636d;
+  --steel-mid-300: #767c86;
 
-  /* Hairlines -- the instrument-panel rules and borders. Deliberately
-     low-contrast; ornament should read as etched, not drawn. */
-  --line: #2b2d32;
-  --line-strong: #3c3e44;
+  /* Cold document/dossier register (replaces the old soft icy-pale
+     band) -- still pale, but blue-cold and harder, not warm and soft. */
+  --dossier-50: #c7cdd2;
+  --dossier-100: #b3bac0;
+  --dossier-200: #99a1a9;
 
-  /* Accent marks -- reserved for real signal (severity/verdict), used
-     as small precise chips/ticks, never as washes or brand color. */
-  --mark-lime: #cdf069;
-  --mark-magenta: #ff3d76;
-  --mark-cyan: #5fd4e8;
-  --mark-blue: #3e6fd9;
+  --paper: #dfe3e6;
+  --steel-300: #8b9299;
+  --steel-500: #5d636b;
+  --steel-700: #3a3e45;
+
+  /* Hairlines. */
+  --line: #262a33;
+  --line-strong: #383d47;
+  --line-on-light: #00000030;
+  --line-on-light-strong: #00000055;
+
+  /* Signal color -- severity/verdict marks PLUS one deliberate hazard
+     tone (amber) used for warning stripes/redaction tags. Cyan/blue
+     read as cold system light; amber is the one warm intrusion,
+     reserved for danger, matching a sodium-lamp/hazard-tape feeling. */
+  --mark-lime: #a8e639;
+  --mark-magenta: #ff2d5e;
+  --mark-cyan: #4fd8e8;
+  --mark-blue: #2e5fd9;
+  --mark-amber: #ffb020;
 
   --font-display: var(--font-display);
   --font-serif: var(--font-serif);
   --font-mono: var(--font-mono);
+}
+
+/* Per-register foreground/hairline overrides -- apply to a section
+   wrapper so everything inside inherits the correct ink for that
+   exposure band. */
+.on-deep {
+  background: var(--deep-950);
+  color: var(--paper);
+}
+.on-deep .hairline {
+  background: var(--line);
+}
+
+/* Dark industrial steel panel -- NOT a bright band. Dystopian futurism
+   is mostly void with rare cold light, not alternating light/dark
+   bands; this reads as a darker structural layer within the same
+   oppressive register as .on-deep, just with a cold blue-steel cast. */
+.on-warm {
+  background: linear-gradient(180deg, var(--deep-850), var(--deep-900));
+  color: var(--paper);
+}
+.on-warm .hairline {
+  background: var(--line);
+}
+
+/* The ONE pale register in the whole system -- a cold classified-
+   dossier insert, used sparingly and deliberately, not a full bright
+   hero band. Its rarity is what makes it read as an anomaly/evidence
+   panel rather than "the light theme." */
+.on-ice {
+  background: var(--dossier-100);
+  color: var(--deep-950);
+}
+.on-ice .hairline {
+  background: var(--line-on-light);
 }
 
 * {
@@ -58,12 +105,12 @@
 }
 
 html {
-  background: var(--ink-950);
+  background: var(--deep-950);
   color-scheme: dark;
 }
 
 body {
-  background: var(--ink-950);
+  background: var(--deep-950);
   color: var(--paper);
   font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   font-feature-settings: "ss01" 1;
@@ -88,27 +135,69 @@ body {
   background: var(--line);
 }
 
-.panel-mist {
-  background: var(--mist-50);
-  color: var(--ink-950);
-}
-
-.panel-mist .hairline {
-  background: var(--mist-200);
-}
-
 /* Fine film-grain, applied as a fixed overlay -- see components/ornament/Grain.tsx.
-   Kept as a CSS class (not inline per-use) so its cost is paid once. */
+   Kept as a CSS class (not inline per-use) so its cost is paid once.
+   Pushed much higher than a typical "subtle noise" pass (0.035) -- the
+   reference board's surfaces are genuinely grainy/painterly, not flat
+   digital color with a hint of texture. */
 .grain-overlay {
   pointer-events: none;
   position: fixed;
   inset: 0;
   z-index: 50;
-  opacity: 0.035;
+  opacity: 0.1;
   mix-blend-mode: overlay;
 }
 
 ::selection {
   background: var(--mark-cyan);
-  color: var(--ink-950);
+  color: var(--deep-950);
+}
+
+/* RGB-split glitch text -- see components/ornament/Glitch.tsx. Static
+   offset by default (cheap, always-on signal of damage/corruption);
+   the flicker keyframes nudge it very occasionally so it reads as a
+   live, slightly unstable signal rather than a decorative sticker. */
+.glitch-layer {
+  position: absolute;
+  inset: 0;
+  clip-path: inset(0);
+}
+.glitch-cyan {
+  color: var(--mark-cyan);
+  transform: translate(-1.5px, 0.5px);
+  mix-blend-mode: screen;
+  animation: glitch-flicker-a 6s infinite steps(1);
+}
+.glitch-magenta {
+  color: var(--mark-magenta);
+  transform: translate(1.5px, -0.5px);
+  mix-blend-mode: screen;
+  animation: glitch-flicker-b 6s infinite steps(1);
+}
+@keyframes glitch-flicker-a {
+  0%, 92%, 100% { transform: translate(-1.5px, 0.5px); opacity: 0.75; }
+  93% { transform: translate(-5px, 1px); opacity: 1; }
+  94% { transform: translate(2px, -1px); opacity: 0.4; }
+}
+@keyframes glitch-flicker-b {
+  0%, 95%, 100% { transform: translate(1.5px, -0.5px); opacity: 0.75; }
+  96% { transform: translate(4px, -1px); opacity: 1; }
+  97% { transform: translate(-2px, 1px); opacity: 0.4; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .glitch-cyan, .glitch-magenta { animation: none; }
+}
+
+/* Hazard stripe -- diagonal amber/black repeating pattern, the one
+   place a warm color is allowed, reserved for danger/critical signal
+   (high-severity findings, alerts) -- see components/ornament/HazardStripe.tsx. */
+.hazard-stripe {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--mark-amber) 0px,
+    var(--mark-amber) 8px,
+    var(--deep-950) 8px,
+    var(--deep-950) 16px
+  );
 }
