@@ -88,7 +88,7 @@ export function LineField({
           light-lines meeting at a single point of presence -- each
           drawn twice: a wide blurred bloom pass, then a crisp core */}
       {lines.map(([x1, y1, x2, y2], i) => (
-        <g key={i}>
+        <g key={i} className="linefield-drift" style={{ animationDelay: `${i * -1.7}s` }}>
           <line
             x1={x1}
             y1={y1}

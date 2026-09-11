@@ -1,6 +1,7 @@
 export { AccentBar, AccentChip } from "./AccentChip";
 export { CornerBrackets } from "./CornerBrackets";
 export { Crosshair } from "./Crosshair";
+export { Cursor } from "./Cursor";
 export { DotGrid } from "./DotGrid";
 export { Glitch } from "./Glitch";
 export { Grain } from "./Grain";
@@ -10,4 +11,5 @@ export { LineField } from "./LineField";
 export { ReadoutCluster } from "./ReadoutCluster";
 export { RedactedLine } from "./RedactedLine";
 export { Scanlines, Vignette } from "./Scanlines";
+export { Sweep } from "./Sweep";
 export { TickRuler } from "./TickRuler";
