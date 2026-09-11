@@ -5,16 +5,23 @@ import { IngestRunSchema } from "@/lib/schema";
 const RUN_LIMIT = 100;
 
 export async function GET() {
-  await ensureSchema();
-  const rows = (await sql`
-    SELECT id, created_at, fixture_name, sensitive_op, finding, hypothesis,
-           before_evidence, after_evidence, verdict, confidence,
-           replay_identical, summary
-    FROM runs
-    ORDER BY created_at DESC
-    LIMIT ${RUN_LIMIT}
-  `) as RunRow[];
-  return NextResponse.json({ runs: rows });
+  try {
+    await ensureSchema();
+    const rows = (await sql`
+      SELECT id, created_at, fixture_name, sensitive_op, finding, hypothesis,
+             before_evidence, after_evidence, verdict, confidence,
+             replay_identical, summary, hypothesis_confidence
+      FROM runs
+      ORDER BY created_at DESC
+      LIMIT ${RUN_LIMIT}
+    `) as RunRow[];
+    return NextResponse.json({ runs: rows });
+  } catch (err) {
+    return NextResponse.json(
+      { detail: `Could not load runs: ${err instanceof Error ? err.message : String(err)}` },
+      { status: 502 },
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
