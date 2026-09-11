@@ -10,9 +10,14 @@ already runs attacks in a real, network-disabled Docker container whenever
 a Docker daemon is reachable, and only falls back to the weaker subprocess
 sandbox when one isn't.
 
-The fix is infrastructure, not code: run the backend on a plain VM you
-have root on, where you own the whole kernel instead of sharing a
-restricted slice of someone else's.
+The fix is infrastructure, not code: run the backend somewhere you own
+the whole kernel instead of sharing a restricted slice of someone else's.
+
+**No money for a VPS?** See `deploy/windows-local-setup.md` instead — your
+own laptop's Docker Desktop (via WSL2, a real Linux VM) gives the exact
+same real isolation, for free, exposed to the internet with a free ngrok
+static domain. Everything below is for when you'd rather it run on a
+paid VPS instead of your own machine.
 
 ## 1. Get a VM
 
