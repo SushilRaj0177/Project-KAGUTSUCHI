@@ -1,5 +1,114 @@
 @import "tailwindcss";
 
-/* Stripped intentionally - see webapp/app/layout.tsx's comment. No
-   palette, fonts, or custom classes carried over from the old design;
-   the rebuild defines its own from scratch once the new theme is known. */
+/* ============================================================
+   KAGUTSUCHI design system -- "instrument panel meets elegy."
+
+   Reference language (see COORDINATION.md for the mood-board this
+   was built from): layered warm/cool greys and near-blacks doing
+   the real work, NOT flat monochrome -- color exists only as tiny,
+   precise accent marks (a lime tick, a magenta chip, a cyan sliver),
+   reserved here for real semantic meaning (severity, verdict state)
+   rather than decoration. Technical/diagrammatic ornament (crosshairs,
+   corner brackets, tick rulers, dotted grids, coordinate-style mono
+   labels) carries the atmosphere; an occasional serif line carries
+   the "beautiful," human register against it. Asymmetric, diagonal,
+   generous negative space -- never a centered SaaS-card layout.
+   ============================================================ */
+:root {
+  /* Layered dark canvas -- never a flat single black. Each step has a
+     faint warm/cool drift, not a pure luminance ramp. */
+  --ink-950: #0a0a0c;
+  --ink-900: #101013;
+  --ink-850: #16171b;
+  --ink-800: #1d1e23;
+  --ink-700: #2a2c33;
+
+  /* Icy light surfaces -- used as inset panels/cards floating in the
+     dark canvas (the light-grey blocks in the reference), not as a
+     separate "light mode." */
+  --mist-50: #f3f4f2;
+  --mist-100: #e7e9e6;
+  --mist-200: #d3d6d2;
+
+  /* Text */
+  --paper: #eceeec;
+  --steel-300: #9a9d9f;
+  --steel-500: #6b6e72;
+  --steel-700: #45474b;
+
+  /* Hairlines -- the instrument-panel rules and borders. Deliberately
+     low-contrast; ornament should read as etched, not drawn. */
+  --line: #2b2d32;
+  --line-strong: #3c3e44;
+
+  /* Accent marks -- reserved for real signal (severity/verdict), used
+     as small precise chips/ticks, never as washes or brand color. */
+  --mark-lime: #cdf069;
+  --mark-magenta: #ff3d76;
+  --mark-cyan: #5fd4e8;
+  --mark-blue: #3e6fd9;
+
+  --font-display: var(--font-display);
+  --font-serif: var(--font-serif);
+  --font-mono: var(--font-mono);
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--ink-950);
+  color-scheme: dark;
+}
+
+body {
+  background: var(--ink-950);
+  color: var(--paper);
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01" 1;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Reusable ornament/utility classes -- the instrument-panel vocabulary
+   shared across every ornament component (see components/ornament/). */
+
+.font-mono-tech {
+  font-family: var(--font-mono), ui-monospace, monospace;
+  letter-spacing: 0.08em;
+}
+
+.font-serif-elegy {
+  font-family: var(--font-serif), Georgia, serif;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.hairline {
+  background: var(--line);
+}
+
+.panel-mist {
+  background: var(--mist-50);
+  color: var(--ink-950);
+}
+
+.panel-mist .hairline {
+  background: var(--mist-200);
+}
+
+/* Fine film-grain, applied as a fixed overlay -- see components/ornament/Grain.tsx.
+   Kept as a CSS class (not inline per-use) so its cost is paid once. */
+.grain-overlay {
+  pointer-events: none;
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  opacity: 0.035;
+  mix-blend-mode: overlay;
+}
+
+::selection {
+  background: var(--mark-cyan);
+  color: var(--ink-950);
+}
