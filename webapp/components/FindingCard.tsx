@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { signIn, useSession } from "next-auth/react";
 import { SEVERITY_COLOR, type SecurityFinding, type VerifyResult } from "@/lib/scanTypes";
 
 function apiUrl(path: string) {
@@ -18,6 +19,8 @@ export function FindingCard({
   repoOwner: string;
   repoName: string;
 }) {
+  const { data: session } = useSession();
+  const signedIn = Boolean(session?.user);
   const [open, setOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const [verifyError, setVerifyError] = useState<string | null>(null);
@@ -49,7 +52,8 @@ export function FindingCard({
   }
 
   async function openPr() {
-    if (!source || !verifyResult?.fixed_source || !token.trim()) return;
+    if (!source || !verifyResult?.fixed_source) return;
+    if (!signedIn && !token.trim()) return;
     setOpeningPr(true);
     setPrError(null);
     try {
@@ -63,6 +67,8 @@ export function FindingCard({
           original_source: source,
           fixed_function_source: verifyResult.fixed_source,
           finding_summary: finding.rationale,
+          // Ignored server-side and replaced with the real OAuth token
+          // when signed in - see app/api/backend/open-pr/route.ts.
           github_token: token,
         }),
       });
@@ -132,20 +138,35 @@ export function FindingCard({
                       </a>
                     ) : showPrForm ? (
                       <div className="space-y-2 rounded border border-slate-800 bg-slate-950 p-3">
-                        <p className="text-[11px] text-slate-500">
-                          Uses a GitHub token with repo write access, sent directly to GitHub for this one request — never stored.
-                        </p>
-                        <input
-                          type="password"
-                          value={token}
-                          onChange={(e) => setToken(e.target.value)}
-                          placeholder="GitHub personal access token (repo scope)"
-                          className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 outline-none"
-                        />
+                        {signedIn ? (
+                          <p className="text-[11px] text-slate-500">Opens the PR as your signed-in GitHub account.</p>
+                        ) : (
+                          <>
+                            <p className="text-[11px] text-slate-500">
+                              Uses a GitHub token with repo write access, sent directly to GitHub for this one
+                              request — never stored.{" "}
+                              <button
+                                type="button"
+                                onClick={() => signIn("github")}
+                                className="underline hover:text-slate-300"
+                              >
+                                Sign in with GitHub
+                              </button>{" "}
+                              instead to skip pasting a token.
+                            </p>
+                            <input
+                              type="password"
+                              value={token}
+                              onChange={(e) => setToken(e.target.value)}
+                              placeholder="GitHub personal access token (repo scope)"
+                              className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 outline-none"
+                            />
+                          </>
+                        )}
                         <div className="flex gap-2">
                           <button
                             onClick={openPr}
-                            disabled={openingPr || !token.trim()}
+                            disabled={openingPr || (!signedIn && !token.trim())}
                             className="rounded bg-white px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
                           >
                             {openingPr ? "Opening…" : "Create pull request"}

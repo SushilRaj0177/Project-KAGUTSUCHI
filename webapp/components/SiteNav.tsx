@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { AuthButton } from "@/components/AuthButton";
 
 const LINKS = [
   { href: "/scan", label: "Scan" },
@@ -33,6 +34,8 @@ export function SiteNav() {
             {link.label}
           </Link>
         ))}
+        <span className="h-4 w-px bg-slate-800" aria-hidden />
+        <AuthButton />
       </div>
     </nav>
   );
