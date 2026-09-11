@@ -28,9 +28,14 @@ result, not a claim.
   functions taking more than one argument, not just the single-string-arg
   shape every hand-built fixture happens to have (see
   `system/orchestration/signature.py`).
-- **Backend**: FastAPI, hosted on Render (falls back to a locked-down
-  subprocess sandbox when Docker isn't reachable on the host — disclosed
-  honestly in the UI whenever that's what ran).
+- **Backend**: FastAPI. Attacks run in a real, network-disabled Docker
+  container (`system/sandbox/docker_runner.py`) whenever the host has a
+  reachable Docker daemon; falls back to a locked-down subprocess sandbox
+  otherwise, disclosed honestly in the UI whenever that's what ran. A
+  shared PaaS container (Render's standard plan, confirmed directly via
+  `/api/debug/isolation-probe`) doesn't grant the kernel privileges either
+  form of real isolation needs — see `deploy/README.md` for running the
+  backend on a plain VM instead, where it does.
 
 ## The pipeline
 

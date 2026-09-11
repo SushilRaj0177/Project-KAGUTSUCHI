@@ -1,0 +1,28 @@
+[Unit]
+Description=KAGUTSUCHI backend (FastAPI + real Docker sandbox)
+After=network.target docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+User={{SERVICE_USER}}
+Group=docker
+WorkingDirectory={{APP_DIR}}
+EnvironmentFile=/etc/kagutsuchi.env
+ExecStart={{APP_DIR}}/.venv/bin/uvicorn server.main:app --host 0.0.0.0 --port {{PORT}}
+Restart=on-failure
+RestartSec=5
+
+# Not a full container sandbox itself (this process needs the docker
+# group to reach /var/run/docker.sock) - but still meaningfully hardened.
+# ProtectSystem=full (not "strict") deliberately leaves /var writable:
+# "strict" has been seen to block the Docker socket connection on some
+# distros' systemd versions, which would silently push every attack onto
+# the weaker subprocess fallback - exactly the failure mode this whole
+# deployment exists to avoid.
+NoNewPrivileges=true
+ProtectSystem=full
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
