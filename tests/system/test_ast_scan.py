@@ -118,15 +118,14 @@ def touched(x):
 
 def test_diff_hunk_captures_full_function_body():
     src = """
-def outer():
-    x = 1
+def outer(x):
     import os
     os.system("echo " + str(x))
     return x
 """
     findings = scan_source(src, "sample.py")
     assert len(findings) == 1
-    assert "def outer():" in findings[0].diff_hunk
+    assert "def outer(x):" in findings[0].diff_hunk
     assert "return x" in findings[0].diff_hunk
 
 
@@ -244,3 +243,33 @@ def render(name):
 """
     findings = scan_source(src, "sample.py")
     assert findings == []
+
+
+def test_no_false_positive_on_dangerous_call_with_only_hardcoded_arguments():
+    # subprocess.run is a real sink in general, but every argument here is
+    # a literal - there's no attacker-influenced data that could ever reach
+    # it, unlike the unrelated `pkg_name` parameter this function happens
+    # to take. This is the "uninstall.py" shape: a dangerous-looking call
+    # that isn't a bug because nothing external ever flows into it.
+    src = """
+def uninstall(pkg_name=None):
+    import subprocess
+    subprocess.run(["pip", "uninstall", "-y", "some-fixed-tool"], check=True)
+"""
+    findings = scan_source(src, "sample.py")
+    assert findings == []
+
+
+def test_flags_dangerous_call_when_parameter_flows_in_via_local_variable():
+    # One hop of local assignment between the parameter and the sink -
+    # matches insecure_deserialization.py's `raw = base64.b64decode(data);
+    # pickle.loads(raw)` shape - should still be flagged.
+    src = """
+def load(data):
+    import pickle
+    raw = data
+    return pickle.loads(raw)
+"""
+    findings = scan_source(src, "sample.py")
+    assert len(findings) == 1
+    assert findings[0].sensitive_op == SensitiveOp.DESERIALIZATION

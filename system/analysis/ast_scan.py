@@ -6,9 +6,17 @@ a known sensitive-operation signature (shell exec, subprocess, filesystem,
 SQL, deserialization, ...). Each match becomes a SecurityFinding — the
 system/ side's only output, consumed by verification/hypothesis.
 
-This is intentionally a signature match over the AST, not a taint/dataflow
-analysis: P0 scope is proving ONE demonstrated vulnerability class end to
-end, not building a general static analyzer.
+This is intentionally a signature match over the AST, not a general
+taint/dataflow analysis: P0 scope is proving ONE demonstrated vulnerability
+class end to end, not building a general static analyzer. It does include
+one small, deliberate exception (see `_tainted_names`/`_call_is_tainted`):
+a dangerous call is only reported if at least one of its arguments could
+possibly carry data derived from the enclosing function's own parameters.
+Without that gate, a call like `subprocess.run(["rm", "-rf", TMP_DIR])` in
+some unrelated maintenance script would be flagged as a command-injection
+sink purely because it calls a dangerous function - true by call name, but
+not a vulnerability, since there's no argument an attacker could ever
+influence in the first place.
 """
 from __future__ import annotations
 
@@ -272,10 +280,73 @@ def _dotted_call_name(node: ast.Call) -> str | None:
     return None
 
 
+def _param_names(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    args = func_node.args
+    names = {a.arg for a in (*args.posonlyargs, *args.args, *args.kwonlyargs)}
+    if args.vararg:
+        names.add(args.vararg.arg)
+    if args.kwarg:
+        names.add(args.kwarg.arg)
+    return names
+
+
+def _expr_references(node: ast.AST, names: set[str]) -> bool:
+    return any(isinstance(n, ast.Name) and n.id in names for n in ast.walk(node))
+
+
+def _tainted_names(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> set[str]:
+    """Names that could carry data from this function's own parameters into
+    a dangerous call: seeded with the parameters themselves, then propagated
+    one hop at a time through plain `x = <expr>` assignments whose
+    right-hand side already references a tainted name (e.g. `raw =
+    base64.b64decode(data)` taints `raw` because `data` is a parameter).
+
+    This is a small fixed-point over a handful of statements, not a real
+    dataflow analysis - it exists only to answer "could an argument to this
+    call possibly be attacker-influenced at all", so that a dangerous call
+    built entirely from hardcoded/literal arguments (a maintenance script's
+    `subprocess.run(["rm", "-rf", TMP_DIR])`, say) isn't reported as if it
+    were an injection sink just because the function happens to take some
+    unrelated parameter.
+    """
+    tainted = _param_names(func_node)
+    changed = True
+    while changed:
+        changed = False
+        for node in ast.walk(func_node):
+            target_name = None
+            value = None
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                target_name, value = node.targets[0].id, node.value
+            elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name) and node.value is not None:
+                target_name, value = node.target.id, node.value
+            if target_name is not None and target_name not in tainted and _expr_references(value, tainted):
+                tainted.add(target_name)
+                changed = True
+    return tainted
+
+
+def _call_is_tainted(node: ast.Call, tainted: set[str]) -> bool:
+    """Whether this call could carry data derived from the enclosing
+    function's own parameters - the gate that keeps a dangerous call made
+    only with hardcoded/literal arguments from being flagged as if
+    attacker input could reach it.
+
+    Walks the whole call expression, not just its direct arguments/
+    keywords: a chained call like `Template(f"...{user_input}...").render()`
+    has the tainted data in the *inner* call's argument, while the outer
+    `.render()` call - the node a heuristic actually matches on - has none
+    of its own."""
+    return _expr_references(node, tainted)
+
+
 def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
     hits: list[_CallSite] = []
+    tainted = _tainted_names(func_node)
     for node in ast.walk(func_node):
         if not isinstance(node, ast.Call):
+            continue
+        if not _call_is_tainted(node, tainted):
             continue
         name = _dotted_call_name(node)
         if name in _SIGNATURES:
