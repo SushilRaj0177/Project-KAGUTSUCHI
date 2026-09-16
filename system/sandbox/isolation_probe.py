@@ -21,6 +21,16 @@ child process (so a failed/denied syscall can never corrupt this
 process's own state) and cleans up anything it creates (a scratch
 cgroup directory, a scratch chroot directory). Safe to call from a live
 request.
+
+Also includes one check that's a different kind of question entirely:
+does this kernel support Landlock (system/sandbox/landlock.py)? Unlike
+everything above, Landlock is DESIGNED to work for an unprivileged
+process with no host cooperation - it's not gated behind the same
+CAP_SYS_ADMIN/seccomp restriction the namespace checks are, so a
+restrictive host failing every check above can still have it. That's
+exactly the situation this probe found on Render, and exactly why
+subprocess_runner.py's fallback uses it unconditionally rather than
+waiting on this probe's overall verdict.
 """
 from __future__ import annotations
 
@@ -30,6 +40,8 @@ import os
 import shutil
 import tempfile
 from dataclasses import dataclass, field
+
+from system.sandbox.landlock import landlock_abi_version
 
 _CLONE_NEWUSER = 0x10000000
 _CLONE_NEWNET = 0x40000000
@@ -62,15 +74,27 @@ class ProbeReport:
             "checks": [
                 {"name": c.name, "ok": c.ok, "detail": c.detail, "required": c.required} for c in self.checks
             ],
-            "verdict": (
-                "This process can build its own isolated namespaces/cgroups - a bespoke "
-                "runtime is technically viable here."
-                if self.all_ok
-                else "At least one required primitive is unavailable - a bespoke runtime "
-                "would NOT get real isolation here, for the same underlying reason "
-                "Docker-in-Docker doesn't work here."
-            ),
+            "verdict": self._verdict(),
         }
+
+    def _verdict(self) -> str:
+        bespoke_namespace_runtime = (
+            "This process can build its own isolated namespaces/cgroups - a bespoke "
+            "runtime is technically viable here."
+            if self.all_ok
+            else "At least one required primitive is unavailable - a bespoke runtime "
+            "would NOT get real isolation here, for the same underlying reason "
+            "Docker-in-Docker doesn't work here."
+        )
+        landlock_check = next((c for c in self.checks if c.name.startswith("landlock")), None)
+        if landlock_check is not None and landlock_check.ok:
+            return (
+                bespoke_namespace_runtime + " Separately, though: Landlock IS available on this "
+                "kernel and needs none of the above - system/sandbox/subprocess_runner.py's "
+                "fallback already uses it to confine filesystem writes and block outbound TCP "
+                "for real, with zero elevated privilege required."
+            )
+        return bespoke_namespace_runtime
 
 
 def _try_unshare_in_child(flags: int) -> tuple[bool, str]:
@@ -203,6 +227,31 @@ def _check_cgroup_v1_delegation() -> CheckResult:
             pass
 
 
+def _check_landlock() -> CheckResult:
+    """Landlock is a DIFFERENT kind of primitive from everything else this
+    probe checks: it's designed to be usable by an unprivileged process
+    with no host cooperation at all (see system/sandbox/landlock.py),
+    which is exactly why it's already wired into
+    system/sandbox/subprocess_runner.py's fallback rather than being
+    gated behind this probe's all_ok verdict - it doesn't need what the
+    other checks are testing for."""
+    version = landlock_abi_version()
+    if version is None:
+        return CheckResult(
+            "landlock (unprivileged, informational)",
+            False,
+            "unsupported on this kernel (pre-5.13, or the syscalls are themselves blocked)",
+            required=False,
+        )
+    return CheckResult(
+        "landlock (unprivileged, informational)",
+        True,
+        f"ABI {version} supported - subprocess_runner.py's fallback confines filesystem writes"
+        + (", and blocks outbound TCP entirely" if version >= 4 else " (network rules need ABI >=4)"),
+        required=False,
+    )
+
+
 def _check_chroot() -> CheckResult:
     """Filesystem isolation via chroot/pivot_root needs CAP_SYS_CHROOT -
     checked in a forked child, same reasoning as the unshare checks."""
@@ -242,6 +291,7 @@ def run_isolation_probe() -> ProbeReport:
         _check_cgroup_v2_delegation,
         _check_cgroup_v1_delegation,
         _check_chroot,
+        _check_landlock,
     ):
         try:
             report.checks.append(check_fn())

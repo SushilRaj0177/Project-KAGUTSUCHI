@@ -28,14 +28,25 @@ result, not a claim.
   functions taking more than one argument, not just the single-string-arg
   shape every hand-built fixture happens to have (see
   `system/orchestration/signature.py`).
-- **Backend**: FastAPI. Attacks run in a real, network-disabled Docker
-  container (`system/sandbox/docker_runner.py`) whenever the host has a
-  reachable Docker daemon; falls back to a locked-down subprocess sandbox
-  otherwise, disclosed honestly in the UI whenever that's what ran. A
-  shared PaaS container (Render's standard plan, confirmed directly via
-  `/api/debug/isolation-probe`) doesn't grant the kernel privileges either
-  form of real isolation needs — see `deploy/README.md` for running the
-  backend on a plain VM instead, where it does.
+- **Backend**: FastAPI, hosted on Render. Attacks run in a real, network-
+  disabled Docker container (`system/sandbox/docker_runner.py`) whenever
+  the host has a reachable Docker daemon; Render's standard plan doesn't
+  (confirmed directly via `/api/debug/isolation-probe` — the same probe
+  found no namespace/cgroup-based alternative works there either, for
+  the identical underlying reason). The fallback
+  (`system/sandbox/subprocess_runner.py`) isn't just a weaker no-op,
+  though: it uses Landlock (`system/sandbox/landlock.py`), a Linux kernel
+  primitive designed to give an *unprivileged* process real, kernel-
+  enforced confinement with no host cooperation needed at all — where
+  Docker and hand-rolled namespaces need the host to grant elevated
+  privileges Render refuses, Landlock doesn't ask permission in the first
+  place. On any kernel that supports it (5.13+, network rules 6.7+ — this
+  probe confirms exactly which), it genuinely restricts filesystem writes
+  to the run's own scratch directory and denies all outbound TCP, and
+  says so precisely in `policy_violations` rather than claiming more.
+  (For anyone who wants real Docker-level isolation anyway, or is running
+  on a kernel without Landlock: `deploy/README.md` covers a plain VM, and
+  `deploy/windows-local-setup.md` a free, self-hosted alternative.)
 
 ## The pipeline
 

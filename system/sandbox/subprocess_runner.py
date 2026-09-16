@@ -1,11 +1,11 @@
 """
 Reduced-isolation fallback sandbox, used only when the Docker daemon is
 unreachable (see docker_runner.SandboxUnavailableError) -- e.g. on
-Render's free tier, which doesn't allow Docker-in-Docker. This is NOT a
-substitute for real container isolation: there is no network namespace,
-so a payload can still reach the network. It exists so the public
-"Attack & Verify" feature keeps working (with an honest disclaimer)
-instead of hard-failing with a 503 whenever the host has no Docker.
+Render's standard plan, which doesn't allow Docker-in-Docker or any
+namespace/cgroup-based sandbox either (confirmed directly via
+system/sandbox/isolation_probe.py). It exists so the public "Attack &
+Verify" feature keeps working (with an honest disclaimer) instead of
+hard-failing with a 503 whenever the host has no Docker.
 
 What it does provide, unlike verification/attacks/run_local.py's
 in-process call:
@@ -17,6 +17,16 @@ in-process call:
   - a dedicated temp working directory, removed after the run
   - the run is serialized (one at a time) so concurrent requests can't
     race on the shared /tmp/kagutsuchi_pwned marker path fixtures use
+  - on a kernel that supports it (Linux 5.13+; network rules 6.7+),
+    Landlock confinement (system/sandbox/landlock.py) - filesystem writes
+    restricted to this run's own scratch directory, and outbound TCP
+    denied entirely. Unlike everything above, this is real KERNEL-
+    enforced confinement, not just a resource cap - and unlike Docker or
+    a hand-rolled namespace sandbox, it needs zero elevated privilege
+    from the host, so it works even inside Render's restricted container.
+    Its real scope is disclosed exactly, never overstated: it only
+    covers TCP (not UDP/raw sockets), and is simply absent (disclosed as
+    such) on a kernel too old to have it.
 """
 from __future__ import annotations
 
@@ -37,9 +47,15 @@ except ImportError:
 
 from contracts import ExecutionEvidence, ExecutionPhase
 
+if sys.platform != "win32":
+    from system.sandbox.landlock import restrict_current_process
+else:
+    restrict_current_process = None  # type: ignore[assignment]
+
 _MAX_LOG_CHARS = 8000
 _MEM_LIMIT_BYTES = 128 * 1024 * 1024
 _MARKER_PATH = Path("/tmp/kagutsuchi_pwned")
+_LANDLOCK_OUTCOME_FILENAME = ".landlock-outcome"
 
 # Real isolation (Docker) can run attacks concurrently since each gets its
 # own container; this fallback shares one host, so serialize runs to keep
@@ -47,18 +63,31 @@ _MARKER_PATH = Path("/tmp/kagutsuchi_pwned")
 _lock = threading.Lock()
 
 
-def _limit_resources() -> None:
-    """rlimits are POSIX-only. On Windows (no `resource` module) this is a
-    no-op -- there's no equivalent stdlib mechanism, so local Windows dev
-    runs the fallback with fewer guardrails than Linux (Render, Codespaces,
-    CI) gets. Fine for local development; the deployed backend is always
-    Linux."""
-    if resource is None:
-        return
-    resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
-    resource.setrlimit(resource.RLIMIT_AS, (_MEM_LIMIT_BYTES, _MEM_LIMIT_BYTES))
-    resource.setrlimit(resource.RLIMIT_FSIZE, (10 * 1024 * 1024, 10 * 1024 * 1024))
-    resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
+def _limit_resources(workdir: Path) -> None:
+    """Runs in the forked child, after fork() but before exec() of the
+    candidate script - the standard place to apply both rlimits (POSIX-
+    only; a no-op on Windows, where local dev runs with fewer guardrails
+    than the deployed Linux backend gets) and Landlock confinement, since
+    both need to be in effect for whatever gets exec'd next, not for this
+    process's own remaining lifetime before the exec.
+
+    Landlock's outcome can't be returned to the parent directly (this
+    function runs in the child); it's written to a small file in
+    `workdir` instead - itself covered by the writable-dir allow-rule
+    Landlock's restriction grants - which the parent reads back after the
+    subprocess finishes to build an honest policy_violations entry."""
+    if resource is not None:
+        resource.setrlimit(resource.RLIMIT_CPU, (5, 5))
+        resource.setrlimit(resource.RLIMIT_AS, (_MEM_LIMIT_BYTES, _MEM_LIMIT_BYTES))
+        resource.setrlimit(resource.RLIMIT_FSIZE, (10 * 1024 * 1024, 10 * 1024 * 1024))
+        resource.setrlimit(resource.RLIMIT_NPROC, (32, 32))
+
+    if restrict_current_process is not None:
+        outcome = restrict_current_process(writable_dirs=[workdir, Path("/tmp")])
+        try:
+            (workdir / _LANDLOCK_OUTCOME_FILENAME).write_text(outcome.detail)
+        except OSError:
+            pass  # best-effort disclosure only - never let this fail the run
 
 
 def _clear_marker() -> None:
@@ -105,7 +134,7 @@ def run_in_subprocess_sandbox(
                 [sys.executable, str(script), payload],
                 cwd=workdir,
                 env=env,
-                preexec_fn=_limit_resources if sys.platform != "win32" else None,
+                preexec_fn=(lambda: _limit_resources(workdir)) if sys.platform != "win32" else None,
                 timeout=timeout_s,
                 capture_output=True,
                 text=True,
@@ -123,7 +152,23 @@ def run_in_subprocess_sandbox(
 
         marker_created = _MARKER_PATH.exists()
         _clear_marker()
+
+        landlock_detail: str | None = None
+        outcome_file = workdir / _LANDLOCK_OUTCOME_FILENAME
+        try:
+            landlock_detail = outcome_file.read_text()
+        except OSError:
+            landlock_detail = None
         shutil.rmtree(workdir, ignore_errors=True)
+
+        policy_violations = [
+            "reduced-isolation: ran without Docker (no privileged/namespace-based sandbox "
+            "reachable on this host)"
+        ]
+        if landlock_detail:
+            policy_violations.append(landlock_detail)
+        elif sys.platform != "win32":
+            policy_violations.append("Landlock confinement was not applied (see landlock_abi_version)")
 
         return ExecutionEvidence(
             evidence_id=str(uuid.uuid4()),
@@ -140,9 +185,6 @@ def run_in_subprocess_sandbox(
                 "deleted": [],
             },
             network_egress_attempts=[],
-            policy_violations=[
-                "reduced-isolation: ran without Docker (network namespace not sandboxed) "
-                "because no Docker daemon was reachable on this host"
-            ],
+            policy_violations=policy_violations,
             duration_ms=duration_ms,
         )

@@ -1,23 +1,32 @@
-# Deploying the backend somewhere that actually gives real isolation
+# Deploying the backend somewhere that gives real Docker-level isolation
 
 Render's standard web service plan does not grant the kernel privileges
-Docker (or any hand-rolled sandbox) needs — confirmed directly by hitting
-`/api/debug/isolation-probe` on the live Render deployment: every required
-check (network/mount/pid namespaces, chroot, cgroup delegation) came back
-denied. That's a property of Render's container runtime itself, not
-something fixable in this codebase — `system/sandbox/docker_runner.py`
-already runs attacks in a real, network-disabled Docker container whenever
-a Docker daemon is reachable, and only falls back to the weaker subprocess
-sandbox when one isn't.
+Docker (or any hand-rolled namespace-based sandbox) needs — confirmed
+directly by hitting `/api/debug/isolation-probe` on the live Render
+deployment: every namespace/cgroup/chroot check came back denied. That's
+a property of Render's container runtime itself, not something fixable
+in this codebase — `system/sandbox/docker_runner.py` already runs attacks
+in a real, network-disabled Docker container whenever a Docker daemon is
+reachable, and only falls back to the subprocess sandbox when one isn't.
 
-The fix is infrastructure, not code: run the backend somewhere you own
-the whole kernel instead of sharing a restricted slice of someone else's.
+**Note:** that fallback isn't the weak spot it used to be. It now uses
+Landlock (`system/sandbox/landlock.py`), an unprivileged kernel sandboxing
+primitive that needs none of what the probe above found blocked — it
+already gives real, kernel-enforced filesystem confinement and blocks all
+outbound TCP, directly on Render, at zero cost, right now. Check the
+probe's `landlock` entry before assuming you need any of what's below —
+if it reports ABI 4+, you already have real (if narrower-scoped than a
+full container) isolation without doing anything else.
+
+Everything below is for getting genuine Docker-level isolation
+specifically — broader than Landlock's scope (full container, not just
+filesystem-writes + TCP) — which still needs a host you fully control.
 
 **No money for a VPS?** See `deploy/windows-local-setup.md` instead — your
-own laptop's Docker Desktop (via WSL2, a real Linux VM) gives the exact
-same real isolation, for free, exposed to the internet with a free ngrok
-static domain. Everything below is for when you'd rather it run on a
-paid VPS instead of your own machine.
+own laptop's Docker Desktop (via WSL2, a real Linux VM) gives that level
+of isolation for free, exposed to the internet with a free ngrok static
+domain. Everything below is for when you'd rather it run on a paid VPS
+instead of your own machine.
 
 ## 1. Get a VM
 
