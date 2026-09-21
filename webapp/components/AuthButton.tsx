@@ -1,9 +1,11 @@
 "use client";
 
 import { signIn, signOut, useSession } from "next-auth/react";
+import { useLanguage } from "@/components/LanguageContext";
 
 export function AuthButton() {
   const { data: session, status } = useSession();
+  const { t } = useLanguage();
 
   if (status === "loading") {
     return <span className="text-xs text-slate-600">…</span>;
@@ -16,14 +18,14 @@ export function AuthButton() {
         className="text-xs text-slate-400 transition-colors hover:text-white"
         title={`Signed in as ${session.user.name ?? session.user.email ?? "GitHub user"}`}
       >
-        Sign out
+        {t.authSignOut}
       </button>
     );
   }
 
   return (
     <button onClick={() => signIn("github")} className="text-xs text-slate-400 transition-colors hover:text-white">
-      Sign in with GitHub
+      {t.authSignIn}
     </button>
   );
 }

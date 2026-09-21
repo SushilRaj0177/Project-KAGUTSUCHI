@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { SEVERITY_COLOR, type SecurityFinding, type VerifyResult } from "@/lib/scanTypes";
+import { useLanguage } from "@/components/LanguageContext";
 
 function apiUrl(path: string) {
   return `/api/backend${path}`;
@@ -20,6 +21,13 @@ export function FindingCard({
   repoName: string;
 }) {
   const { data: session } = useSession();
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
+  const severityLabel: Record<string, string> = {
+    high: t.severityHigh,
+    medium: t.severityMedium,
+    low: t.severityLow,
+  };
   const signedIn = Boolean(session?.user);
   const [open, setOpen] = useState(false);
   const [verifying, setVerifying] = useState(false);
@@ -84,7 +92,7 @@ export function FindingCard({
   }
 
   return (
-    <div className="rounded border border-slate-800 bg-slate-900/40">
+    <div className={`rounded border border-slate-800 bg-slate-900/40 ${jp}`}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left hover:bg-slate-900/70"
@@ -98,7 +106,7 @@ export function FindingCard({
             SEVERITY_COLOR[finding.severity_hint] ?? SEVERITY_COLOR.low
           }`}
         >
-          {finding.severity_hint}
+          {severityLabel[finding.severity_hint] ?? finding.severity_hint}
         </span>
       </button>
 
@@ -113,20 +121,20 @@ export function FindingCard({
               disabled={verifying || !source}
               className="rounded bg-white px-4 py-2 text-xs font-semibold text-slate-950 disabled:opacity-50"
             >
-              {verifying ? "Attacking…" : source ? "Attack & Verify" : "Source unavailable"}
+              {verifying ? t.verifyingButton : source ? t.verifyButton : t.sourceUnavailable}
             </button>
           )}
           {verifyError && <p className="rounded border border-rose-900 bg-rose-950/40 p-3 text-xs text-rose-300">{verifyError}</p>}
 
           {verifyResult && (
             <div className="space-y-3 border-t border-slate-800 pt-4">
-              <p className="text-sm text-slate-300">{verifyResult.result?.summary ?? "This finding was a false positive."}</p>
+              <p className="text-sm text-slate-300">{verifyResult.result?.summary ?? t.falsePositiveDefault}</p>
               <div className="font-mono text-xs text-slate-500">
-                payload: <span className="text-slate-300">{verifyResult.hypothesis.payload}</span>
+                {t.payloadLabel} <span className="text-slate-300">{verifyResult.hypothesis.payload}</span>
               </div>
               {verifyResult.fixed_source && (
                 <>
-                  <div className="font-mono text-[10px] tracking-wide text-emerald-400 uppercase">Proposed fix</div>
+                  <div className="font-mono text-[10px] tracking-wide text-emerald-400 uppercase">{t.proposedFix}</div>
                   <pre className="max-h-56 overflow-auto rounded border border-emerald-900 bg-slate-950 p-3 font-mono text-xs text-emerald-300">
                     {verifyResult.fixed_source}
                   </pre>
@@ -134,31 +142,29 @@ export function FindingCard({
                   {verifyResult.result?.verdict === "VERIFIED_FIXED" &&
                     (prUrl ? (
                       <a href={prUrl} target="_blank" rel="noreferrer" className="inline-block rounded bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">
-                        Pull request opened ↗
+                        {t.openPrSuccess}
                       </a>
                     ) : showPrForm ? (
                       <div className="space-y-2 rounded border border-slate-800 bg-slate-950 p-3">
                         {signedIn ? (
-                          <p className="text-[11px] text-slate-500">Opens the PR as your signed-in GitHub account.</p>
+                          <p className="text-[11px] text-slate-500">{t.openPrSignedInHint}</p>
                         ) : (
                           <>
                             <p className="text-[11px] text-slate-500">
-                              Uses a GitHub token with repo write access, sent directly to GitHub for this one
-                              request — never stored.{" "}
+                              {t.openPrHint}{" "}
                               <button
                                 type="button"
                                 onClick={() => signIn("github")}
                                 className="underline hover:text-slate-300"
                               >
-                                Sign in with GitHub
-                              </button>{" "}
-                              instead to skip pasting a token.
+                                {t.openPrSignInNudge}
+                              </button>
                             </p>
                             <input
                               type="password"
                               value={token}
                               onChange={(e) => setToken(e.target.value)}
-                              placeholder="GitHub personal access token (repo scope)"
+                              placeholder={t.openPrTokenPlaceholder}
                               className="w-full rounded border border-slate-700 bg-slate-900 px-3 py-1.5 font-mono text-xs text-slate-200 outline-none"
                             />
                           </>
@@ -169,22 +175,26 @@ export function FindingCard({
                             disabled={openingPr || (!signedIn && !token.trim())}
                             className="rounded bg-white px-3 py-1.5 text-xs font-semibold text-slate-950 disabled:opacity-50"
                           >
-                            {openingPr ? "Opening…" : "Create pull request"}
+                            {openingPr ? t.openingPrButton : t.openPrSubmit}
                           </button>
                           <button onClick={() => setShowPrForm(false)} className="rounded border border-slate-700 px-3 py-1.5 text-xs text-slate-300">
-                            Cancel
+                            {t.openPrCancel}
                           </button>
                         </div>
                         {prError && <p className="rounded border border-rose-900 bg-rose-950/40 p-2 text-[11px] text-rose-300">{prError}</p>}
                       </div>
                     ) : (
                       <button onClick={() => setShowPrForm(true)} className="rounded border border-emerald-700 px-4 py-2 text-xs font-semibold text-emerald-400">
-                        Open a PR with this fix
+                        {t.openPrButton}
                       </button>
                     ))}
                 </>
               )}
-              {verifyResult.fix_error && <p className="text-xs text-slate-500">Fix not available: {verifyResult.fix_error}</p>}
+              {verifyResult.fix_error && (
+                <p className="text-xs text-slate-500">
+                  {t.fixUnavailable}: {verifyResult.fix_error}
+                </p>
+              )}
             </div>
           )}
         </div>

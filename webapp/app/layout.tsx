@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { JetBrains_Mono, Space_Grotesk } from "next/font/google";
+import { JetBrains_Mono, Noto_Sans_JP, Space_Grotesk } from "next/font/google";
 import { SessionProvider } from "@/components/SessionProvider";
+import { LanguageProvider } from "@/components/LanguageContext";
 import "./globals.css";
 
 const display = Space_Grotesk({
@@ -13,6 +14,15 @@ const mono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   weight: ["400", "500"],
+});
+
+// Only loaded for the Japanese toggle (lib/i18n.ts) - Latin text keeps
+// using `display`/`mono` above, this covers Japanese glyphs neither of
+// those fonts includes.
+const jp = Noto_Sans_JP({
+  variable: "--font-jp",
+  subsets: ["latin"],
+  weight: ["400", "500", "700"],
 });
 
 const SITE_URL = "https://project-kagutsuchi-ruddy.vercel.app";
@@ -40,9 +50,11 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="en" className={`${display.variable} ${mono.variable} h-full`}>
+    <html lang="en" className={`${display.variable} ${mono.variable} ${jp.variable} h-full`}>
       <body className="min-h-full">
-        <SessionProvider>{children}</SessionProvider>
+        <SessionProvider>
+          <LanguageProvider>{children}</LanguageProvider>
+        </SessionProvider>
       </body>
     </html>
   );

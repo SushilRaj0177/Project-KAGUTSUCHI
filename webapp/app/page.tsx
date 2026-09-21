@@ -1,8 +1,11 @@
+"use client";
+
 import Link from "next/link";
 import { NetworkCanvas } from "@/components/NetworkCanvas";
 import { TerminalLog } from "@/components/TerminalLog";
 import { SiteNav } from "@/components/SiteNav";
 import { LiveCounter } from "@/components/ornament";
+import { useLanguage } from "@/components/LanguageContext";
 
 // Homepage, rebuilt again after the typography/instrument-panel
 // direction was rejected outright ("looks so bad," "abandon the vibe").
@@ -13,6 +16,9 @@ import { LiveCounter } from "@/components/ornament";
 // the product does) plus a live-typing event log and a ticking
 // counter, rather than from a designed static composition.
 export default function HomePage() {
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <NetworkCanvas className="absolute inset-0 h-full w-full" />
@@ -22,37 +28,34 @@ export default function HomePage() {
         <SiteNav />
 
         <div className="flex flex-1 flex-col justify-center py-16">
-          <p className="mb-3 font-mono text-xs tracking-widest text-slate-500 uppercase">
-            <LiveCounter from={41862} /> exploits proven, not claimed
+          <p className={`mb-3 font-mono text-xs tracking-widest text-slate-500 uppercase ${jp}`}>
+            <LiveCounter from={41862} /> {t.homeStatLabel}
           </p>
-          <h1 className="max-w-2xl text-5xl leading-tight font-bold sm:text-6xl">
-            Find the vulnerability. Attack it for real. Prove the fix.
+          <h1 className={`max-w-2xl text-5xl leading-tight font-bold sm:text-6xl ${jp}`}>
+            {t.homeHeadline1} {t.homeHeadline2} {t.homeHeadline3}
           </h1>
-          <p className="mt-6 max-w-lg text-slate-400">
-            Kagutsuchi scans your code, then actually exploits what it finds in an isolated sandbox — nothing gets
-            called a vulnerability on a guess, and nothing gets called fixed without a second exploit attempt failing.
-          </p>
+          <p className={`mt-6 max-w-lg text-slate-400 ${jp}`}>{t.homeSubtitle}</p>
 
           <div className="mt-10 flex flex-wrap items-center gap-4">
             <Link
               href="/scan"
-              className="rounded bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition-transform hover:scale-105"
+              className={`rounded bg-white px-6 py-3 text-sm font-semibold text-slate-950 transition-transform hover:scale-105 ${jp}`}
             >
-              Run a scan →
+              {t.homeCtaScan}
             </Link>
             <Link
               href="/dashboard"
-              className="rounded border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500"
+              className={`rounded border border-slate-700 px-6 py-3 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-500 ${jp}`}
             >
-              See live runs
+              {t.homeCtaLiveRuns}
             </Link>
           </div>
 
           <TerminalLog className="mt-14 max-w-md rounded border border-slate-800 bg-slate-950/70 p-4 backdrop-blur-sm" />
         </div>
 
-        <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-800 py-6 text-xs text-slate-500">
-          <span>Detect → Attack → Verify → Fix</span>
+        <footer className={`flex flex-wrap justify-between gap-2 border-t border-slate-800 py-6 text-xs text-slate-500 ${jp}`}>
+          <span>{t.homeFooterTagline}</span>
           <span>© Kagutsuchi</span>
         </footer>
       </div>

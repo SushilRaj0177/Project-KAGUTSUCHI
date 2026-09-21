@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { SiteNav } from "@/components/SiteNav";
+import { useLanguage } from "@/components/LanguageContext";
 
 interface RunRow {
   id: string;
@@ -23,6 +24,8 @@ const VERDICT_COLOR: Record<string, string> = {
 };
 
 export default function DashboardPage() {
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
   const [runs, setRuns] = useState<RunRow[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,19 +44,20 @@ export default function DashboardPage() {
       <div className="mx-auto max-w-4xl">
         <SiteNav />
 
-        <h1 className="text-3xl font-bold sm:text-4xl">Live runs</h1>
-        <p className="mt-2 max-w-lg text-slate-400">
-          Real completed verifications from actual site usage — not sample data.
-        </p>
+        <h1 className={`text-3xl font-bold sm:text-4xl ${jp}`}>{t.dashboardTitle}</h1>
+        <p className={`mt-2 max-w-lg text-slate-400 ${jp}`}>{t.dashboardSubtitle}</p>
 
         {error && <p className="mt-6 rounded border border-rose-900 bg-rose-950/40 p-4 text-sm text-rose-300">{error}</p>}
 
-        {runs === null && !error && <p className="mt-10 text-sm text-slate-500">Loading…</p>}
+        {runs === null && !error && <p className={`mt-10 text-sm text-slate-500 ${jp}`}>{t.loading}</p>}
 
         {runs && runs.length === 0 && (
-          <p className="mt-10 rounded border border-dashed border-slate-800 p-8 text-center text-slate-400">
-            No runs recorded yet. Attack a finding on the <Link href="/scan" className="underline">scan page</Link> to
-            create one.
+          <p className={`mt-10 rounded border border-dashed border-slate-800 p-8 text-center text-slate-400 ${jp}`}>
+            {t.emptyTitle}. {t.emptyBodyDashboard}{" "}
+            <Link href="/scan" className="underline">
+              {t.emptyBodyScanLink}
+            </Link>
+            .
           </p>
         )}
 
@@ -66,14 +70,20 @@ export default function DashboardPage() {
                     <span className="font-mono text-xs text-slate-500">{r.sensitive_op}</span>
                     <span className="text-sm text-slate-300">{r.fixture_name}</span>
                   </div>
-                  <span className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase ${VERDICT_COLOR[r.verdict] ?? "text-slate-400 border-slate-700"}`}>
-                    {r.verdict}
+                  <span
+                    className={`rounded border px-2 py-0.5 font-mono text-[10px] uppercase ${VERDICT_COLOR[r.verdict] ?? "text-slate-400 border-slate-700"} ${jp}`}
+                  >
+                    {t.verdict[r.verdict] ?? r.verdict}
                   </span>
                 </div>
                 <p className="mt-2 text-sm text-slate-400">{r.summary}</p>
-                <div className="mt-2 flex gap-4 font-mono text-[10px] text-slate-600">
+                <div className={`mt-2 flex gap-4 font-mono text-[10px] text-slate-600 ${jp}`}>
                   <span>{new Date(r.created_at).toLocaleString()}</span>
-                  {r.hypothesis_confidence !== null && <span>stated confidence: {(r.hypothesis_confidence * 100).toFixed(0)}%</span>}
+                  {r.hypothesis_confidence !== null && (
+                    <span>
+                      {t.statedConfidence}: {(r.hypothesis_confidence * 100).toFixed(0)}%
+                    </span>
+                  )}
                 </div>
               </div>
             ))}

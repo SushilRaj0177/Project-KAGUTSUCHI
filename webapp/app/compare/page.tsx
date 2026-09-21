@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { SiteNav } from "@/components/SiteNav";
+import { useLanguage } from "@/components/LanguageContext";
 
 interface Finding {
   finding_id: string;
@@ -24,6 +25,8 @@ interface CompareResult {
 }
 
 export default function ComparePage() {
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
   const [repoUrl, setRepoUrl] = useState("");
   const [baseRef, setBaseRef] = useState("main");
   const [headRef, setHeadRef] = useState("");
@@ -58,37 +61,35 @@ export default function ComparePage() {
       <div className="mx-auto max-w-4xl">
         <SiteNav />
 
-        <h1 className="text-3xl font-bold sm:text-4xl">Compare two branches</h1>
-        <p className="mt-2 max-w-lg text-slate-400">
-          Did this branch or PR introduce a new vulnerability — or fix one? Scans both refs and diffs the findings.
-        </p>
+        <h1 className={`text-3xl font-bold sm:text-4xl ${jp}`}>{t.compareTitle}</h1>
+        <p className={`mt-2 max-w-lg text-slate-400 ${jp}`}>{t.compareSubtitle}</p>
 
         <form onSubmit={handleSubmit} className="mt-8 space-y-3">
           <input
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo"
+            placeholder={t.repoPlaceholder}
             className="w-full rounded border border-slate-700 bg-slate-900 px-4 py-3 font-mono text-sm text-slate-100 outline-none focus:border-slate-500"
           />
           <div className="flex flex-col gap-3 sm:flex-row">
             <input
               value={baseRef}
               onChange={(e) => setBaseRef(e.target.value)}
-              placeholder="base ref (e.g. main)"
+              placeholder={t.baseRefPlaceholder}
               className="flex-1 rounded border border-slate-700 bg-slate-900 px-4 py-3 font-mono text-sm text-slate-100 outline-none focus:border-slate-500"
             />
             <input
               value={headRef}
               onChange={(e) => setHeadRef(e.target.value)}
-              placeholder="head ref (e.g. my-branch)"
+              placeholder={t.headRefPlaceholder}
               className="flex-1 rounded border border-slate-700 bg-slate-900 px-4 py-3 font-mono text-sm text-slate-100 outline-none focus:border-slate-500"
             />
             <button
               type="submit"
               disabled={loading}
-              className="rounded bg-white px-6 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
+              className={`rounded bg-white px-6 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50 ${jp}`}
             >
-              {loading ? "Comparing…" : "Compare"}
+              {loading ? t.comparingButton : t.compareButton}
             </button>
           </div>
         </form>
@@ -100,20 +101,24 @@ export default function ComparePage() {
             <div className="grid grid-cols-2 gap-px overflow-hidden rounded border border-slate-800 bg-slate-800">
               <div className="bg-slate-950 p-4">
                 <div className="text-2xl font-bold">{result.base_files_scanned}</div>
-                <div className="text-xs text-slate-500 uppercase">{result.base_ref} files scanned</div>
+                <div className={`text-xs text-slate-500 uppercase ${jp}`}>
+                  {result.base_ref} {t.filesScannedShort}
+                </div>
               </div>
               <div className="bg-slate-950 p-4">
                 <div className="text-2xl font-bold">{result.head_files_scanned}</div>
-                <div className="text-xs text-slate-500 uppercase">{result.head_ref} files scanned</div>
+                <div className={`text-xs text-slate-500 uppercase ${jp}`}>
+                  {result.head_ref} {t.filesScannedShort}
+                </div>
               </div>
             </div>
 
             <div>
-              <h2 className="font-mono text-xs tracking-wide text-rose-400 uppercase">
-                Added ({result.added.length})
+              <h2 className={`font-mono text-xs tracking-wide text-rose-400 uppercase ${jp}`}>
+                {t.compareAddedTitle} ({result.added.length})
               </h2>
               {result.added.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-500">No new findings introduced.</p>
+                <p className={`mt-2 text-sm text-slate-500 ${jp}`}>{t.compareNoAdded}</p>
               ) : (
                 <div className="mt-2 space-y-2">
                   {result.added.map((f) => (
@@ -130,11 +135,11 @@ export default function ComparePage() {
             </div>
 
             <div>
-              <h2 className="font-mono text-xs tracking-wide text-emerald-400 uppercase">
-                Removed ({result.removed.length})
+              <h2 className={`font-mono text-xs tracking-wide text-emerald-400 uppercase ${jp}`}>
+                {t.compareRemovedTitle} ({result.removed.length})
               </h2>
               {result.removed.length === 0 ? (
-                <p className="mt-2 text-sm text-slate-500">No findings fixed between these refs.</p>
+                <p className={`mt-2 text-sm text-slate-500 ${jp}`}>{t.compareNoRemoved}</p>
               ) : (
                 <div className="mt-2 space-y-2">
                   {result.removed.map((f) => (
@@ -150,7 +155,9 @@ export default function ComparePage() {
               )}
             </div>
 
-            <p className="text-xs text-slate-600">{result.unchanged_count} finding(s) unchanged between refs.</p>
+            <p className={`text-xs text-slate-600 ${jp}`}>
+              {result.unchanged_count} {t.compareUnchangedCount}
+            </p>
           </div>
         )}
       </div>

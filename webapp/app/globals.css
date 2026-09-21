@@ -11,3 +11,9 @@ body {
   font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* Japanese text (lib/i18n.ts's "ja" strings) needs a font that actually
+   has JP glyphs - neither --font-display nor --font-mono do. */
+.font-jp {
+  font-family: var(--font-jp), ui-sans-serif, sans-serif;
+}

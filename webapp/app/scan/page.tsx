@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { SiteNav } from "@/components/SiteNav";
 import { FindingCard } from "@/components/FindingCard";
+import { useLanguage } from "@/components/LanguageContext";
 import type { RepoResult } from "@/lib/scanTypes";
 
 function apiUrl(path: string) {
@@ -30,6 +31,8 @@ async function pollJob(jobId: string, owner?: string, repo?: string, sha?: strin
 }
 
 function ShareLinks({ owner, repo, sha }: { owner: string; repo: string; sha: string }) {
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
   const [copied, setCopied] = useState<"link" | "badge" | null>(null);
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const permalink = `${origin}/scan/${owner}/${repo}/${sha}`;
@@ -46,13 +49,13 @@ function ShareLinks({ owner, repo, sha }: { owner: string; repo: string; sha: st
   }
 
   return (
-    <div className="mt-8 flex flex-wrap items-center gap-3 border-t border-slate-800 pt-6 text-xs text-slate-500">
-      <span>Share this result:</span>
+    <div className={`mt-8 flex flex-wrap items-center gap-3 border-t border-slate-800 pt-6 text-xs text-slate-500 ${jp}`}>
+      <span>{t.shareResult}</span>
       <button onClick={() => copy(permalink, "link")} className="rounded border border-slate-700 px-3 py-1.5 hover:border-slate-500">
-        {copied === "link" ? "Copied!" : "Copy permalink"}
+        {copied === "link" ? t.permalinkCopied : t.copyPermalink}
       </button>
       <button onClick={() => copy(badgeMarkdown, "badge")} className="rounded border border-slate-700 px-3 py-1.5 hover:border-slate-500">
-        {copied === "badge" ? "Copied!" : "Copy README badge"}
+        {copied === "badge" ? t.permalinkCopied : t.copyBadge}
       </button>
     </div>
   );
@@ -64,6 +67,8 @@ const EXAMPLES = [
 ];
 
 export default function ScanPage() {
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
   const [repoUrl, setRepoUrl] = useState("");
   const [loading, setLoading] = useState(false);
   const [polling, setPolling] = useState(false);
@@ -107,29 +112,27 @@ export default function ScanPage() {
       <div className="mx-auto max-w-4xl">
         <SiteNav />
 
-        <h1 className="text-3xl font-bold sm:text-4xl">Scan a public repo</h1>
-        <p className="mt-2 max-w-lg text-slate-400">
-          Paste a GitHub URL. Real static analysis, then a real sandboxed exploit, then a real proposed fix.
-        </p>
+        <h1 className={`text-3xl font-bold sm:text-4xl ${jp}`}>{t.scanPageTitle}</h1>
+        <p className={`mt-2 max-w-lg text-slate-400 ${jp}`}>{t.scanPageSubtitle}</p>
 
         <form onSubmit={handleSubmit} className="mt-8 flex flex-col gap-3 sm:flex-row">
           <input
             value={repoUrl}
             onChange={(e) => setRepoUrl(e.target.value)}
-            placeholder="https://github.com/owner/repo"
+            placeholder={t.repoPlaceholder}
             className="flex-1 rounded border border-slate-700 bg-slate-900 px-4 py-3 font-mono text-sm text-slate-100 outline-none focus:border-slate-500"
           />
           <button
             type="submit"
             disabled={loading}
-            className="rounded bg-white px-6 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
+            className={`rounded bg-white px-6 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50 ${jp}`}
           >
-            {loading ? "Scanning…" : "Analyze"}
+            {loading ? t.scanningButton : t.scanButton}
           </button>
         </form>
 
-        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-          <span>Try:</span>
+        <div className={`mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500 ${jp}`}>
+          <span>{t.tryExample}</span>
           {EXAMPLES.map((ex) => (
             <button
               key={ex.url}
@@ -145,7 +148,7 @@ export default function ScanPage() {
           ))}
         </div>
 
-        {polling && <p className="mt-6 text-sm text-slate-500">Still scanning — larger repos can take a minute or two.</p>}
+        {polling && <p className={`mt-6 text-sm text-slate-500 ${jp}`}>{t.scanPollingNotice}</p>}
         {error && <p className="mt-6 rounded border border-rose-900 bg-rose-950/40 p-4 text-sm text-rose-300">{error}</p>}
 
         {result && (
@@ -153,17 +156,17 @@ export default function ScanPage() {
             <div className="mb-6 grid grid-cols-2 gap-px overflow-hidden rounded border border-slate-800 bg-slate-800 sm:grid-cols-2">
               <div className="bg-slate-950 p-4">
                 <div className="text-3xl font-bold">{result.files_scanned}</div>
-                <div className="text-xs text-slate-500 uppercase">Files scanned</div>
+                <div className={`text-xs text-slate-500 uppercase ${jp}`}>{t.filesScanned}</div>
               </div>
               <div className="bg-slate-950 p-4">
                 <div className="text-3xl font-bold">{result.findings.length}</div>
-                <div className="text-xs text-slate-500 uppercase">Findings</div>
+                <div className={`text-xs text-slate-500 uppercase ${jp}`}>{t.findingsCount}</div>
               </div>
             </div>
 
             {result.findings.length === 0 ? (
-              <p className="rounded border border-dashed border-slate-800 p-8 text-center text-slate-400">
-                No findings — nothing in this repo matched a known vulnerability pattern.
+              <p className={`rounded border border-dashed border-slate-800 p-8 text-center text-slate-400 ${jp}`}>
+                {t.noFindingsBody}
               </p>
             ) : (
               <div className="space-y-2">

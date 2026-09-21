@@ -4,18 +4,22 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthButton } from "@/components/AuthButton";
-
-const LINKS = [
-  { href: "/scan", label: "Scan" },
-  { href: "/dashboard", label: "Live Runs" },
-  { href: "/compare", label: "Compare" },
-  { href: "/calibration", label: "Calibration" },
-  { href: "/detector-proposals", label: "New Classes" },
-];
+import { LanguageToggle } from "@/components/LanguageToggle";
+import { useLanguage } from "@/components/LanguageContext";
 
 export function SiteNav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { t, lang } = useLanguage();
+  const jp = lang === "ja" ? "font-jp" : "";
+
+  const links = [
+    { href: "/scan", label: t.navScan },
+    { href: "/dashboard", label: t.navDashboard },
+    { href: "/compare", label: t.navCompare },
+    { href: "/calibration", label: t.navCalibration },
+    { href: "/detector-proposals", label: t.navDetectorProposals },
+  ];
 
   return (
     <nav className="mb-16">
@@ -25,8 +29,8 @@ export function SiteNav() {
         </Link>
 
         {/* Desktop: full link list inline. */}
-        <div className="hidden items-center gap-5 text-sm sm:flex">
-          {LINKS.map((link) => (
+        <div className={`hidden items-center gap-5 text-sm sm:flex ${jp}`}>
+          {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -36,6 +40,7 @@ export function SiteNav() {
             </Link>
           ))}
           <span className="h-4 w-px bg-slate-800" aria-hidden />
+          <LanguageToggle />
           <AuthButton />
         </div>
 
@@ -52,8 +57,8 @@ export function SiteNav() {
       </div>
 
       {open && (
-        <div className="mt-4 flex flex-col gap-3 border-t border-slate-800 pt-4 text-sm sm:hidden">
-          {LINKS.map((link) => (
+        <div className={`mt-4 flex flex-col gap-3 border-t border-slate-800 pt-4 text-sm sm:hidden ${jp}`}>
+          {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -63,8 +68,9 @@ export function SiteNav() {
               {link.label}
             </Link>
           ))}
-          <div className="border-t border-slate-800 pt-3">
+          <div className="flex items-center justify-between border-t border-slate-800 pt-3">
             <AuthButton />
+            <LanguageToggle />
           </div>
         </div>
       )}
