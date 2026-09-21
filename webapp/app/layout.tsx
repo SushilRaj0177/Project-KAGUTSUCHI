@@ -15,9 +15,27 @@ const mono = JetBrains_Mono({
   weight: ["400", "500"],
 });
 
+const SITE_URL = "https://project-kagutsuchi-ruddy.vercel.app";
+const TITLE = "Kagutsuchi — Find it, exploit it, prove the fix";
+const DESCRIPTION =
+  "Kagutsuchi scans your code, then actually exploits what it finds in an isolated sandbox — nothing gets called a vulnerability on a guess, and nothing gets called fixed without a second exploit attempt failing.";
+
 export const metadata: Metadata = {
-  title: "Kagutsuchi",
-  description: "Autonomous code security verification.",
+  metadataBase: new URL(SITE_URL),
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: {
+    title: TITLE,
+    description: DESCRIPTION,
+    url: SITE_URL,
+    siteName: "Kagutsuchi",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: TITLE,
+    description: DESCRIPTION,
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -13,6 +13,8 @@ result, not a claim.
 
 ## Live
 
+**[project-kagutsuchi-ruddy.vercel.app](https://project-kagutsuchi-ruddy.vercel.app)**
+
 - **Website**: paste any public GitHub repo and watch it scan, attack, and
   fix in real time — `/scan` (the tool), `/dashboard` (real usage, not
   sample data), `/compare` (diff two branches), `/calibration` (is the AI's
@@ -20,7 +22,9 @@ result, not a claim.
   vulnerability classes awaiting review).
 - **One click to actually fix it**: a verified fix isn't just a code block —
   `/scan` can open a real GitHub pull request carrying it, straight from the
-  browser (see `integration/github_pr.py`).
+  browser, via a real GitHub OAuth sign-in (`lib/auth.ts`) or a pasted
+  personal access token if you'd rather not sign in (see
+  `integration/github_pr.py`).
 - **Repo scanning is asynchronous**: a large repo scan runs as a background
   job instead of one blocking request, so it can't 504 on a slow connection
   or a big codebase (see `server/jobs.py`).
@@ -124,10 +128,14 @@ Plus whatever the AI scanner discovers beyond this list — see
 | `webapp/app/detector-proposals/` | AI-discovered vulnerability classes awaiting human review/promotion. |
 | `webapp/app/api/backend/` | Server-side proxy routes to the FastAPI backend (avoids browser CORS entirely). |
 | `webapp/lib/db.ts` | Postgres schema + queries (`runs`, `repo_scan_cache`, `detector_proposals` tables). |
+| `webapp/lib/auth.ts` | GitHub OAuth sign-in (Auth.js) — replaces having to paste a personal access token to open a PR. |
+| `system/sandbox/landlock.py` | Unprivileged, kernel-enforced sandbox confinement (Linux Landlock) — real isolation with no elevated host privilege needed. |
+| `system/sandbox/isolation_probe.py` | Diagnostic: what real isolation (namespaces/cgroups/Landlock) is actually available on this host — `/api/debug/isolation-probe`. |
+| `deploy/` | Running the backend somewhere with full Docker-level isolation instead of the fallback — a VPS (`vps_setup.sh`) or a free self-hosted option (`windows-local-setup.md`). |
 | `scripts/demo_scan.py` | Interactive CLI demo console — scan, attack, calibration, and discovery, all from one menu. |
 | `scripts/promote_detector.py` | Turns an accepted AI-proposed detector into a ready-to-review `ast_scan.py` code snippet. |
 | `scripts/start_live_demo.sh` | Runs the backend with real Docker + a Cloudflare Tunnel, for environments (like Codespaces) where you want the real sandbox instead of the fallback. |
-| `tests/`, `verification/tests/` | The automated test suite (176 passing as of this build). |
+| `tests/`, `verification/tests/` | The automated test suite (193 passing as of this build). |
 | `COORDINATION.md` | Append-only cross-session build log — every merge, every bug found, every design decision, in order. |
 
 ## Try it
