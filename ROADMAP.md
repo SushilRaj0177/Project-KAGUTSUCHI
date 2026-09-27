@@ -85,26 +85,19 @@ No milestone is marked done because a plan for it exists.
           goal is catching completely unconstrained dependencies, the
           clearest low-false-positive signal, not grading pin strictness.
           9 tests.
-    - [x] **Performance Efficiency (Time Behaviour) — one narrow, real
-          static signal.** `wsqfai/measurement/performance.py`: AST-based
-          detection of `x = x + <expr>` / `x += <expr>` executed inside a
-          loop body where the expression gives strong static evidence of
-          building a string (an f-string, a string literal, or a
-          `str(...)` call). Because Python strings are immutable, each such
-          iteration allocates an entirely new string and copies the old
-          contents in — O(n) work per iteration, O(n^2) total — a
-          well-established anti-pattern (the reason `"".join(...)` exists,
-          and the same class of issue `perflint`, a real published static
-          analyzer, flags). Correctly leaves numeric accumulation
-          (`total += price`) unflagged, since the risk is specifically
-          string-building, not augmented assignment in a loop in general. 8
-          tests. Most of Time Behaviour/Resource Utilization/Capacity still
-          genuinely can't be measured from static source alone — this is
-          one real, narrow exception, not a claim that static analysis now
-          covers performance broadly.
-    - [ ] Compatibility, Usability — not started. Each needs its own honest
-          scoping pass to find a signal reachable from static source
-          without fabricating one.
+    - [x] **Usability (Appropriateness Recognizability).**
+          `wsqfai/measurement/usability.py`: flags a repository with no
+          README (`README`/`README.md`/`README.rst`/`README.txt`) at its
+          root. A prospective user has nothing to read before deciding
+          whether the project is relevant to their needs otherwise - the
+          same signal GitHub's own community-standards checklist uses, not
+          an invented rule. Deliberately checks presence only, not content
+          quality: a one-line README still clears it, since judging
+          content quality is beyond what a static check can honestly claim.
+          7 tests.
+    - [ ] Performance Efficiency, Compatibility — not started. Each needs
+          its own honest scoping pass to find a signal reachable from
+          static source without fabricating one.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
@@ -129,13 +122,28 @@ No milestone is marked done because a plan for it exists.
         line-counting) — a real, deliberate scope change to M1's
         ingestion layer, covered by 2 new tests there (34 → all still
         passing).
-  - [ ] **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
+  - **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
         Pipeline Jungles, Dead Experimental Codepaths, Test Infrastructure
         Independence, Wrap Black-box Packages into Common APIs, and the
         rest of the 12+13+8 catalogue. Each needs a detection heuristic
         honest enough not to be mostly false positives from a static,
         no-execution read of source — that's real design work per
         pattern, not a batch of regexes to add in one sitting.
+    - [x] **Dead Experimental Codepaths.** `wsqfai/measurement/ml_patterns.py`:
+          AST-based detection of `if False:`/`if 0:` branches containing
+          real code (not just `pass`/a docstring) in an ML-containing
+          repository. Sculley et al.'s "Hidden Technical Debt in Machine
+          Learning Systems" (NeurIPS 2015) names this exact pattern — an
+          alternative approach tried behind a conditional that's later
+          disabled rather than removed, accumulating as debt that obscures
+          what the system does. The lowest-false-positive instance of this
+          pattern a static, no-execution read can identify: a literal
+          `False`/`0` condition can never be true regardless of any runtime
+          state, so no semantic analysis is needed to know the branch is
+          dead. ISO/IEC 25010's Analysability sub-characteristic. 4 tests.
+    - [ ] Glue Code, Pipeline Jungles, Test Infrastructure Independence,
+          Wrap Black-box Packages into Common APIs, and the rest of the
+          12+13+8 catalogue — still need their own honest scoping pass.
   - [ ] **M3c — ISO/IEC 25059 AI-specific characteristics themselves**
         (Functional Adaptability, User Controllability, Transparency,
         Intervenability, Societal/Ethical Risk Mitigation from
@@ -234,15 +242,30 @@ No milestone is marked done because a plan for it exists.
         average, 2.0 = twice the corpus rate), returning `None` rather
         than a bogus infinity when the corpus has zero findings for that
         characteristic to divide by. 6 tests, including one real
-        end-to-end corpus build against a live public repo. This is the
-        *methodology* proven correct, not the milestone finished: there's
-        no real reference corpus yet, only whatever repo list a caller
-        supplies. See M5b.
-  - [ ] **M5b — A real reference corpus.** A curated, versioned set of
-        repositories to benchmark against by default (WSQF/WSQB's own
-        study used 21 commercial products) — needs a deliberate choice of
-        what belongs in it and why, not just picking a few repos
-        arbitrarily.
+        end-to-end corpus build against a live public repo. This was the
+        *methodology* proven correct, not the whole milestone finished at
+        the time - `compare_to_corpus` still takes any `CorpusReport`
+        a caller supplies, including a custom one; M5b adds a real curated
+        default.
+  - [x] **M5b — A real reference corpus.** `wsqfai/reference_corpus.py`:
+        a curated, versioned list of 4 real, actively-maintained,
+        permissively-licensed repositories - `pallets/flask` (web
+        framework), `psf/requests` (HTTP client), `pallets/click` (CLI
+        toolkit), `benoitc/gunicorn` (WSGI server) - deliberately diverse
+        in application shape, not just four web frameworks, since diversity
+        is what makes `compare_to_corpus()`'s baseline mean something
+        rather than secretly measuring "typical of web frameworks." Each
+        entry carries its own one-line justification inline, so the
+        corpus's composition stays auditable. `build_reference_corpus()`
+        caches the built `CorpusReport` to a JSON file (via pydantic's own
+        `model_dump_json`/`model_validate_json`) so repeated benchmark runs
+        don't re-clone and re-analyze all 4 repositories every time - only
+        `force_refresh=True` (e.g. after `REFERENCE_CORPUS` itself changes)
+        rebuilds and overwrites the cache. Deliberately small (4, not
+        WSQF/WSQB's 21): a small set that's actually exercised end-to-end
+        beats a large one that's aspirational. 8 tests, including one real
+        end-to-end build against all 4 live repositories, cached, then
+        confirmed the cache is read back without a second clone.
 - [ ] **M6 — Dashboard, report, CI/PR integration.** A real frontend
       (reusing KAGUTSUCHI's auth/i18n infrastructure from the archive where
       it fits), a generated report, and a CI-gate mode.
@@ -332,5 +355,5 @@ there is widening M4b's coverage beyond its two shell-reaching shapes
 generation, or handling multi-parameter functions), since that's what
 turns this from "one narrow
 but real case" into something that finds proven vulnerabilities across a
-meaningfully wider slice of real code. M2b/M3b/M3c/M4c/M5b's other
-remaining slices are all real, scoped, startable work whenever picked up.
+meaningfully wider slice of real code. M2b/M3b/M3c/M4c's other remaining
+slices are all real, scoped, startable work whenever picked up.
