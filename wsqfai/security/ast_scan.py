@@ -173,6 +173,7 @@ class _CallSite:
     rationale: str | None = None
     detector: str | None = None
     severity: Severity | None = None
+    shell_true: bool = False
 
 
 def _is_string_built(node: ast.expr) -> bool:
@@ -321,6 +322,25 @@ def _ssti_hit(node: ast.Call) -> _CallSite | None:
     return None
 
 
+_SHELL_TRUE_CALLS = {"subprocess.run", "subprocess.Popen", "subprocess.call"}
+
+
+def _call_has_shell_true(node: ast.Call) -> bool:
+    """True if this call passes an explicit `shell=True` keyword. Only
+    meaningful for subprocess.run/Popen/call: with `shell=True`, the
+    command argument is handed to a real shell, which is exactly what
+    makes a generic shell-metacharacter payload work regardless of the
+    function's own base command - the same property `os.system`/
+    `os.popen` have unconditionally. Without this keyword, subprocess.*
+    execs argv directly with no shell involved at all, so the same
+    payload would do nothing - which is why M4b's verification only
+    attempts these calls when this is true (see verify.py)."""
+    for kw in node.keywords:
+        if kw.arg == "shell" and isinstance(kw.value, ast.Constant) and kw.value.value is True:
+            return True
+    return False
+
+
 def _dotted_call_name(node: ast.Call) -> str | None:
     func = node.func
     if isinstance(func, ast.Name):
@@ -427,7 +447,8 @@ def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
             continue
         name = _dotted_call_name(node)
         if name in _SIGNATURES:
-            hits.append(_CallSite(func_node.name, name, node.lineno))
+            shell_true = name in _SHELL_TRUE_CALLS and _call_has_shell_true(node)
+            hits.append(_CallSite(func_node.name, name, node.lineno, shell_true=shell_true))
             continue
         for heuristic in (_sql_call_hit, _django_sql_call_hit, _yaml_load_hit, _ssti_hit):
             hit = heuristic(node)
@@ -494,6 +515,8 @@ def scan_source(source: str, file_path: str) -> list[Observation]:
             }
             if module_imports:
                 metadata["module_imports"] = module_imports
+            if hit.shell_true:
+                metadata["shell_true"] = "true"
             sole_param = _sole_direct_taint_param(node)  # type: ignore[arg-type]
             if sole_param is not None:
                 metadata["single_param_direct_taint"] = sole_param
