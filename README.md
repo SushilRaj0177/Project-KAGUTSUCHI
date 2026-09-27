@@ -20,8 +20,12 @@ evidence-based dependability auditing, not an LLM's opinion of your code.**
 ```bash
 git clone <this repo> && cd Project-KAGUTSUCHI
 pip install -e .
-python -m wsqfai https://github.com/pallets/flask
+wsqfai https://github.com/pallets/flask
 ```
+
+(`wsqfai` is a console-script entry point installed by `pip install -e .`;
+`python -m wsqfai <repo-url>` works identically if you'd rather not rely on
+your `PATH` having picked it up.)
 
 Real output from that exact command, against Flask's actual source, on the
 `M4a` build:
@@ -56,7 +60,7 @@ hypothesis) an honest label that it's a static pattern match, not yet a
 sandbox-proven exploit. Add `--json` for the full machine-readable report,
 or `--ref <branch>` to scan a specific branch/tag instead of the default.
 
-Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 81 tests.
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 92 tests.
 
 ## What this is
 
@@ -114,5 +118,5 @@ wsqfai/
   measurement/           -- Maintainability, Reliability, ML-pattern metrics (M2a/M2b/M3a)
   security/              -- AST-based sensitive-operation scanner (M4a)
   report.py, __main__.py -- the end-to-end report + `python -m wsqfai` CLI
-tests/                   -- 81 tests, mirroring wsqfai/'s package structure
+tests/                   -- 92 tests, mirroring wsqfai/'s package structure
 ```
