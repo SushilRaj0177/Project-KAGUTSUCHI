@@ -85,10 +85,19 @@ No milestone is marked done because a plan for it exists.
           goal is catching completely unconstrained dependencies, the
           clearest low-false-positive signal, not grading pin strictness.
           9 tests.
-    - [ ] Performance Efficiency, Compatibility, Usability — not started.
-          Each needs its own honest scoping pass; Performance Efficiency in
-          particular can't be measured from static source alone at all —
-          it needs a profiling run, not a source read.
+    - [x] **Usability (Appropriateness Recognizability).**
+          `wsqfai/measurement/usability.py`: flags a repository with no
+          README (`README`/`README.md`/`README.rst`/`README.txt`) at its
+          root. A prospective user has nothing to read before deciding
+          whether the project is relevant to their needs otherwise - the
+          same signal GitHub's own community-standards checklist uses, not
+          an invented rule. Deliberately checks presence only, not content
+          quality: a one-line README still clears it, since judging
+          content quality is beyond what a static check can honestly claim.
+          7 tests.
+    - [ ] Performance Efficiency, Compatibility — not started. Each needs
+          its own honest scoping pass to find a signal reachable from
+          static source without fabricating one.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
