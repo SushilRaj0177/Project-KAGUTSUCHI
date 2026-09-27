@@ -84,10 +84,13 @@ def test_finding_counts_by_severity_and_characteristic():
     assert by_characteristic.get("reliability") == 1
 
 
-def test_report_on_empty_repository_has_no_findings_or_hypotheses():
+def test_report_on_empty_repository_has_no_hypotheses_but_flags_missing_readme():
+    # An empty repository has no README either - a real, honest finding
+    # (usability's Appropriateness Recognizability), not a bug: see
+    # wsqfai/measurement/usability.py.
     snapshot = RepositorySnapshot(owner="me", repo="empty", ref=None, files=[])
     report = analyze_snapshot(snapshot)
-    assert report.findings == []
+    assert [f.evidence[0].analyzer.rule_id for f in report.findings] == ["missing_readme"]
     assert report.security_hypotheses == []
     assert report.is_ml_repository is False
 
@@ -124,10 +127,12 @@ def test_render_html_is_well_formed_and_escapes_repository_controlled_text():
     assert "app.py" in page
 
 
-def test_render_html_on_empty_repository_shows_no_findings_message():
+def test_render_html_on_empty_repository_shows_no_security_hypotheses_message():
+    # An empty repository still legitimately gets one Finding (missing
+    # README - see the analyze_snapshot test above), so "No findings." no
+    # longer applies here, but there are genuinely no security hypotheses.
     snapshot = RepositorySnapshot(owner="me", repo="empty", ref=None, files=[])
     page = render_html(analyze_snapshot(snapshot))
-    assert "No findings." in page
     assert "No security hypotheses." in page
 
 
