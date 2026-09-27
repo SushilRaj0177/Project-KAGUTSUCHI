@@ -3,11 +3,60 @@
 **An AI-systems extension of Waseda's Software Quality Framework methodology —
 evidence-based dependability auditing, not an LLM's opinion of your code.**
 
-> Status: active rebuild, milestone M0 (dismantle prior product, ground the
-> new architecture) complete. See [`ROADMAP.md`](ROADMAP.md) for what's real
-> today versus what's planned, and [`ARCHITECTURE.md`](ARCHITECTURE.md) for
-> how every major design decision traces to a specific, cited piece of
-> published research — not an invented rubric.
+> Status: active rebuild, real and runnable. M0 (dismantle prior product,
+> ground the new architecture), M1 (quality/evidence model + real repo
+> ingestion), M2a+ (Maintainability + Reliability measurement), M3a
+> (ML-repository detection + a Washizaki-catalogued ML-pattern check), and
+> M4a (AST-based security hypothesis generation) are built, tested, and
+> wired into one CLI you can run against any public GitHub repo today. See
+> [`ROADMAP.md`](ROADMAP.md) for exactly what's real versus what's still
+> planned — every checkbox there is backed by tested code, none by a plan —
+> and [`ARCHITECTURE.md`](ARCHITECTURE.md) for how every major design
+> decision traces to a specific, cited piece of published research, not an
+> invented rubric.
+
+## Try it
+
+```bash
+git clone <this repo> && cd Project-KAGUTSUCHI
+pip install -e .
+python -m wsqfai https://github.com/pallets/flask
+```
+
+Real output from that exact command, against Flask's actual source, on the
+`M4a` build:
+
+```
+WSQF-AI report for pallets/flask
+236 files, 18803 lines
+Top languages: Python (83 files, 18345 lines), YAML (8 files, 249 lines), Markdown (6 files, 153 lines), SQL (2 files, 28 lines), JSON (2 files, 21 lines)
+ML-containing repository: no
+
+Findings: 10
+  high: 1
+  medium: 9
+  [HIGH] reliability/fault_tolerance: Bare 'except:' clause(s) in src/flask/app.py (src/flask/app.py)
+  [MEDIUM] maintainability/modularity: Large file reduces modularity: src/flask/cli.py (src/flask/cli.py)
+  [MEDIUM] maintainability/modularity: Large file reduces modularity: src/flask/app.py (src/flask/app.py)
+  [MEDIUM] maintainability/modularity: Large file reduces modularity: src/flask/sansio/app.py (src/flask/sansio/app.py)
+  [MEDIUM] maintainability/modularity: Large file reduces modularity: tests/test_basic.py (tests/test_basic.py)
+  [MEDIUM] maintainability/modularity: Large file reduces modularity: tests/test_blueprints.py (tests/test_blueprints.py)
+  [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in src/flask/config.py (src/flask/config.py)
+  [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in tests/test_reqctx.py (tests/test_reqctx.py)
+  [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in tests/test_basic.py (tests/test_basic.py)
+  [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in tests/test_appctx.py (tests/test_appctx.py)
+
+Security hypotheses (unverified static AST match, not sandbox-proven — see M4b in ROADMAP.md): 1
+  [HIGH] deserialization: exec executes arbitrary Python from its argument. (call: exec, line 209) (src/flask/config.py:209)
+```
+
+Every line there is a real Finding or Observation, each citing an exact
+file, an exact ISO/IEC 25010 sub-characteristic, and (for the security
+hypothesis) an honest label that it's a static pattern match, not yet a
+sandbox-proven exploit. Add `--json` for the full machine-readable report,
+or `--ref <branch>` to scan a specific branch/tag instead of the default.
+
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 81 tests.
 
 ## What this is
 
@@ -56,8 +105,14 @@ where it's going.
 ## Repository layout
 
 ```
-ARCHITECTURE.md      -- the research grounding + design rationale (read this first)
-ROADMAP.md           -- milestones, what's built vs planned, honestly
-engine-archive/       -- Project KAGUTSUCHI, dismantled and held for reuse
-<new WSQF-AI code lands here as each milestone is built>
+ARCHITECTURE.md          -- the research grounding + design rationale (read this first)
+ROADMAP.md               -- milestones, what's built vs planned, honestly
+engine-archive/          -- Project KAGUTSUCHI, dismantled and held for reuse
+wsqfai/
+  domain/                -- the ISO/IEC 25010+25059 quality model, Finding/Evidence/Observation
+  ingestion/             -- real repo cloning + file/language classification
+  measurement/           -- Maintainability, Reliability, ML-pattern metrics (M2a/M2b/M3a)
+  security/              -- AST-based sensitive-operation scanner (M4a)
+  report.py, __main__.py -- the end-to-end report + `python -m wsqfai` CLI
+tests/                   -- 81 tests, mirroring wsqfai/'s package structure
 ```
