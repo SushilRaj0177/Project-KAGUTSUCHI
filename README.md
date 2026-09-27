@@ -1,175 +1,63 @@
-# Project KAGUTSUCHI
+# WSQF-AI
 
-**Autonomous Code Security Verification — proof, not opinion.**
-Team CIPHER-X
+**An AI-systems extension of Waseda's Software Quality Framework methodology —
+evidence-based dependability auditing, not an LLM's opinion of your code.**
 
-KAGUTSUCHI doesn't just flag vulnerabilities — it actually attacks them in
-an isolated sandbox to prove they're real, then attacks the proposed fix
-with the identical payload before ever calling it fixed. Nothing here is
-trusted because an LLM asserted it; every verdict comes from an observed
-result, not a claim.
+> Status: active rebuild, milestone M0 (dismantle prior product, ground the
+> new architecture) complete. See [`ROADMAP.md`](ROADMAP.md) for what's real
+> today versus what's planned, and [`ARCHITECTURE.md`](ARCHITECTURE.md) for
+> how every major design decision traces to a specific, cited piece of
+> published research — not an invented rubric.
 
-> An explanation is not an exploit, and "looks fixed" is not a verdict.
+## What this is
 
-## Live
+WSQF-AI takes a software repository and produces a **dependability
+assessment grounded in real standards**, not a static-analysis dashboard
+wearing an AI badge:
 
-**[project-kagutsuchi-ruddy.vercel.app](https://project-kagutsuchi-ruddy.vercel.app)**
+- Quality characteristics measured against **ISO/IEC 25000 (SQuaRE)**, the
+  same standard Prof. Hironori Washizaki's own **WSQF/WSQB** (Waseda
+  Software Quality Framework/Benchmark, ICSE 2019) concretizes into
+  measurable metrics — this project follows that same "measure the real
+  characteristic, don't invent a score" discipline, extended to AI/ML
+  repositories specifically.
+- AI/ML-specific quality dimensions aligned to **ISO/IEC 25059**, the SQuaRE
+  extension for AI systems (e.g. Functional Adaptability).
+- **ML design-pattern detection** — Prof. Washizaki's own most distinctive
+  research line (*Machine Learning Architecture and Design Patterns*,
+  Computer 2022; ML reliability solution patterns, PLoP 2024) — recognizing
+  and recommending established ML software patterns, not just flagging
+  anti-patterns.
+- Security findings that are **proven, not asserted**: reusing Project
+  KAGUTSUCHI's real exploit-and-verify engine (see `engine-archive/`) so a
+  finding means "we attacked it and it worked," framed through Washizaki &
+  Yoshioka's **AI Security Continuum** (CAIN 2024) rather than generic
+  OWASP language.
+- Findings structured around **SWEBOK v4.0** knowledge areas (Quality,
+  Security, Architecture, Testing, Maintenance) — the body of knowledge
+  Prof. Washizaki personally edited for IEEE Computer Society in 2024.
 
-- **Website**: paste any public GitHub repo and watch it scan, attack, and
-  fix in real time — `/scan` (the tool), `/dashboard` (real usage, not
-  sample data), `/compare` (diff two branches), `/calibration` (is the AI's
-  confidence trustworthy?), `/detector-proposals` (AI-discovered
-  vulnerability classes awaiting review).
-- **One click to actually fix it**: a verified fix isn't just a code block —
-  `/scan` can open a real GitHub pull request carrying it, straight from the
-  browser, via a real GitHub OAuth sign-in (`lib/auth.ts`) or a pasted
-  personal access token if you'd rather not sign in (see
-  `integration/github_pr.py`).
-- **Repo scanning is asynchronous**: a large repo scan runs as a background
-  job instead of one blocking request, so it can't 504 on a slow connection
-  or a big codebase (see `server/jobs.py`).
-- **Real-world function signatures**: the attack/fix harness handles
-  functions taking more than one argument, not just the single-string-arg
-  shape every hand-built fixture happens to have (see
-  `system/orchestration/signature.py`).
-- **Backend**: FastAPI, hosted on Render. Attacks run in a real, network-
-  disabled Docker container (`system/sandbox/docker_runner.py`) whenever
-  the host has a reachable Docker daemon; Render's standard plan doesn't
-  (confirmed directly via `/api/debug/isolation-probe` — the same probe
-  found no namespace/cgroup-based alternative works there either, for
-  the identical underlying reason). The fallback
-  (`system/sandbox/subprocess_runner.py`) isn't just a weaker no-op,
-  though: it uses Landlock (`system/sandbox/landlock.py`), a Linux kernel
-  primitive designed to give an *unprivileged* process real, kernel-
-  enforced confinement with no host cooperation needed at all — where
-  Docker and hand-rolled namespaces need the host to grant elevated
-  privileges Render refuses, Landlock doesn't ask permission in the first
-  place. On any kernel that supports it (5.13+, network rules 6.7+ — this
-  probe confirms exactly which), it genuinely restricts filesystem writes
-  to the run's own scratch directory and denies all outbound TCP, and
-  says so precisely in `policy_violations` rather than claiming more.
-  (For anyone who wants real Docker-level isolation anyway, or is running
-  on a kernel without Landlock: `deploy/README.md` covers a plain VM, and
-  `deploy/windows-local-setup.md` a free, self-hosted alternative.)
+## Why this exists
 
-## The pipeline
+Full research synthesis and the reasoning behind every architectural choice
+is in [`ARCHITECTURE.md`](ARCHITECTURE.md). Short version: this project
+starts from Prof. Washizaki's actual, current, published work — not a
+generic "AI code reviewer" idea with his name attached after the fact.
+
+## Where the prior product went
+
+This repository previously shipped **Project KAGUTSUCHI**, a narrower
+exploit-and-verify security tool. It wasn't discarded — its real, tested
+engine (Docker/Landlock sandbox, attack-hypothesis generation, verified-fix
+delivery) is held in [`engine-archive/`](engine-archive/) and reconnects at
+Milestone M4. See that directory's own README for exactly what's there and
+where it's going.
+
+## Repository layout
 
 ```
-system/analysis        --SecurityFinding-->      verification/hypothesis
-verification/hypothesis --AttackHypothesis-->     system/sandbox
-system/sandbox          --ExecutionEvidence-->    verification/regression
-verification/regression --VerificationResult-->   system/orchestration
+ARCHITECTURE.md      -- the research grounding + design rationale (read this first)
+ROADMAP.md           -- milestones, what's built vs planned, honestly
+engine-archive/       -- Project KAGUTSUCHI, dismantled and held for reuse
+<new WSQF-AI code lands here as each milestone is built>
 ```
-
-Two detection engines feed the same pipeline:
-1. **Deterministic AST scan** — matches a fixed table of dangerous call
-   signatures. Instant, no network, no false negatives on what it knows.
-2. **AI scan** — reads the code for *meaning*, catches classes the fixed
-   list doesn't know about yet, and can propose a brand-new detector
-   signature for human review at `/detector-proposals`. Never
-   auto-applied: a human clicking Approve is what makes a proposal start
-   being checked for on every future scan (as plain data — a dotted call
-   name, matched through the exact same taint-gated logic as every
-   built-in detector, never AI-authored code running unreviewed), and a
-   human hand-writing it into `ast_scan.py` (see
-   `scripts/promote_detector.py`) is what makes it permanent.
-
-Every finding — from either engine — flows into the same
-hypothesize → attack → verify loop. A wrong AI guess comes back
-`FALSE_POSITIVE`; nothing gets a free pass because a model said so.
-
-## Vulnerability classes covered
-
-| Class | Fixture | Sink | Fix |
-|---|---|---|---|
-| Command injection | `verification/fixtures/netdiag.py` | `os.system(f"ping ... {host}")` | allowlist + `subprocess.run(shell=False)` |
-| SQL injection | `verification/fixtures/sql_injection.py` | `cursor.executescript(f"... {name}")` | parameterized `execute()` |
-| Insecure deserialization | `verification/fixtures/insecure_deserialization.py` | `pickle.loads(...)` | `json.loads(...)` |
-| Path traversal | `verification/fixtures/path_traversal.py` | `os.path.join(base, filename)` silently discarding `base` on an absolute path | `os.path.realpath` + `commonpath` check |
-| Unsafe tar extraction (CVE-2007-4559 class) | `verification/fixtures/tar_extraction.py` | `tarfile.extractall()` with no filter | resolve + validate each member's path before extracting |
-
-Plus whatever the AI scanner discovers beyond this list — see
-`/detector-proposals` and `scripts/promote_detector.py`.
-
-## Where everything lives
-
-| Path | What it is |
-|---|---|
-| `contracts/` | The four shared Pydantic models (`SecurityFinding`, `AttackHypothesis`, `ExecutionEvidence`, `VerificationResult`) — the **only** integration surface between `system/` and `verification/`. See `contracts/CONTRACTS.md`. |
-| `system/analysis/ast_scan.py` | Deterministic AST scanner — the fixed-signature detection engine. |
-| `system/analysis/llm_scan.py` | AI scanner — reads code for meaning, proposes new detector classes. |
-| `system/orchestration/` | Builds a runnable script from a fixture/source + a target function, drives attack/replay through the sandbox. |
-| `system/orchestration/signature.py` | Determines a function's real parameter count from source, so the harness can drive functions taking more than one argument instead of assuming exactly one. |
-| `system/sandbox/docker_runner.py` | Real Docker sandbox — network-disabled, memory-capped, destroyed per run. |
-| `system/sandbox/subprocess_runner.py` | Fallback sandbox (resource-limited subprocess, scrubbed env) used only when Docker isn't reachable. |
-| `system/cli/main.py` | Typer CLI: `analyze`, `analyze-diff`, `ingest`, `verify`. |
-| `verification/fixtures/` | The 5 vulnerable/fixed code pairs listed above. |
-| `verification/hypothesis/generate.py` | Turns a `SecurityFinding` into a live attack payload (Groq), with per-class hardcoded fallbacks. |
-| `verification/hypothesis/propose_fix.py` | Turns a proven-vulnerable finding into a proposed fix, AST-validated for self-containment before it's trusted to run. |
-| `verification/hypothesis/groq_client.py` | Groq API wrapper — retries automatically (up to 3x, temperature nudged up each time) on a malformed generation before giving up. |
-| `verification/regression/verify.py` | The actual verdict logic — deterministic marker-file comparison, not an LLM opinion. |
-| `verification/calibration.py` | Scores the AI's stated confidence against real sandbox outcomes (Brier score) — powers `/calibration`. |
-| `verification/attacks/` | Payload variants per fixture (proof each vulnerability is exploitable more than one way) and a local (non-sandboxed, dev-only) attack runner. |
-| `integration/upload_pipeline.py` | The real-product path: arbitrary uploaded source + a finding → full attack/fix/verify. Powers `/api/verify`. |
-| `integration/pipeline.py` | The fixture-demo path: known vulnerable/fixed pair → full verification, used by `integration/demo*.py`. |
-| `integration/demo.py`, `demo_sql.py`, `demo_deserialize.py` | One-shot end-to-end demos per fixture, fallback-hypothesis based (no API key needed). |
-| `integration/publish_result.py` | Publishes a real pipeline run to the live dashboard's database. |
-| `integration/file_patch.py` | Splices a verified fix's self-contained function back into its original file, preserving everything else (imports, decorators, other functions). |
-| `integration/github_pr.py` | Opens a real GitHub PR carrying a verified fix — the only place in the codebase that talks to GitHub's write API. |
-| `server/main.py` | FastAPI app — `/api/analyze`, `/api/analyze-repo` (+ `/start` and `/jobs/{id}` for the async version), `/api/verify`, `/api/open-pr`, `/api/health`. |
-| `server/repo_scan.py` | Clones a public GitHub repo and scans every `.py` file (AST on all, AI on a capped concurrent subset). |
-| `server/jobs.py` | In-memory background job runner backing `/api/analyze-repo/start` — turns a slow scan into a poll instead of one long blocking request. |
-| `server/rate_limit.py` | Per-IP, per-endpoint rate limiting — a short window (stops a retry storm) and a daily one (stops a script quietly burning the whole day's Groq quota). |
-| `webapp/app/page.tsx` | Landing page — what the project is, why the name, what it does. |
-| `webapp/app/scan/` | The scanning tool itself (paste a repo, see findings, attack one). |
-| `webapp/app/dashboard/` | Live Runs — real completed verifications from actual site usage. |
-| `webapp/app/compare/` | Diffs findings between two branches/refs of the same repo. |
-| `webapp/app/calibration/` | The AI-confidence-vs-reality page, backed by `verification/calibration.py`'s method. |
-| `webapp/app/detector-proposals/` | AI-discovered vulnerability classes awaiting human review/promotion. |
-| `webapp/app/api/backend/` | Server-side proxy routes to the FastAPI backend (avoids browser CORS entirely). |
-| `webapp/lib/db.ts` | Postgres schema + queries (`runs`, `repo_scan_cache`, `detector_proposals` tables). |
-| `webapp/lib/auth.ts` | GitHub OAuth sign-in (Auth.js) — replaces having to paste a personal access token to open a PR. |
-| `system/sandbox/landlock.py` | Unprivileged, kernel-enforced sandbox confinement (Linux Landlock) — real isolation with no elevated host privilege needed. |
-| `system/sandbox/isolation_probe.py` | Diagnostic: what real isolation (namespaces/cgroups/Landlock) is actually available on this host — `/api/debug/isolation-probe`. |
-| `deploy/` | Running the backend somewhere with full Docker-level isolation instead of the fallback — a VPS (`vps_setup.sh`) or a free self-hosted option (`windows-local-setup.md`). |
-| `scripts/demo_scan.py` | Interactive CLI demo console — scan, attack, calibration, and discovery, all from one menu. |
-| `scripts/promote_detector.py` | Turns an accepted AI-proposed detector into a ready-to-review `ast_scan.py` code snippet. |
-| `scripts/start_live_demo.sh` | Runs the backend with real Docker + a Cloudflare Tunnel, for environments (like Codespaces) where you want the real sandbox instead of the fallback. |
-| `tests/`, `verification/tests/` | The automated test suite (193 passing as of this build). |
-| `COORDINATION.md` | Append-only cross-session build log — every merge, every bug found, every design decision, in order. |
-
-## Try it
-
-**Interactive console (recommended, needs `GROQ_API_KEY` for the AI/attack steps):**
-```
-pip install -r requirements.txt -r server/requirements.txt -r verification/requirements.txt
-PYTHONPATH=. python scripts/demo_scan.py
-```
-
-**One-shot fixture demos (no API key needed, uses hardcoded fallback hypotheses):**
-```
-PYTHONPATH=. python -m integration.demo               # command injection
-PYTHONPATH=. python -m integration.demo_sql            # SQL injection
-PYTHONPATH=. python -m integration.demo_deserialize    # insecure deserialization
-```
-
-**CLI for scanning arbitrary code:**
-```
-python -m system.cli.main analyze <file.py>
-python -m system.cli.main analyze-diff <old> <new> <path>
-```
-
-All of the above work without Docker — they fall back to the subprocess
-sandbox automatically and say so in the output.
-
-## Team & ownership
-
-| Person | Role | Owns |
-|---|---|---|
-| **Sushil Raj** (Team Lead) | System & Security Engineering | `system/`, `integration/`, `webapp/`, `server/`, `scripts/`, final demo |
-| **Charanpreet Kaur** | Adversarial Verification & Evaluation | `verification/` — fixtures, attack hypothesis generation, fix proposal, calibration, regression/verdict logic |
-
-Both workstreams integrate **only** through `contracts/` — never through a
-shared working tree. See [`PLAN.md`](PLAN.md) for the build plan,
-[`CONTRIBUTING.md`](CONTRIBUTING.md) for collaboration rules, and
-[`COORDINATION.md`](COORDINATION.md) for the full build/verification log.
