@@ -85,10 +85,26 @@ No milestone is marked done because a plan for it exists.
           goal is catching completely unconstrained dependencies, the
           clearest low-false-positive signal, not grading pin strictness.
           9 tests.
-    - [ ] Performance Efficiency, Compatibility, Usability — not started.
-          Each needs its own honest scoping pass; Performance Efficiency in
-          particular can't be measured from static source alone at all —
-          it needs a profiling run, not a source read.
+    - [x] **Performance Efficiency (Time Behaviour) — one narrow, real
+          static signal.** `wsqfai/measurement/performance.py`: AST-based
+          detection of `x = x + <expr>` / `x += <expr>` executed inside a
+          loop body where the expression gives strong static evidence of
+          building a string (an f-string, a string literal, or a
+          `str(...)` call). Because Python strings are immutable, each such
+          iteration allocates an entirely new string and copies the old
+          contents in — O(n) work per iteration, O(n^2) total — a
+          well-established anti-pattern (the reason `"".join(...)` exists,
+          and the same class of issue `perflint`, a real published static
+          analyzer, flags). Correctly leaves numeric accumulation
+          (`total += price`) unflagged, since the risk is specifically
+          string-building, not augmented assignment in a loop in general. 8
+          tests. Most of Time Behaviour/Resource Utilization/Capacity still
+          genuinely can't be measured from static source alone — this is
+          one real, narrow exception, not a claim that static analysis now
+          covers performance broadly.
+    - [ ] Compatibility, Usability — not started. Each needs its own honest
+          scoping pass to find a signal reachable from static source
+          without fabricating one.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
