@@ -146,21 +146,40 @@ No milestone is marked done because a plan for it exists.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
-- [ ] **M5 — Evidence & benchmark engine.** WSQF/WSQB-style benchmarking:
-      build a small reference corpus of scanned repositories and report a
-      repo's measurements *relative to that corpus*, not as a lonely
-      number.
+- **M5 — Evidence & benchmark engine.** WSQF/WSQB-style benchmarking: build
+      a small reference corpus of scanned repositories and report a repo's
+      measurements *relative to that corpus*, not as a lonely number.
+  - [x] **M5a — Comparison methodology.** `wsqfai/benchmark.py`:
+        `CorpusReport.findings_per_kloc_by_characteristic()` computes a
+        corpus-wide findings-per-1000-lines rate per characteristic,
+        weighted by each repo's own line count (summing counts and lines
+        separately, never averaging per-repo rates) so one huge repository
+        isn't drowned out by many tiny ones. `compare_to_corpus()` then
+        expresses a single report as a ratio against that baseline (1.0 =
+        average, 2.0 = twice the corpus rate), returning `None` rather
+        than a bogus infinity when the corpus has zero findings for that
+        characteristic to divide by. 6 tests, including one real
+        end-to-end corpus build against a live public repo. This is the
+        *methodology* proven correct, not the milestone finished: there's
+        no real reference corpus yet, only whatever repo list a caller
+        supplies. See M5b.
+  - [ ] **M5b — A real reference corpus.** A curated, versioned set of
+        repositories to benchmark against by default (WSQF/WSQB's own
+        study used 21 commercial products) — needs a deliberate choice of
+        what belongs in it and why, not just picking a few repos
+        arbitrarily.
 - [ ] **M6 — Dashboard, report, CI/PR integration.** A real frontend
       (reusing KAGUTSUCHI's auth/i18n infrastructure from the archive where
       it fits), a generated report, and a CI-gate mode.
 
 ## Immediately next
 
-An end-to-end entry point that actually runs M1+M2a+M2b+M3a+M4a against a
-real repository and produces one combined report - `wsqfai/report.py` and
-a CLI - so the project is demonstrable as a working tool, not just a set
-of passing test suites. Everything built so far has been proven correct in
-isolation; nothing yet proves the pieces compose. After that: M4b (sandbox
-verification, the highest-value remaining milestone since it's the step
-that makes Security findings mean "proven exploitable", not just "pattern
-matched") and M2b/M3b's remaining slices.
+The report/CLI/benchmark composition layer is done (`wsqfai/report.py`,
+`wsqfai/__main__.py`, `wsqfai/benchmark.py` — text/JSON/HTML output, a real
+`wsqfai` console command, and a proven corpus-comparison methodology).
+M4b (sandbox verification) is the highest-value remaining milestone: it's
+the step that makes a Security finding mean "proven exploitable" instead
+of "an AST pattern matched somewhere", and it's mostly a re-platforming
+job since `engine-archive/kagutsuchi/system/sandbox` and `verification/`
+already exist, tested, from the prior product. M2b/M3b/M5b's remaining
+slices are all real, scoped, startable work whenever picked up next.
