@@ -24,11 +24,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--format", choices=("text", "json", "html"), default="text", help="output format (default: text)")
     parser.add_argument("--json", action="store_true", help="shorthand for --format json")
     parser.add_argument("--html", action="store_true", help="shorthand for --format html")
+    parser.add_argument(
+        "--patch", action="store_true",
+        help="print only the proposed fixes as one unified diff (git apply -p1 the output against a clone of the repo)",
+    )
     args = parser.parse_args(argv)
     fmt = "json" if args.json else "html" if args.html else args.format
 
     report = analyze_repository(args.repo_url, ref=args.ref)
-    if fmt == "json":
+    if args.patch:
+        print(report.combined_patch(), end="")
+    elif fmt == "json":
         print(report.model_dump_json(indent=2))
     elif fmt == "html":
         print(render_html(report))

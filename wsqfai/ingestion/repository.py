@@ -59,8 +59,19 @@ _LANGUAGE_BY_EXTENSION: dict[str, str] = {
     ".sh": "Shell", ".bash": "Shell",
     ".yaml": "YAML", ".yml": "YAML",
     ".json": "JSON",
+    ".toml": "TOML",
     ".md": "Markdown",
 }
+
+# Manifest/config files that matter to downstream analysis (portability's
+# dependency-pinning check, and future ones) but have no distinguishing
+# extension `_classify` can key on - "requirements.txt" would otherwise
+# fall through unclassified and never have its content retained at all.
+# Deliberately NOT given a language label: they aren't source code, and
+# labeling them "Python"/etc would corrupt language_summary()'s file/line
+# counts. content is retained; line_count stays 0, same as any other
+# unclassified file, so total_lines is unaffected.
+_ALWAYS_RETAIN_CONTENT_FILENAMES = {"requirements.txt", "Pipfile", "Dockerfile", "Makefile"}
 
 
 class InvalidRepoUrl(ValueError):
@@ -165,7 +176,13 @@ def _snapshot_from_dir(root: Path, owner: str, repo: str, ref: str | None) -> Re
             truncated = True
             continue
         language = _classify(path)
-        content, line_count = _read_text_and_count_lines(path) if language is not None else (None, 0)
+        if language is not None:
+            content, line_count = _read_text_and_count_lines(path)
+        elif path.name in _ALWAYS_RETAIN_CONTENT_FILENAMES:
+            content, _ = _read_text_and_count_lines(path)
+            line_count = 0
+        else:
+            content, line_count = None, 0
         files.append(FileRecord(
             path=path.relative_to(root).as_posix(),
             language=language,

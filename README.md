@@ -9,9 +9,10 @@ evidence-based dependability auditing, not an LLM's opinion of your code.**
 > measurement), M3a (ML-repository detection + a Washizaki-catalogued
 > ML-pattern check), M4a+M4b (AST-based security hypothesis generation,
 > actually sandbox-verified — a kernel-confined subprocess really attempts
-> the exploit before any Security Finding is minted), and M5a (a
-> WSQF/WSQB-style corpus-comparison methodology) are built, tested, and
-> wired into one CLI you can run against any public GitHub repo today. See
+> the exploit before any Security Finding is minted), M5a (a WSQF/WSQB-
+> style corpus-comparison methodology), and M7a (real auto-fix diffs, not
+> just findings) are built, tested, and wired into one CLI you can run
+> against any public GitHub repo today. See
 > [`ROADMAP.md`](ROADMAP.md) for exactly what's real versus what's still
 > planned — every checkbox there is backed by tested code, none by a plan —
 > and [`ARCHITECTURE.md`](ARCHITECTURE.md) for how every major design
@@ -34,13 +35,13 @@ Real output from that exact command, against Flask's actual source:
 
 ```
 WSQF-AI report for pallets/flask
-236 files, 18803 lines
-Top languages: Python (83 files, 18345 lines), YAML (8 files, 249 lines), Markdown (6 files, 153 lines), SQL (2 files, 28 lines), JSON (2 files, 21 lines)
+236 files, 19188 lines
+Top languages: Python (83 files, 18345 lines), TOML (5 files, 385 lines), YAML (8 files, 249 lines), Markdown (6 files, 153 lines), SQL (2 files, 28 lines)
 ML-containing repository: no
 
-Findings: 10
+Findings: 13
   high: 1
-  medium: 9
+  medium: 12
   [HIGH] reliability/fault_tolerance: Bare 'except:' clause(s) in src/flask/app.py (src/flask/app.py)
   [MEDIUM] maintainability/modularity: Large file reduces modularity: src/flask/cli.py (src/flask/cli.py)
   [MEDIUM] maintainability/modularity: Large file reduces modularity: src/flask/app.py (src/flask/app.py)
@@ -51,12 +52,36 @@ Findings: 10
   [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in tests/test_reqctx.py (tests/test_reqctx.py)
   [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in tests/test_basic.py (tests/test_basic.py)
   [MEDIUM] reliability/fault_tolerance: Swallowed exception(s) in tests/test_appctx.py (tests/test_appctx.py)
+  [MEDIUM] portability/installability: Unpinned dependencies in examples/tutorial/pyproject.toml (examples/tutorial/pyproject.toml)
+  [MEDIUM] portability/installability: Unpinned dependencies in examples/celery/pyproject.toml (examples/celery/pyproject.toml)
+  [MEDIUM] portability/installability: Unpinned dependencies in examples/javascript/pyproject.toml (examples/javascript/pyproject.toml)
 
 Security hypotheses (raw static AST matches — a confirmed one is also promoted to a Finding above; see M4b in ROADMAP.md): 1
   [HIGH] deserialization: exec executes arbitrary Python from its argument. (call: exec, line 209) (src/flask/config.py:209)
+
+Fixes proposed (real diffs — see --patch to get them as an applyable file): 1
+  src/flask/app.py: Narrowed bare 'except:' to 'except Exception:' so SystemExit/KeyboardInterrupt/GeneratorExit propagate normally.
 ```
 
-Flask's `exec()` call stays a hypothesis here, honestly: M4b's sandbox
+`wsqfai https://github.com/pallets/flask --patch` gives that fix as a real,
+applyable diff, generated from Flask's own actual file content — not a
+generic snippet:
+
+```diff
+--- a/src/flask/app.py
++++ b/src/flask/app.py
+@@ -1601,7 +1601,7 @@
+             except Exception as e:
+                 error = e
+                 response = self.handle_exception(ctx, e)
+-            except:
++            except Exception:
+                 error = sys.exc_info()[1]
+                 raise
+             return response(environ, start_response)
+```
+
+Flask's `exec()` call stays a hypothesis, honestly: M4b's sandbox
 verification only covers one mechanically reconstructible shape so far (a
 direct single-parameter shell-exec call), and `deserialization` isn't it
 yet. Run it against code that *is* that shape and the sandbox actually
@@ -86,10 +111,11 @@ function that validates its input first, and the sandbox correctly clears
 it instead (see `tests/security/test_verify.py`).
 
 Add `--json` for the full machine-readable report, `--format html` for a
-self-contained HTML page, or `--ref <branch>` to scan a specific
-branch/tag instead of the default.
+self-contained HTML page, `--patch` to get every proposed fix as one
+`git apply`-able diff, or `--ref <branch>` to scan a specific branch/tag
+instead of the default.
 
-Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 128 tests.
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 146 tests.
 
 ## What this is
 
@@ -121,6 +147,12 @@ wearing an AI badge:
 - Findings structured around **SWEBOK v4.0** knowledge areas (Quality,
   Security, Architecture, Testing, Maintenance) — the body of knowledge
   Prof. Washizaki personally edited for IEEE Computer Society in 2024.
+- **Fixes, not just findings**: for the handful of issues with an
+  unambiguous, mechanical fix, WSQF-AI generates a real diff from the
+  repository's own file content — `wsqfai <repo> --patch` gives you
+  something to `git apply`, not another list to read and act on by hand.
+  Everything else stays a Finding you decide how to act on, honestly —
+  a fake fix would be worse than no fix.
 
 ## Why this exists
 
@@ -150,6 +182,7 @@ wsqfai/
   measurement/           -- Maintainability, Reliability, Portability, ML-pattern metrics (M2a/M2b/M3a)
   security/              -- AST hypothesis scanner (M4a) + sandbox verification (M4b)
   benchmark.py           -- WSQF/WSQB-style corpus-comparison methodology (M5a)
-  report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML)
-tests/                   -- 128 tests, mirroring wsqfai/'s package structure
+  remediation.py         -- real auto-fix diffs for mechanically-fixable findings (M7a)
+  report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML/patch)
+tests/                   -- 146 tests, mirroring wsqfai/'s package structure
 ```

@@ -30,7 +30,7 @@ _ANALYZER = "wsqfai.measurement.maintainability"
 # JSON, and YAML are excluded: a large lockfile or a long changelog is not
 # evidence of a "god file", and their presence-or-absence says nothing
 # about test coverage.
-_NON_CODE_LANGUAGES = {"Markdown", "JSON", "YAML"}
+_NON_CODE_LANGUAGES = {"Markdown", "JSON", "YAML", "TOML"}
 
 # A file this long is very likely mixing more than one responsibility.
 # 1000/2000 lines are the commonly-cited "God Class/File" thresholds in

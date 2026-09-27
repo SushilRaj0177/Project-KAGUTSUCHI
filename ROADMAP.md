@@ -25,6 +25,21 @@ No milestone is marked done because a plan for it exists.
       from Python-only to any language) and file/language classification.
       19 tests, including one real end-to-end clone against a live public
       GitHub repo (skipped, not faked, if network is unavailable).
+
+      **Bug found and fixed later (during M7):** `requirements.txt` and
+      `.toml` files had no recognized extension, so their content was
+      never retained by ingestion - silently breaking the Portability
+      check (M2b) against every real repository since the day it shipped,
+      even though its own unit tests passed (they constructed `FileRecord`
+      directly, bypassing real ingestion, and never caught it). Fixed by
+      adding `.toml` as a real classified extension (consistent with YAML/
+      JSON already being classified) and a small filename allowlist for
+      extension-less manifests (`requirements.txt`, `Pipfile`, `Dockerfile`,
+      `Makefile`). Caught by actually running the tool against Flask's
+      real repository and noticing zero Portability findings where there
+      should have been some - a reminder that a unit-test suite passing is
+      not the same as the pipeline working end to end, which is exactly
+      why `wsqfai/report.py` exists. 2 regression tests added.
 - **M2 — SQuaRE quality measurement.** Deterministic measurement of real
       SQuaRE product-quality characteristics — each metric traceable to the
       specific sub-characteristic it measures. Split honestly into slices
@@ -204,18 +219,57 @@ No milestone is marked done because a plan for it exists.
 - [ ] **M6 — Dashboard, report, CI/PR integration.** A real frontend
       (reusing KAGUTSUCHI's auth/i18n infrastructure from the archive where
       it fits), a generated report, and a CI-gate mode.
+- **M7 — Remediation: "clean it up," not just "here's what's wrong."**
+      Added after real feedback that a findings-only report isn't useful
+      enough on its own - overlaps with what free linters already do
+      unless it actually fixes something.
+  - [x] **M7a — Mechanical auto-fix (first two rules).** `wsqfai/remediation.py`:
+        for a Finding whose fix is unambiguous and mechanical, generate a
+        real unified diff from the repository's own actual file content -
+        `git apply`-able, not a generic snippet. Covers `bare_except`
+        (narrow to `except Exception:`) and `unpinned_dependency` (pin to
+        the dependency's real current release, looked up live from PyPI).
+        Deliberately does NOT auto-fix a sandbox-confirmed security
+        Finding (`sandbox_verified_shell_injection`) - correctly rewriting
+        a shell-exec call needs understanding the intended command, which
+        this tool doesn't have, so it returns human-actionable guidance
+        text instead of a diff it can't stand behind. Wired into
+        `wsqfai/report.py`: every report now carries `fixes`/`suggestions`,
+        and `RepositoryReport.combined_patch()` (CLI: `wsqfai <repo>
+        --patch`) gives one patch file for everything auto-fixable at
+        once. 13 tests plus 2 in `report.py`'s own suite. Required
+        splitting `wsqfai/measurement/portability.py`'s findings from one
+        aggregated-per-file Finding to one per unpinned dependency (with a
+        real line number) - each fix needs its own precise line to edit,
+        which an aggregated summary string couldn't provide.
+  - [ ] **M7b — Wider fix coverage.** `swallowed_broad_exception` (insert
+        real logging), `pyproject.toml`'s unpinned dependencies (needs
+        line-number tracking tomllib doesn't give for free), and
+        anything else M2b/M3b add later.
+  - [ ] **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
+        + `server/` already built exactly this shape once (paste a repo
+        link, get a report back) - reconnecting them onto this pipeline is
+        what turns "run a CLI" into "paste a link on a website," which is
+        the actual product experience, not just a demo screenshot. Needs a
+        real decision about hosting and whether it opens a GitHub pull
+        request automatically (which needs OAuth/write access) or just
+        offers the patch file for manual `git apply` - not started.
 
 ## Immediately next
 
-The core "proven, not asserted" loop is now real end to end: ingest a
-repo, statically hypothesize (M4a), actually attempt the exploit in a
-kernel-confined sandbox (M4b), and only mint a Security Finding when the
-sandbox proves it - `wsqfai/report.py`'s own tests demonstrate the same
-static pattern in two different real functions correctly resolving to two
-different verdicts. The highest-value next step is widening M4b's
-coverage beyond its one shell-exec shape (reintroducing
-`verification/hypothesis`'s LLM-based hypothesis generation, or handling
-multi-parameter functions), since that's what turns this from "one narrow
+M7c (a real running web app) is the highest-value next step for making
+this something people actually use, not just read about - but it needs a
+real decision on hosting and GitHub-write scope before building, not a
+guess. Independent of that: the core "proven, not asserted" loop is real
+end to end - ingest a repo, statically hypothesize (M4a), actually attempt
+the exploit in a kernel-confined sandbox (M4b), and only mint a Security
+Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
+demonstrate the same static pattern in two different real functions
+correctly resolving to two different verdicts. The highest-value next step
+there is widening M4b's coverage beyond its one shell-exec shape
+(reintroducing `verification/hypothesis`'s LLM-based hypothesis
+generation, or handling multi-parameter functions), since that's what
+turns this from "one narrow
 but real case" into something that finds proven vulnerabilities across a
 meaningfully wider slice of real code. M2b/M3b/M3c/M4c/M5b's other
 remaining slices are all real, scoped, startable work whenever picked up.

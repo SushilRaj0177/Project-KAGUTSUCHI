@@ -18,6 +18,13 @@ Deliberately narrow: a dependency with *any* version operator (`==`,
 a range like `>=2.0` is weaker than an exact pin - the goal here is
 catching completely unconstrained dependencies, the clearest and lowest-
 false-positive signal, not grading pin strictness.
+
+requirements.txt gets one Finding per unpinned line (each with a real line
+number), not one aggregated Finding per file - deliberately, so
+wsqfai/remediation.py can fix each one independently rather than needing
+to re-parse a summary string. pyproject.toml's dependencies array doesn't
+carry line numbers through tomllib, so it stays a single aggregated,
+non-line-precise Finding - reported, not (yet) auto-fixable.
 """
 from __future__ import annotations
 
@@ -31,14 +38,16 @@ _ANALYZER = "wsqfai.measurement.portability"
 _VERSION_OPERATOR_RE = re.compile(r"(==|>=|<=|~=|!=|>|<)")
 
 
-def _requirements_txt_unpinned(content: str) -> list[str]:
-    unpinned: list[str] = []
-    for raw_line in content.splitlines():
+def _requirements_txt_unpinned(content: str) -> list[tuple[int, str]]:
+    """(line_number, dependency_declaration) for every line with no
+    version operator at all - 1-indexed to match SourceLocation.start_line."""
+    unpinned: list[tuple[int, str]] = []
+    for lineno, raw_line in enumerate(content.splitlines(), start=1):
         line = raw_line.split("#", 1)[0].strip()
         if not line or line.startswith("-"):
             continue
         if not _VERSION_OPERATOR_RE.search(line):
-            unpinned.append(line)
+            unpinned.append((lineno, line))
     return unpinned
 
 
@@ -62,6 +71,48 @@ def _pyproject_toml_unpinned(content: str) -> list[str]:
     return unpinned
 
 
+def _requirements_txt_finding(file_path: str, lineno: int, declaration: str) -> Finding:
+    return Finding(
+        title=f"Unpinned dependency in {file_path}: {declaration}",
+        description=(
+            f"{declaration!r} (line {lineno} of {file_path}) has no version constraint at all. A "
+            "fresh install can silently resolve a different, untested version of this dependency "
+            "than the one this repository was last known to work with - ISO/IEC 25010's "
+            "Installability sub-characteristic: the degree to which a product can be successfully "
+            "installed in a specified environment."
+        ),
+        characteristic=QualityCharacteristic.PORTABILITY,
+        sub_characteristic_key="installability",
+        severity=Severity.MEDIUM,
+        evidence=[Evidence(
+            location=SourceLocation(file_path=file_path, start_line=lineno, end_line=lineno),
+            snippet=declaration,
+            analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="unpinned_dependency", confidence=Confidence.HIGH),
+        )],
+    )
+
+
+def _pyproject_toml_finding(file_path: str, unpinned: list[str]) -> Finding:
+    return Finding(
+        title=f"Unpinned dependencies in {file_path}",
+        description=(
+            f"{len(unpinned)} dependency declaration(s) in {file_path} have no version constraint "
+            f"at all (e.g. {', '.join(unpinned[:5])}). Same risk as requirements.txt's own version - "
+            "ISO/IEC 25010's Installability sub-characteristic. tomllib doesn't expose source line "
+            "numbers for array entries, so this is reported as one aggregated finding, not one "
+            "auto-fixable Finding per dependency."
+        ),
+        characteristic=QualityCharacteristic.PORTABILITY,
+        sub_characteristic_key="installability",
+        severity=Severity.MEDIUM,
+        evidence=[Evidence(
+            location=SourceLocation(file_path=file_path),
+            snippet=f"{len(unpinned)} unconstrained dependencies: {', '.join(unpinned[:5])}",
+            analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="unpinned_dependency_pyproject", confidence=Confidence.HIGH),
+        )],
+    )
+
+
 def compute_portability_findings(snapshot: RepositorySnapshot) -> list[Finding]:
     findings: list[Finding] = []
     for f in snapshot.files:
@@ -69,29 +120,9 @@ def compute_portability_findings(snapshot: RepositorySnapshot) -> list[Finding]:
             continue
         name = f.path.rsplit("/", 1)[-1]
         if name == "requirements.txt":
-            unpinned = _requirements_txt_unpinned(f.content)
+            findings.extend(_requirements_txt_finding(f.path, lineno, decl) for lineno, decl in _requirements_txt_unpinned(f.content))
         elif name == "pyproject.toml":
             unpinned = _pyproject_toml_unpinned(f.content)
-        else:
-            continue
-        if not unpinned:
-            continue
-        findings.append(Finding(
-            title=f"Unpinned dependencies in {f.path}",
-            description=(
-                f"{len(unpinned)} dependency declaration(s) in {f.path} have no version constraint "
-                f"at all (e.g. {', '.join(unpinned[:5])}). A fresh install can silently resolve a "
-                "different, untested version of that dependency than the one this repository was "
-                "last known to work with - ISO/IEC 25010's Installability sub-characteristic: the "
-                "degree to which a product can be successfully installed in a specified environment."
-            ),
-            characteristic=QualityCharacteristic.PORTABILITY,
-            sub_characteristic_key="installability",
-            severity=Severity.MEDIUM,
-            evidence=[Evidence(
-                location=SourceLocation(file_path=f.path),
-                snippet=f"{len(unpinned)} unconstrained dependencies: {', '.join(unpinned[:5])}",
-                analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="unpinned_dependency", confidence=Confidence.HIGH),
-            )],
-        ))
+            if unpinned:
+                findings.append(_pyproject_toml_finding(f.path, unpinned))
     return findings

@@ -3,7 +3,7 @@ from wsqfai.measurement.portability import compute_portability_findings
 
 
 def _file(path: str, content: str) -> RepositorySnapshot:
-    f = FileRecord(path=path, language="Python" if path.endswith(".toml") else None, size_bytes=len(content), line_count=content.count("\n"), content=content)
+    f = FileRecord(path=path, language="TOML" if path.endswith(".toml") else None, size_bytes=len(content), line_count=content.count("\n"), content=content)
     return RepositorySnapshot(owner="me", repo="proj", ref=None, files=[f])
 
 
@@ -14,6 +14,14 @@ def test_requirements_txt_with_unpinned_dependency_is_flagged():
     assert findings[0].sub_characteristic_key == "installability"
     assert "requests" in findings[0].evidence[0].snippet
     assert "flask" not in findings[0].evidence[0].snippet
+
+
+def test_requirements_txt_with_multiple_unpinned_dependencies_gets_one_finding_each():
+    content = "requests\nflask==2.3.0\nnumpy\n"
+    findings = compute_portability_findings(_file("requirements.txt", content))
+    assert len(findings) == 2
+    by_line = {f.evidence[0].location.start_line: f.evidence[0].snippet for f in findings}
+    assert by_line == {1: "requests", 3: "numpy"}
 
 
 def test_fully_pinned_requirements_txt_has_no_finding():

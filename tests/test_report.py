@@ -44,6 +44,26 @@ def test_sandbox_verified_shell_injection_is_promoted_to_a_critical_finding():
     assert security_findings[0].evidence[0].location.file_path == "app.py"
 
 
+def test_bare_except_finding_gets_a_real_applyable_fix():
+    snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
+        _py("app.py", "def f():\n    try:\n        risky()\n    except:\n        pass\n"),
+    ])
+    report = analyze_snapshot(snapshot)
+    assert len(report.fixes) == 1
+    assert "except Exception:" in report.fixes[0].diff
+    assert report.combined_patch() == report.fixes[0].diff
+
+
+def test_sandbox_confirmed_security_finding_gets_a_suggestion_not_a_fix():
+    snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
+        _py("app.py", "def run(cmd):\n    import os\n    os.system(cmd)\n"),
+    ])
+    report = analyze_snapshot(snapshot)
+    assert report.fixes == []
+    assert len(report.suggestions) == 1
+    assert "subprocess.run" in report.suggestions[0].guidance
+
+
 def test_unverifiable_security_hypothesis_stays_a_hypothesis_not_a_finding():
     snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
         _py("app.py", "def get_user(conn, username):\n    cursor = conn.cursor()\n    cursor.execute(f\"SELECT * FROM users WHERE name = '{username}'\")\n"),

@@ -59,6 +59,29 @@ def test_snapshot_from_dir_skips_ignored_directories_and_classifies_files(tmp_pa
     assert main_py.content == "import os\n\ndef f():\n    return 1\n"
 
 
+def test_requirements_txt_content_is_retained_despite_having_no_recognized_extension(tmp_path):
+    # Regression test: requirements.txt has no distinguishing extension, so
+    # it fell through _classify() unclassified and its content was never
+    # retained - silently breaking the Portability check (M2b) against
+    # every real repository, even though its own unit tests passed (they
+    # constructed FileRecord directly, bypassing real ingestion).
+    (tmp_path / "requirements.txt").write_text("requests\nflask==2.3.0\n")
+    snapshot = _snapshot_from_dir(tmp_path, owner="me", repo="proj", ref=None)
+    req = next(f for f in snapshot.files if f.path == "requirements.txt")
+    assert req.content == "requests\nflask==2.3.0\n"
+    assert req.language is None  # not source code - must not pollute language_summary()
+    assert req.line_count == 0
+
+
+def test_pyproject_toml_content_is_retained(tmp_path):
+    # Same class of bug: .toml wasn't a recognized extension at all.
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "x"\n')
+    snapshot = _snapshot_from_dir(tmp_path, owner="me", repo="proj", ref=None)
+    pyproject = next(f for f in snapshot.files if f.path == "pyproject.toml")
+    assert pyproject.content == '[project]\nname = "x"\n'
+    assert pyproject.language == "TOML"
+
+
 def test_unclassified_files_do_not_retain_content(tmp_path):
     (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
 

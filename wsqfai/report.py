@@ -30,6 +30,7 @@ from wsqfai.measurement.maintainability import compute_maintainability_findings
 from wsqfai.measurement.ml_patterns import compute_ml_pattern_findings, is_ml_repository
 from wsqfai.measurement.portability import compute_portability_findings
 from wsqfai.measurement.reliability import compute_reliability_findings
+from wsqfai.remediation import Fix, Suggestion, propose_fix, propose_suggestion
 from wsqfai.security.scanner import scan_repository_for_security_hypotheses
 from wsqfai.security.verify import can_attempt_verification, promote_to_finding, verify_shell_exec_observation
 
@@ -47,6 +48,14 @@ class RepositoryReport(BaseModel):
     is_ml_repository: bool
     findings: list[Finding]
     security_hypotheses: list[Observation]
+    fixes: list[Fix]
+    suggestions: list[Suggestion]
+
+    def combined_patch(self) -> str:
+        """Every proposed Fix's diff, concatenated into one patch file a
+        user can `git apply` directly against a clone of the repository -
+        the actual "clean it up" deliverable, not just a list of findings."""
+        return "".join(fix.diff for fix in self.fixes)
 
     def finding_count_by_severity(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -83,6 +92,18 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
         if finding is not None:
             findings.append(finding)
 
+    file_contents = {f.path: f.content for f in snapshot.files if f.content is not None}
+    fixes: list[Fix] = []
+    suggestions: list[Suggestion] = []
+    for finding in findings:
+        fix = propose_fix(finding, file_contents)
+        if fix is not None:
+            fixes.append(fix)
+            continue
+        suggestion = propose_suggestion(finding)
+        if suggestion is not None:
+            suggestions.append(suggestion)
+
     return RepositoryReport(
         owner=snapshot.owner,
         repo=snapshot.repo,
@@ -94,6 +115,8 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
         is_ml_repository=is_ml_repository(snapshot),
         findings=findings,
         security_hypotheses=security_hypotheses,
+        fixes=fixes,
+        suggestions=suggestions,
     )
 
 
@@ -135,6 +158,15 @@ def render_text(report: RepositoryReport) -> str:
         op = o.metadata.get("sensitive_op", "?")
         loc = f"{o.location.file_path}:{o.location.start_line}" if o.location else "?"
         lines.append(f"  [{severity_hint}] {op}: {o.description} ({loc})")
+    lines.append("")
+
+    lines.append(f"Fixes proposed (real diffs — see --patch to get them as an applyable file): {len(report.fixes)}")
+    for fix in report.fixes:
+        lines.append(f"  {fix.file_path}: {fix.summary}")
+    if report.suggestions:
+        lines.append(f"Suggestions (not auto-applied — needs human judgment): {len(report.suggestions)}")
+        for suggestion in report.suggestions:
+            lines.append(f"  {suggestion.guidance}")
 
     return "\n".join(lines)
 
@@ -161,6 +193,10 @@ _HTML_TEMPLATE = """<!doctype html>
   .sev-medium {{ color: #b45309; font-weight: 600; }}
   .sev-low {{ color: #4b5563; }}
   .empty {{ color: #666; font-style: italic; }}
+  pre.diff {{ background: #0d1117; color: #c9d1d9; padding: 0.75rem 1rem; border-radius: 8px; overflow-x: auto; font-size: 0.82rem; line-height: 1.4; }}
+  pre.diff .add {{ color: #7ee787; }}
+  pre.diff .del {{ color: #ffa198; }}
+  .fix-summary {{ font-size: 0.85rem; color: #666; margin: 0.5rem 0 0.25rem; }}
   footer {{ margin-top: 2rem; border-top: 1px solid #ddd; padding-top: 1rem; font-size: 0.8rem; color: #666; }}
 </style>
 </head>
@@ -173,11 +209,15 @@ _HTML_TEMPLATE = """<!doctype html>
   <div class="stat"><span class="n">{total_lines}</span><span class="l">lines</span></div>
   <div class="stat"><span class="n">{finding_count}</span><span class="l">findings</span></div>
   <div class="stat"><span class="n">{hypothesis_count}</span><span class="l">security hypotheses</span></div>
+  <div class="stat"><span class="n">{fix_count}</span><span class="l">fixes proposed</span></div>
   <div class="stat"><span class="n">{ml_repo}</span><span class="l">ML-containing</span></div>
 </div>
 
 <h2>Findings</h2>
 {findings_table}
+
+<h2>Proposed fixes <span style="font-weight:400;font-size:0.7em;color:#666">(real diffs, generated from the repository's own files — get them as one patch with --patch)</span></h2>
+{fixes_block}
 
 <h2>Security hypotheses <span style="font-weight:400;font-size:0.7em;color:#666">(raw static matches — a sandbox-confirmed one is also promoted to a Finding above)</span></h2>
 {hypotheses_table}
@@ -231,6 +271,33 @@ def _hypotheses_table_html(report: RepositoryReport) -> str:
     )
 
 
+def _diff_html(diff_text: str) -> str:
+    lines = []
+    for line in diff_text.splitlines():
+        escaped = _escape(line)
+        if line.startswith("+") and not line.startswith("+++"):
+            lines.append(f'<span class="add">{escaped}</span>')
+        elif line.startswith("-") and not line.startswith("---"):
+            lines.append(f'<span class="del">{escaped}</span>')
+        else:
+            lines.append(escaped)
+    return "\n".join(lines)
+
+
+def _fixes_block_html(report: RepositoryReport) -> str:
+    if not report.fixes and not report.suggestions:
+        return '<p class="empty">No fixes proposed.</p>'
+    blocks = []
+    for fix in report.fixes:
+        blocks.append(
+            f"<p class='fix-summary'><code>{_escape(fix.file_path)}</code> — {_escape(fix.summary)}</p>"
+            f"<pre class='diff'>{_diff_html(fix.diff)}</pre>"
+        )
+    for suggestion in report.suggestions:
+        blocks.append(f"<p class='fix-summary'>Suggestion (not auto-applied): {_escape(suggestion.guidance)}</p>")
+    return "".join(blocks)
+
+
 def render_html(report: RepositoryReport) -> str:
     """A self-contained static HTML page (no external assets) - suitable
     for saving to a file and opening directly, or for `--format html`'s
@@ -246,7 +313,9 @@ def render_html(report: RepositoryReport) -> str:
         total_lines=report.total_lines,
         finding_count=len(report.findings),
         hypothesis_count=len(report.security_hypotheses),
+        fix_count=len(report.fixes),
         ml_repo="yes" if report.is_ml_repository else "no",
         findings_table=_findings_table_html(report),
+        fixes_block=_fixes_block_html(report),
         hypotheses_table=_hypotheses_table_html(report),
     )
