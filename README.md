@@ -115,7 +115,7 @@ self-contained HTML page, `--patch` to get every proposed fix as one
 `git apply`-able diff, or `--ref <branch>` to scan a specific branch/tag
 instead of the default.
 
-Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 164 tests (install
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 172 tests (install
 with `pip install -e ".[server]"` first if you want the 10 FastAPI server
 tests included — the base install doesn't need FastAPI at all).
 
@@ -205,9 +205,10 @@ wsqfai/
   measurement/           -- Maintainability, Reliability, Portability, ML-pattern metrics (M2a/M2b/M3a)
   security/              -- AST hypothesis scanner (M4a) + sandbox verification (M4b)
   benchmark.py           -- WSQF/WSQB-style corpus-comparison methodology (M5a)
+  reference_corpus.py    -- curated default corpus to benchmark against, with caching (M5b)
   remediation.py         -- real auto-fix diffs for mechanically-fixable findings (M7a)
   integration/           -- opens a real GitHub PR carrying selected fixes (M7c-backend)
   server/                -- the FastAPI backend behind a future web frontend (M7c-backend)
   report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML/patch)
-tests/                   -- 164 tests, mirroring wsqfai/'s package structure
+tests/                   -- 172 tests, mirroring wsqfai/'s package structure
 ```

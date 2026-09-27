@@ -207,15 +207,30 @@ No milestone is marked done because a plan for it exists.
         average, 2.0 = twice the corpus rate), returning `None` rather
         than a bogus infinity when the corpus has zero findings for that
         characteristic to divide by. 6 tests, including one real
-        end-to-end corpus build against a live public repo. This is the
-        *methodology* proven correct, not the milestone finished: there's
-        no real reference corpus yet, only whatever repo list a caller
-        supplies. See M5b.
-  - [ ] **M5b — A real reference corpus.** A curated, versioned set of
-        repositories to benchmark against by default (WSQF/WSQB's own
-        study used 21 commercial products) — needs a deliberate choice of
-        what belongs in it and why, not just picking a few repos
-        arbitrarily.
+        end-to-end corpus build against a live public repo. This was the
+        *methodology* proven correct, not the whole milestone finished at
+        the time - `compare_to_corpus` still takes any `CorpusReport`
+        a caller supplies, including a custom one; M5b adds a real curated
+        default.
+  - [x] **M5b — A real reference corpus.** `wsqfai/reference_corpus.py`:
+        a curated, versioned list of 4 real, actively-maintained,
+        permissively-licensed repositories - `pallets/flask` (web
+        framework), `psf/requests` (HTTP client), `pallets/click` (CLI
+        toolkit), `benoitc/gunicorn` (WSGI server) - deliberately diverse
+        in application shape, not just four web frameworks, since diversity
+        is what makes `compare_to_corpus()`'s baseline mean something
+        rather than secretly measuring "typical of web frameworks." Each
+        entry carries its own one-line justification inline, so the
+        corpus's composition stays auditable. `build_reference_corpus()`
+        caches the built `CorpusReport` to a JSON file (via pydantic's own
+        `model_dump_json`/`model_validate_json`) so repeated benchmark runs
+        don't re-clone and re-analyze all 4 repositories every time - only
+        `force_refresh=True` (e.g. after `REFERENCE_CORPUS` itself changes)
+        rebuilds and overwrites the cache. Deliberately small (4, not
+        WSQF/WSQB's 21): a small set that's actually exercised end-to-end
+        beats a large one that's aspirational. 8 tests, including one real
+        end-to-end build against all 4 live repositories, cached, then
+        confirmed the cache is read back without a second clone.
 - [ ] **M6 — Dashboard, report, CI/PR integration.** A real frontend
       (reusing KAGUTSUCHI's auth/i18n infrastructure from the archive where
       it fits), a generated report, and a CI-gate mode.
@@ -296,5 +311,5 @@ there is widening M4b's coverage beyond its one shell-exec shape
 generation, or handling multi-parameter functions), since that's what
 turns this from "one narrow
 but real case" into something that finds proven vulnerabilities across a
-meaningfully wider slice of real code. M2b/M3b/M3c/M4c/M5b's other
-remaining slices are all real, scoped, startable work whenever picked up.
+meaningfully wider slice of real code. M2b/M3b/M3c/M4c's other remaining
+slices are all real, scoped, startable work whenever picked up.
