@@ -216,6 +216,66 @@ def test_syntax_error_source_is_skipped_not_crashed():
     assert scan_source("def f(:\n  bad\n", "broken.py") == []
 
 
+def test_single_param_direct_taint_is_recorded_for_simple_functions():
+    src = """
+def run_lookup(hostname):
+    import os
+    os.system("ping -c 1 " + hostname)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert observations[0].metadata["single_param_direct_taint"] == "hostname"
+
+
+def test_single_param_direct_taint_absent_when_taint_flows_through_a_local_variable():
+    src = """
+def load(data):
+    import pickle
+    raw = data
+    return pickle.loads(raw)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert "single_param_direct_taint" not in observations[0].metadata
+
+
+def test_single_param_direct_taint_absent_when_function_has_more_than_one_parameter():
+    src = """
+def get_user(conn, username):
+    cursor = conn.cursor()
+    cursor.execute(f"SELECT * FROM users WHERE name = '{username}'")
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert "single_param_direct_taint" not in observations[0].metadata
+
+
+def test_module_level_imports_are_captured_in_metadata():
+    src = """
+import os
+from pathlib import Path
+
+def run(cmd):
+    os.system(cmd)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    imports = observations[0].metadata["module_imports"]
+    assert "import os" in imports
+    assert "from pathlib import Path" in imports
+
+
+def test_module_imports_key_absent_when_file_has_no_top_level_imports():
+    src = """
+def run(cmd):
+    import os
+    os.system(cmd)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert "module_imports" not in observations[0].metadata
+
+
 def test_every_observation_has_a_real_source_location_with_line_number():
     src = """
 def run(cmd):

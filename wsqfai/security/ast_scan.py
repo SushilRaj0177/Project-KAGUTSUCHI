@@ -17,8 +17,11 @@ sub-characteristic is *at risk*, backed by evidence of that risk - not
 backed by evidence of a mere pattern match). Every hit here becomes an
 `Observation` instead: "this call site matches a sensitive-operation
 signature", not "this is a vulnerability". Promoting an Observation to a
-Finding is the sandbox-verification stage - M4b, not yet built - reusing
-`engine-archive/kagutsuchi/system/sandbox` and `verification/`.
+Finding is the sandbox-verification stage - wsqfai/security/verify.py
+(M4b), re-platforming `engine-archive/kagutsuchi/system/sandbox`. It
+currently covers one mechanically reconstructible shape (a direct,
+single-parameter shell-exec call - see verify.py's own docstring); every
+other Observation stays a hypothesis until that coverage widens.
 
 Parses Python source, walks each function body, and flags calls that match
 a known sensitive-operation signature (shell exec, subprocess, filesystem,
@@ -388,6 +391,32 @@ def _call_is_tainted(node: ast.Call, tainted: set[str]) -> bool:
     return _expr_references(node, tainted)
 
 
+def _sole_direct_taint_param(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
+    """The function's one and only parameter, when the dangerous call's
+    tainted data traces directly to it with no intermediate local
+    variable - `os.system("ping " + host)` where `host` is the sole
+    parameter, not `raw = transform(host); os.system(raw)`.
+
+    This identifies the narrow, mechanically re-callable shape M4b's
+    sandbox verification (wsqfai/security/verify.py) can actually attempt:
+    given just this parameter name and the function's own source text, a
+    verifier can construct `symbol(payload)` and run it, with no need to
+    reconstruct multi-argument call context or a derivation chain. A
+    function with more than one parameter, or where the taint only reaches
+    the sink through a reassigned local, returns None here - real but
+    unverified by this first slice, not silently claimed as verifiable."""
+    args = func_node.args
+    if args.vararg or args.kwarg or args.kwonlyargs or args.defaults or args.kw_defaults:
+        return None
+    positional = (*args.posonlyargs, *args.args)
+    if len(positional) != 1:
+        return None
+    only_param = positional[0].arg
+    if _tainted_names(func_node) != {only_param}:
+        return None
+    return only_param
+
+
 def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
     hits: list[_CallSite] = []
     tainted = _tainted_names(func_node)
@@ -415,6 +444,24 @@ def _function_source(source_lines: list[str], func_node: ast.FunctionDef) -> str
     return text[:_MAX_RETAINED_SNIPPET_CHARS]
 
 
+def _module_level_imports(tree: ast.Module) -> str:
+    """Reconstructed source text of every top-level import statement in
+    the file. A function's own body frequently relies on a name (`os`,
+    `subprocess`, ...) imported at module scope rather than inside the
+    function itself - the common real-world case, as opposed to the
+    import-inside-the-function style some hand-written fixtures use.
+    Without these, a candidate script built from `_function_source` alone
+    fails with a bare NameError before the sink is ever reached, which
+    M4b's verification (wsqfai/security/verify.py) would otherwise
+    misread as "not vulnerable" rather than "couldn't even run"."""
+    lines = [
+        ast.unparse(node)
+        for node in tree.body
+        if isinstance(node, (ast.Import, ast.ImportFrom))
+    ]
+    return "\n".join(lines)[:_MAX_RETAINED_SNIPPET_CHARS]
+
+
 def scan_source(source: str, file_path: str) -> list[Observation]:
     """Parse `source`, return one Observation per sensitive call site found
     inside any top-level or nested function definition. Returns an empty
@@ -426,6 +473,7 @@ def scan_source(source: str, file_path: str) -> list[Observation]:
     except (SyntaxError, ValueError):
         return []
     source_lines = source.splitlines()
+    module_imports = _module_level_imports(tree)
     observations: list[Observation] = []
 
     for node in ast.walk(tree):
@@ -436,16 +484,22 @@ def scan_source(source: str, file_path: str) -> list[Observation]:
             if op is None:
                 op, rationale, detector = _SIGNATURES[hit.call_name]
             severity = hit.severity or _SEVERITY_BY_OP.get(op, Severity.MEDIUM)
+            metadata = {
+                "sensitive_op": op.value,
+                "detected_by": detector,
+                "severity_hint": severity.value,
+                "symbol": hit.function_name,
+                "likely_security_sub_characteristic": _LIKELY_SUB_CHARACTERISTIC[op],
+                "function_source": _function_source(source_lines, node),
+            }
+            if module_imports:
+                metadata["module_imports"] = module_imports
+            sole_param = _sole_direct_taint_param(node)  # type: ignore[arg-type]
+            if sole_param is not None:
+                metadata["single_param_direct_taint"] = sole_param
             observations.append(Observation(
                 description=f"{rationale} (call: {hit.call_name}, line {hit.lineno})",
                 location=SourceLocation(file_path=file_path, start_line=hit.lineno, end_line=hit.lineno),
-                metadata={
-                    "sensitive_op": op.value,
-                    "detected_by": detector,
-                    "severity_hint": severity.value,
-                    "symbol": hit.function_name,
-                    "likely_security_sub_characteristic": _LIKELY_SUB_CHARACTERISTIC[op],
-                    "function_source": _function_source(source_lines, node),
-                },
+                metadata=metadata,
             ))
     return observations

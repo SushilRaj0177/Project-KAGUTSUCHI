@@ -27,9 +27,30 @@ def test_analyze_snapshot_composes_every_module():
     characteristics = {f.characteristic.value for f in report.findings}
     assert "maintainability" in characteristics  # god-file + missing versioning (modifiability)
     assert "reliability" in characteristics  # bare except
+    assert "security" in characteristics  # app.py's os.system(cmd) sandbox-verified
 
     assert len(report.security_hypotheses) == 1
     assert report.security_hypotheses[0].metadata["sensitive_op"] == "shell_exec"
+
+
+def test_sandbox_verified_shell_injection_is_promoted_to_a_critical_finding():
+    snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
+        _py("app.py", "def run(cmd):\n    import os\n    os.system(cmd)\n"),
+    ])
+    report = analyze_snapshot(snapshot)
+    security_findings = [f for f in report.findings if f.characteristic.value == "security"]
+    assert len(security_findings) == 1
+    assert security_findings[0].severity.value == "critical"
+    assert security_findings[0].evidence[0].location.file_path == "app.py"
+
+
+def test_unverifiable_security_hypothesis_stays_a_hypothesis_not_a_finding():
+    snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
+        _py("app.py", "def get_user(conn, username):\n    cursor = conn.cursor()\n    cursor.execute(f\"SELECT * FROM users WHERE name = '{username}'\")\n"),
+    ])
+    report = analyze_snapshot(snapshot)
+    assert len(report.security_hypotheses) == 1
+    assert not any(f.characteristic.value == "security" for f in report.findings)
 
 
 def test_finding_counts_by_severity_and_characteristic():

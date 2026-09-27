@@ -11,8 +11,12 @@ passing test suites" and "a working tool".
 Deliberately still limited in the same ways its parts are limited (see
 each module's own docstring): Maintainability/Reliability/ML-pattern
 Findings are real but only cover the sub-characteristics built so far
-(M2a/M2b/M3a); security hypotheses are unverified static AST matches, not
-sandbox-proven Findings, until M4b exists.
+(M2a/M2b/M3a); most security hypotheses remain unverified static AST
+matches, since M4b's sandbox verification only covers one mechanically
+reconstructible shape so far (see wsqfai/security/verify.py) - the ones it
+can attempt are actually run in the sandbox here, and only a real,
+sandbox-confirmed exploit is promoted into `findings` as a Security
+Finding. Everything else stays a labeled hypothesis, not silently upgraded.
 """
 from __future__ import annotations
 
@@ -27,6 +31,7 @@ from wsqfai.measurement.ml_patterns import compute_ml_pattern_findings, is_ml_re
 from wsqfai.measurement.portability import compute_portability_findings
 from wsqfai.measurement.reliability import compute_reliability_findings
 from wsqfai.security.scanner import scan_repository_for_security_hypotheses
+from wsqfai.security.verify import can_attempt_verification, promote_to_finding, verify_shell_exec_observation
 
 _SEVERITY_ORDER = ("critical", "high", "medium", "low")
 
@@ -66,6 +71,18 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
     findings.extend(compute_reliability_findings(snapshot))
     findings.extend(compute_portability_findings(snapshot))
     findings.extend(compute_ml_pattern_findings(snapshot))
+
+    security_hypotheses = scan_repository_for_security_hypotheses(snapshot)
+    for observation in security_hypotheses:
+        if not can_attempt_verification(observation.metadata):
+            continue
+        result = verify_shell_exec_observation(observation.metadata)
+        start_line = observation.location.start_line if observation.location else None
+        file_path = observation.location.file_path if observation.location else "?"
+        finding = promote_to_finding(observation.metadata, file_path, start_line, result)
+        if finding is not None:
+            findings.append(finding)
+
     return RepositoryReport(
         owner=snapshot.owner,
         repo=snapshot.repo,
@@ -76,7 +93,7 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
         language_summary=snapshot.language_summary(),
         is_ml_repository=is_ml_repository(snapshot),
         findings=findings,
-        security_hypotheses=scan_repository_for_security_hypotheses(snapshot),
+        security_hypotheses=security_hypotheses,
     )
 
 
@@ -112,7 +129,7 @@ def render_text(report: RepositoryReport) -> str:
         lines.append(f"  [{f.severity.value.upper()}] {f.characteristic.value}/{f.sub_characteristic_key}: {f.title} ({location})")
     lines.append("")
 
-    lines.append(f"Security hypotheses (unverified static AST match, not sandbox-proven — see M4b in ROADMAP.md): {len(report.security_hypotheses)}")
+    lines.append(f"Security hypotheses (raw static AST matches — a confirmed one is also promoted to a Finding above; see M4b in ROADMAP.md): {len(report.security_hypotheses)}")
     for o in report.security_hypotheses:
         severity_hint = o.metadata.get("severity_hint", "?").upper()
         op = o.metadata.get("sensitive_op", "?")
@@ -162,7 +179,7 @@ _HTML_TEMPLATE = """<!doctype html>
 <h2>Findings</h2>
 {findings_table}
 
-<h2>Security hypotheses <span style="font-weight:400;font-size:0.7em;color:#666">(unverified static AST match, not sandbox-proven)</span></h2>
+<h2>Security hypotheses <span style="font-weight:400;font-size:0.7em;color:#666">(raw static matches — a sandbox-confirmed one is also promoted to a Finding above)</span></h2>
 {hypotheses_table}
 
 <footer>

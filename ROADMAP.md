@@ -130,19 +130,52 @@ No milestone is marked done because a plan for it exists.
         and minting a Finding from it would violate this project's own
         "proven, not asserted" discipline (ARCHITECTURE.md's #1 security
         design decision). `wsqfai/security/scanner.py` runs it across a
-        whole `RepositorySnapshot`. 25 tests (22 detector-level, 3
+        whole `RepositorySnapshot`. Also captures each function's own
+        source, its enclosing file's module-level imports, and (for the
+        narrow shape M4b needs) which single parameter directly carries
+        the tainted data into the sink. 30 tests (27 detector-level, 3
         repository-level), ported from the archive's own
         `tests/system/test_ast_scan.py` test-by-test. `LearnedSignature`/
         `extra_signatures` and `scan_diff`/diff-scoped scanning were left
         out of this port deliberately — they depended on a review/approval
         workflow and a CI diff view that haven't been re-platformed yet.
-  - [ ] **M4b — Sandbox verification.** Reintroduce
-        `engine-archive/kagutsuchi/system/sandbox` (Docker/subprocess
-        isolation) and `verification/` (attack-hypothesis generation,
-        execution, before/after evidence, verdicts) to actually attempt
-        exploiting an M4a Observation and only then mint a `Finding` -
-        the step that makes a Security Finding mean something more than
-        "an AST pattern matched somewhere".
+  - [x] **M4b — Sandbox verification (shell-exec slice).**
+        `wsqfai/security/sandbox.py` re-platforms
+        `engine-archive/kagutsuchi/system/sandbox/subprocess_runner.py`:
+        real, isolated subprocess execution (rlimits, a scrubbed
+        environment, serialized runs) plus `wsqfai/security/landlock.py`
+        (`.../system/sandbox/landlock.py`, real kernel-level Landlock
+        confinement — filesystem writes restricted to a scratch dir,
+        outbound TCP denied — verified against the actual kernel in this
+        environment, not mocked: 13 tests, none skipped). Docker isolation
+        (`docker_runner.py`) was deliberately NOT re-platformed — it needs
+        a reachable Docker daemon this environment doesn't provide, and
+        reintroducing untested orchestration code would be exactly the
+        vaporware this project's honesty discipline forbids.
+
+        `wsqfai/security/verify.py` is the actual "prove it" step: for the
+        one mechanically reconstructible shape this slice covers — a
+        direct shell-exec call (`os.system`/`os.popen`) in a function with
+        exactly one parameter, where the tainted data reaches the sink
+        directly (no intermediate local variable) — it builds a
+        self-contained candidate script from the observed function's real
+        source, actually runs it in the sandbox with a shell-injection
+        payload, and only mints a `Finding` when the sandbox proves the
+        injection executed (a marker-file side effect). This generalizes
+        Project KAGUTSUCHI's own demo, which only ever proved this against
+        three hand-authored fixtures: the same static pattern in two
+        *different* real functions — one genuinely vulnerable, one that
+        validates its input first — is correctly told apart by actually
+        running both, not by trusting the identical AST match. Every other
+        Observation shape (SQL injection, deserialization, SSTI, multi-
+        parameter shell-exec, taint through a local variable) returns
+        `NOT_APPLICABLE` — a stated limitation, not a silent false
+        negative. 10 tests, plus 2 in `wsqfai/report.py`'s own suite proving
+        the wiring: a confirmed hypothesis is promoted to a `Finding`, an
+        unsupported one stays a hypothesis. Reintroducing the archived
+        LLM-based hypothesis generation (`verification/hypothesis/
+        generate.py`, `groq_client.py`) to widen coverage beyond this one
+        shape is real further M4b work.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -174,12 +207,15 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-The report/CLI/benchmark composition layer is done (`wsqfai/report.py`,
-`wsqfai/__main__.py`, `wsqfai/benchmark.py` — text/JSON/HTML output, a real
-`wsqfai` console command, and a proven corpus-comparison methodology).
-M4b (sandbox verification) is the highest-value remaining milestone: it's
-the step that makes a Security finding mean "proven exploitable" instead
-of "an AST pattern matched somewhere", and it's mostly a re-platforming
-job since `engine-archive/kagutsuchi/system/sandbox` and `verification/`
-already exist, tested, from the prior product. M2b/M3b/M5b's remaining
-slices are all real, scoped, startable work whenever picked up next.
+The core "proven, not asserted" loop is now real end to end: ingest a
+repo, statically hypothesize (M4a), actually attempt the exploit in a
+kernel-confined sandbox (M4b), and only mint a Security Finding when the
+sandbox proves it - `wsqfai/report.py`'s own tests demonstrate the same
+static pattern in two different real functions correctly resolving to two
+different verdicts. The highest-value next step is widening M4b's
+coverage beyond its one shell-exec shape (reintroducing
+`verification/hypothesis`'s LLM-based hypothesis generation, or handling
+multi-parameter functions), since that's what turns this from "one narrow
+but real case" into something that finds proven vulnerabilities across a
+meaningfully wider slice of real code. M2b/M3b/M3c/M4c/M5b's other
+remaining slices are all real, scoped, startable work whenever picked up.
