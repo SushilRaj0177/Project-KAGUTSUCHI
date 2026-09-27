@@ -101,10 +101,40 @@ No milestone is marked done because a plan for it exists.
         (e.g. whether a model-serving endpoint exposes an explanation/
         override mechanism), which is further scoping work, not yet
         started.
-- [ ] **M4 — Security, proven not asserted.** Reintroduce
+- **M4 — Security, proven not asserted.** Reintroduce
       `engine-archive/kagutsuchi`'s sandbox + attack-hypothesis + verify
       pipeline, re-platformed onto the new Finding/Evidence model, findings
-      framed via the AI Security Continuum's dimensions.
+      framed via the AI Security Continuum's dimensions. Split for the same
+      reason M2/M3 were:
+  - [x] **M4a — Static hypothesis generation.** `wsqfai/security/ast_scan.py`
+        re-platforms `engine-archive/kagutsuchi/system/analysis/ast_scan.py`'s
+        AST-based sensitive-operation scanner (shell exec, subprocess,
+        deserialization, SQL/Django/YAML/SSTI injection heuristics, all
+        gated by a taint-propagation check so a dangerous call built from
+        only hardcoded arguments isn't flagged) onto wsqfai's domain model
+        — detection logic carried over near-verbatim since it was already
+        proven against real code, only its *output* changes. Every hit
+        becomes an `Observation`, deliberately NOT a `Finding`: a static
+        AST match is evidence of a pattern, not proof of a vulnerability,
+        and minting a Finding from it would violate this project's own
+        "proven, not asserted" discipline (ARCHITECTURE.md's #1 security
+        design decision). `wsqfai/security/scanner.py` runs it across a
+        whole `RepositorySnapshot`. 25 tests (22 detector-level, 3
+        repository-level), ported from the archive's own
+        `tests/system/test_ast_scan.py` test-by-test. `LearnedSignature`/
+        `extra_signatures` and `scan_diff`/diff-scoped scanning were left
+        out of this port deliberately — they depended on a review/approval
+        workflow and a CI diff view that haven't been re-platformed yet.
+  - [ ] **M4b — Sandbox verification.** Reintroduce
+        `engine-archive/kagutsuchi/system/sandbox` (Docker/subprocess
+        isolation) and `verification/` (attack-hypothesis generation,
+        execution, before/after evidence, verdicts) to actually attempt
+        exploiting an M4a Observation and only then mint a `Finding` -
+        the step that makes a Security Finding mean something more than
+        "an AST pattern matched somewhere".
+  - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
+        via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
+        instead of flat severity tags.
 - [ ] **M5 — Evidence & benchmark engine.** WSQF/WSQB-style benchmarking:
       build a small reference corpus of scanned repositories and report a
       repo's measurements *relative to that corpus*, not as a lonely
@@ -115,12 +145,11 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-M4 (Security). M2/M3 both have further honest slices left (M2b's other
-four characteristics, M3b's harder catalogue patterns), but each remaining
-slice needs its own scoping pass rather than being more of the same
-pattern — reasonable to pick up incrementally rather than all before
-moving on. M4 is a good next milestone to open in parallel: reintroducing
-`engine-archive/kagutsuchi`'s proven sandbox/attack-hypothesis/verify
-pipeline onto the new Finding/Evidence model is large, well-understood
-(it's *already built and tested*, just archived), and is the piece of this
-project with the most existing working code behind it.
+An end-to-end entry point that actually runs M1+M2a+M2b+M3a+M4a against a
+real repository and produces one combined report - `wsqfai/report.py` and
+a CLI - so the project is demonstrable as a working tool, not just a set
+of passing test suites. Everything built so far has been proven correct in
+isolation; nothing yet proves the pieces compose. After that: M4b (sandbox
+verification, the highest-value remaining milestone since it's the step
+that makes Security findings mean "proven exploitable", not just "pattern
+matched") and M2b/M3b's remaining slices.
