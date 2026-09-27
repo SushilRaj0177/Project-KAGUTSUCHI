@@ -246,21 +246,46 @@ No milestone is marked done because a plan for it exists.
         real logging), `pyproject.toml`'s unpinned dependencies (needs
         line-number tracking tomllib doesn't give for free), and
         anything else M2b/M3b add later.
-  - [ ] **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
+  - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is
         what turns "run a CLI" into "paste a link on a website," which is
-        the actual product experience, not just a demo screenshot. Needs a
-        real decision about hosting and whether it opens a GitHub pull
-        request automatically (which needs OAuth/write access) or just
-        offers the patch file for manual `git apply` - not started.
+        the actual product experience, not just a demo screenshot. Split
+        into backend (real, done) and frontend (not started):
+    - [x] **M7c-backend.** `wsqfai/server/main.py` re-platforms
+          `engine-archive/kagutsuchi/server/main.py`'s design: a real
+          FastAPI app with `/api/analyze-repo/start` + `/api/analyze-repo/
+          jobs/{job_id}` (a background-job pattern, ported near-verbatim
+          from `server/jobs.py` - exists because a real repo scan can take
+          longer than a typical serverless proxy's request timeout, which
+          caused a live 504 in the original product) and `/api/open-pr`
+          (opens a real GitHub PR carrying the selected Fixes, via
+          `wsqfai/integration/github_pr.py` - re-platformed from
+          `integration/github_pr.py`, generalized from "one function fix
+          per PR" to "every fix from a scan in one PR"). Per-IP rate
+          limiting ported near-verbatim from `server/rate_limit.py`. 18
+          tests (10 server, 8 github_pr - the GitHub API itself is mocked
+          at the network boundary, since a test suite can't safely make
+          real write calls against arbitrary repos). Manually smoke-tested
+          for real: started the server with uvicorn, submitted a real
+          `octocat/Hello-World` scan over HTTP, and polled it to
+          completion. Uses stdlib `urllib`, not the `requests` package -
+          matches `remediation.py`'s PyPI lookup, no new HTTP dependency.
+    - [ ] **M7c-frontend.** Reconnect `engine-archive/kagutsuchi/webapp`
+          (Next.js) onto this API - adapting `lib/scanTypes.ts` and the
+          UI to the new report shape, and to WSQF-AI's own branding
+          instead of Kagutsuchi's. Not started. Also still open: where
+          this gets hosted, and whether GitHub sign-in (OAuth) replaces
+          the "paste a token" MVP path `open_fix_pr` currently expects.
 
 ## Immediately next
 
-M7c (a real running web app) is the highest-value next step for making
-this something people actually use, not just read about - but it needs a
-real decision on hosting and GitHub-write scope before building, not a
-guess. Independent of that: the core "proven, not asserted" loop is real
+M7c-frontend is the highest-value next step for making this something
+people actually use, not just read about - the backend it needs already
+works, proven by an actual HTTP round-trip against a live repo. It still
+needs a decision on hosting and whether GitHub OAuth replaces "paste a
+token" before that part is real. Independent of that: the core "proven,
+not asserted" loop is real
 end to end - ingest a repo, statically hypothesize (M4a), actually attempt
 the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests

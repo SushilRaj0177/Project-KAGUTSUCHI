@@ -115,7 +115,23 @@ self-contained HTML page, `--patch` to get every proposed fix as one
 `git apply`-able diff, or `--ref <branch>` to scan a specific branch/tag
 instead of the default.
 
-Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 146 tests.
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 164 tests (install
+with `pip install -e ".[server]"` first if you want the 10 FastAPI server
+tests included — the base install doesn't need FastAPI at all).
+
+To run the real backend behind a future web frontend:
+
+```bash
+pip install -e ".[server]"
+uvicorn wsqfai.server.main:app --reload
+```
+
+`POST /api/analyze-repo/start` kicks off a background scan and returns a
+`job_id`; poll `GET /api/analyze-repo/jobs/{job_id}` for the result — the
+same design the archived Kagutsuchi backend used to avoid a real 504 it
+hit in production when a scan took longer than a serverless proxy's
+request timeout. `POST /api/open-pr` opens a real GitHub pull request
+carrying the fixes you select.
 
 ## What this is
 
@@ -153,6 +169,13 @@ wearing an AI badge:
   something to `git apply`, not another list to read and act on by hand.
   Everything else stays a Finding you decide how to act on, honestly —
   a fake fix would be worse than no fix.
+- **A real backend, not just a CLI**: `wsqfai/server/` is an actual FastAPI
+  service (background-job scanning so a slow clone can't 504 a request,
+  per-IP rate limiting, and an endpoint that opens a real GitHub pull
+  request carrying the selected fixes) — the API a "paste a repo link"
+  website would call. The website itself (reconnecting
+  `engine-archive/kagutsuchi/webapp`'s frontend) is the next milestone,
+  not yet built.
 
 ## Why this exists
 
@@ -183,6 +206,8 @@ wsqfai/
   security/              -- AST hypothesis scanner (M4a) + sandbox verification (M4b)
   benchmark.py           -- WSQF/WSQB-style corpus-comparison methodology (M5a)
   remediation.py         -- real auto-fix diffs for mechanically-fixable findings (M7a)
+  integration/           -- opens a real GitHub PR carrying selected fixes (M7c-backend)
+  server/                -- the FastAPI backend behind a future web frontend (M7c-backend)
   report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML/patch)
-tests/                   -- 146 tests, mirroring wsqfai/'s package structure
+tests/                   -- 164 tests, mirroring wsqfai/'s package structure
 ```

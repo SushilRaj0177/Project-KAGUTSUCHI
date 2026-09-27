@@ -70,6 +70,7 @@ def test_unpinned_dependency_fix_pins_to_the_looked_up_version():
     assert "-requests" in fix.diff
     assert "+requests==2.31.0" in fix.diff
     assert "flask==2.3.0" in fix.diff  # untouched lines preserved
+    assert fix.patched_content == "flask==2.3.0\nrequests==2.31.0\nnumpy==1.26.0\n"
 
 
 def test_unpinned_dependency_fix_returns_none_when_lookup_fails():
