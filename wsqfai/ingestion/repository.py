@@ -1,0 +1,207 @@
+"""
+Repository ingestion: clone a public Git repository and produce a
+RepositorySnapshot - file inventory, per-language breakdown, basic size
+metrics. This is the first stage of the M1-M6 pipeline in ARCHITECTURE.md;
+everything downstream (SQuaRE measurement, AI/ML quality extension,
+security) reads from this snapshot rather than re-cloning or re-walking
+the repository itself.
+
+The clone/validation safety pattern (URL allowlist, ref validation,
+--depth 1, a hard timeout, skip-list directories, per-file size cap) is
+carried over from Project KAGUTSUCHI's server/repo_scan.py, which was
+exercised against real public repositories in production - not
+reinvented here, generalized from Python-only to any language.
+
+Classified files also have their text content retained on FileRecord
+(within the same per-file size cap already enforced below), because M2's
+Maintainability slice needed nothing beyond size/line-count, but M2b and
+M3 (real content-based metrics, ML-pattern detection) do. This is kept
+simple rather than optimal: content for every classified file sits in
+memory for the snapshot's lifetime, capped only by _MAX_FILE_BYTES per
+file and _MAX_FILES file count - fine for the repo sizes this project
+targets, but streaming instead of retaining-all is real future work if
+that ever stops being true.
+"""
+from __future__ import annotations
+
+import re
+import subprocess
+import tempfile
+from dataclasses import dataclass, field
+from pathlib import Path
+
+_GITHUB_URL_RE = re.compile(r"^https://github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+?)(\.git)?/?$")
+_SAFE_REF_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]*$")
+
+_SKIP_DIRS = {
+    ".git", "node_modules", "venv", ".venv", "env", "site-packages", "__pycache__",
+    "dist", "build", "target", ".next", ".turbo", "vendor", "coverage",
+}
+_MAX_FILES = 5000
+_MAX_FILE_BYTES = 500_000
+_CLONE_TIMEOUT_S = 60
+
+# Extension -> language label. Deliberately a flat, explicit map (not a
+# heuristic/library dependency) so the classification a snapshot reports
+# is always traceable to one line in this file.
+_LANGUAGE_BY_EXTENSION: dict[str, str] = {
+    ".py": "Python", ".pyi": "Python",
+    ".ts": "TypeScript", ".tsx": "TypeScript",
+    ".js": "JavaScript", ".jsx": "JavaScript", ".mjs": "JavaScript", ".cjs": "JavaScript",
+    ".java": "Java", ".kt": "Kotlin",
+    ".go": "Go", ".rs": "Rust",
+    ".rb": "Ruby", ".php": "PHP",
+    ".c": "C", ".h": "C",
+    ".cpp": "C++", ".cc": "C++", ".hpp": "C++",
+    ".cs": "C#",
+    ".swift": "Swift",
+    ".sql": "SQL",
+    ".sh": "Shell", ".bash": "Shell",
+    ".yaml": "YAML", ".yml": "YAML",
+    ".json": "JSON",
+    ".toml": "TOML",
+    ".md": "Markdown",
+}
+
+# Manifest/config files that matter to downstream analysis (portability's
+# dependency-pinning check, and future ones) but have no distinguishing
+# extension `_classify` can key on - "requirements.txt" would otherwise
+# fall through unclassified and never have its content retained at all.
+# Deliberately NOT given a language label: they aren't source code, and
+# labeling them "Python"/etc would corrupt language_summary()'s file/line
+# counts. content is retained; line_count stays 0, same as any other
+# unclassified file, so total_lines is unaffected.
+_ALWAYS_RETAIN_CONTENT_FILENAMES = {"requirements.txt", "Pipfile", "Dockerfile", "Makefile"}
+
+
+class InvalidRepoUrl(ValueError):
+    """repo_url isn't a plain https://github.com/<owner>/<repo> URL, or ref
+    isn't a safe branch/tag name."""
+
+
+class CloneFailed(RuntimeError):
+    """git clone failed or timed out."""
+
+
+@dataclass
+class FileRecord:
+    path: str  # repository-relative, forward slashes
+    language: str | None
+    size_bytes: int
+    line_count: int
+    content: str | None = None  # only populated for classified (language is not None) files
+
+
+@dataclass
+class RepositorySnapshot:
+    owner: str
+    repo: str
+    ref: str | None
+    files: list[FileRecord] = field(default_factory=list)
+    truncated: bool = False
+
+    @property
+    def files_by_language(self) -> dict[str, list[FileRecord]]:
+        out: dict[str, list[FileRecord]] = {}
+        for f in self.files:
+            if f.language is not None:
+                out.setdefault(f.language, []).append(f)
+        return out
+
+    @property
+    def total_lines(self) -> int:
+        return sum(f.line_count for f in self.files)
+
+    def language_summary(self) -> dict[str, dict[str, int]]:
+        """{"Python": {"files": 12, "lines": 3400}, ...}, sorted by lines
+        descending - the shape a report/dashboard actually wants to render."""
+        summary = {
+            lang: {"files": len(records), "lines": sum(r.line_count for r in records)}
+            for lang, records in self.files_by_language.items()
+        }
+        return dict(sorted(summary.items(), key=lambda kv: kv[1]["lines"], reverse=True))
+
+
+def _parse_github_url(repo_url: str) -> tuple[str, str]:
+    match = _GITHUB_URL_RE.match(repo_url.strip())
+    if not match:
+        raise InvalidRepoUrl("Expected a public GitHub repo URL like https://github.com/<owner>/<repo>")
+    return match.group("owner"), match.group("repo")
+
+
+def _clone(repo_url: str, dest: Path, ref: str | None) -> None:
+    if ref is not None and not _SAFE_REF_RE.match(ref):
+        raise InvalidRepoUrl(f"Not a valid branch/tag name: {ref!r}")
+    cmd = ["git", "clone", "--depth", "1", "--single-branch"]
+    if ref is not None:
+        cmd += ["--branch", ref]
+    cmd += [repo_url, str(dest)]
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, timeout=_CLONE_TIMEOUT_S, text=True)
+    except subprocess.CalledProcessError as exc:
+        raise CloneFailed(f"git clone failed (repo/branch may be private, deleted, or wrong): {exc.stderr.strip()}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise CloneFailed("git clone timed out - repo is too large for a live ingest.") from exc
+
+
+def _classify(path: Path) -> str | None:
+    return _LANGUAGE_BY_EXTENSION.get(path.suffix.lower())
+
+
+def _read_text_and_count_lines(path: Path) -> tuple[str | None, int]:
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return None, 0
+    return text, len(text.splitlines())
+
+
+def _snapshot_from_dir(root: Path, owner: str, repo: str, ref: str | None) -> RepositorySnapshot:
+    files: list[FileRecord] = []
+    truncated = False
+    count = 0
+    for path in root.rglob("*"):
+        if not path.is_file():
+            continue
+        if any(part in _SKIP_DIRS for part in path.parts):
+            continue
+        try:
+            size = path.stat().st_size
+        except OSError:
+            continue
+        if size > _MAX_FILE_BYTES:
+            continue
+        count += 1
+        if count > _MAX_FILES:
+            truncated = True
+            continue
+        language = _classify(path)
+        if language is not None:
+            content, line_count = _read_text_and_count_lines(path)
+        elif path.name in _ALWAYS_RETAIN_CONTENT_FILENAMES:
+            content, _ = _read_text_and_count_lines(path)
+            line_count = 0
+        else:
+            content, line_count = None, 0
+        files.append(FileRecord(
+            path=path.relative_to(root).as_posix(),
+            language=language,
+            size_bytes=size,
+            line_count=line_count,
+            content=content,
+        ))
+    return RepositorySnapshot(owner=owner, repo=repo, ref=ref, files=files, truncated=truncated)
+
+
+def ingest(repo_url: str, ref: str | None = None) -> RepositorySnapshot:
+    """Clone `repo_url` (optionally at `ref`) into a scratch directory and
+    return a RepositorySnapshot. The clone is always removed before this
+    returns - nothing downstream should assume the working tree still
+    exists on disk; re-clone (cheap, --depth 1) if raw file content is
+    needed again later, rather than caching a path that may already be
+    gone."""
+    owner, repo = _parse_github_url(repo_url)
+    with tempfile.TemporaryDirectory(prefix="wsqfai-ingest-") as tmp:
+        root = Path(tmp)
+        _clone(repo_url, root, ref)
+        return _snapshot_from_dir(root, owner, repo, ref)
