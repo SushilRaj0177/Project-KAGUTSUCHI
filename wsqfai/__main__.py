@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from wsqfai.report import analyze_repository, render_text
+from wsqfai.report import analyze_repository, render_html, render_text
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -21,11 +21,19 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("repo_url", help="https://github.com/<owner>/<repo>")
     parser.add_argument("--ref", default=None, help="branch or tag to scan (default: the repository's default branch)")
-    parser.add_argument("--json", action="store_true", help="print the full report as JSON instead of a text summary")
+    parser.add_argument("--format", choices=("text", "json", "html"), default="text", help="output format (default: text)")
+    parser.add_argument("--json", action="store_true", help="shorthand for --format json")
+    parser.add_argument("--html", action="store_true", help="shorthand for --format html")
     args = parser.parse_args(argv)
+    fmt = "json" if args.json else "html" if args.html else args.format
 
     report = analyze_repository(args.repo_url, ref=args.ref)
-    print(report.model_dump_json(indent=2) if args.json else render_text(report))
+    if fmt == "json":
+        print(report.model_dump_json(indent=2))
+    elif fmt == "html":
+        print(render_html(report))
+    else:
+        print(render_text(report))
     return 0
 
 

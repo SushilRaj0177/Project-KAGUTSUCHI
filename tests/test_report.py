@@ -3,7 +3,7 @@ import subprocess
 import pytest
 
 from wsqfai.ingestion.repository import FileRecord, RepositorySnapshot
-from wsqfai.report import analyze_repository, analyze_snapshot, render_text
+from wsqfai.report import analyze_repository, analyze_snapshot, render_html, render_text
 
 
 def _py(path: str, content: str) -> FileRecord:
@@ -68,6 +68,26 @@ def test_report_is_json_serializable():
     report = analyze_snapshot(snapshot)
     payload = report.model_dump_json()
     assert '"owner":"me"' in payload or '"owner": "me"' in payload
+
+
+def test_render_html_is_well_formed_and_escapes_repository_controlled_text():
+    malicious_title_content = "def f():\n    try:\n        risky()\n    except:\n        pass\n"
+    snapshot = RepositorySnapshot(owner="me", repo="<script>alert(1)</script>", ref=None, files=[
+        _py("app.py", malicious_title_content),
+    ])
+    page = render_html(analyze_snapshot(snapshot))
+    assert page.startswith("<!doctype html>")
+    assert "</html>" in page
+    assert "<script>alert(1)</script>" not in page  # must be escaped, not injected raw
+    assert "&lt;script&gt;" in page
+    assert "app.py" in page
+
+
+def test_render_html_on_empty_repository_shows_no_findings_message():
+    snapshot = RepositorySnapshot(owner="me", repo="empty", ref=None, files=[])
+    page = render_html(analyze_snapshot(snapshot))
+    assert "No findings." in page
+    assert "No security hypotheses." in page
 
 
 @pytest.mark.skipif(
