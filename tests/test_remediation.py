@@ -101,6 +101,14 @@ def test_propose_suggestion_returns_none_for_a_fixable_rule():
     assert propose_suggestion(finding) is None
 
 
+def test_swallowed_exception_finding_gets_a_suggestion_not_an_auto_fix():
+    finding = _finding("swallowed_broad_exception", "app.py", 4, "x")
+    assert propose_fix(finding, {"app.py": "x = 1\n"}) is None
+    suggestion = propose_suggestion(finding)
+    assert suggestion is not None
+    assert "logging.exception" in suggestion.guidance
+
+
 @pytest.mark.skipif(
     subprocess.run(
         ["python3", "-c", "import urllib.request; urllib.request.urlopen('https://pypi.org', timeout=5)"],

@@ -242,10 +242,19 @@ No milestone is marked done because a plan for it exists.
         aggregated-per-file Finding to one per unpinned dependency (with a
         real line number) - each fix needs its own precise line to edit,
         which an aggregated summary string couldn't provide.
-  - [ ] **M7b — Wider fix coverage.** `swallowed_broad_exception` (insert
-        real logging), `pyproject.toml`'s unpinned dependencies (needs
-        line-number tracking tomllib doesn't give for free), and
-        anything else M2b/M3b add later.
+  - [x] **M7b — Wider fix coverage.** `pyproject.toml`'s unpinned
+        dependencies now get real per-entry line numbers - tomllib doesn't
+        expose array-entry line numbers, so `portability.py` recovers them
+        with a narrow raw-text scan of the `[project]` table's
+        `dependencies = [...]` array, falling back to the old aggregated
+        Finding if the scan can't place every entry tomllib itself reports
+        as unpinned (an escaped-character mismatch, an unrecognized array
+        shape) rather than guessing a wrong line. `swallowed_broad_exception`
+        gets a `Suggestion` (log the fault, consider re-raising) rather than
+        an auto-fix - safely inserting a logging call needs to know whether
+        the file already imports `logging`, and whether the swallow was
+        ever actually intentional is a judgment call this tool can't make.
+        164 -> 168 tests. Anything else M2b/M3b add later stays open.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is
