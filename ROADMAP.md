@@ -11,10 +11,20 @@ No milestone is marked done because a plan for it exists.
       nothing left half-migrated. New repo root established with
       `ARCHITECTURE.md` grounding every future decision in cited,
       verifiable research.
-- [ ] **M1 — Foundation.** Repository ingestion (clone, walk, classify
-      languages/files) + a canonical `Finding` / `Evidence` / `Observation`
-      model using ISO/IEC 25000-2 (SQuaRE Vocabulary) terms, not ad hoc
-      field names.
+- [x] **M1 — Foundation.** `wsqfai/domain/quality_model.py`: ISO/IEC
+      25010:2011's 8 characteristics + real sub-characteristics, plus
+      ISO/IEC 25059:2023's AI-specific additions (Functional Adaptability,
+      User Controllability, Transparency, Intervenability, Societal and
+      Ethical Risk Mitigation), each sourced and cited, not invented.
+      `wsqfai/domain/evidence.py`: the canonical `Finding` / `Evidence` /
+      `Observation` / `AIAssessment` model — a Finding must cite a real,
+      correctly-scoped sub-characteristic and at least one Evidence item,
+      enforced by validation, not convention.
+      `wsqfai/ingestion/repository.py`: real repo cloning (safety pattern
+      carried over from KAGUTSUCHI's proven server/repo_scan.py, extended
+      from Python-only to any language) and file/language classification.
+      19 tests, including one real end-to-end clone against a live public
+      GitHub repo (skipped, not faked, if network is unavailable).
 - [ ] **M2 — SQuaRE quality measurement.** Deterministic measurement of
       real SQuaRE product-quality characteristics (Maintainability,
       Reliability, Performance Efficiency, Compatibility, Usability,
@@ -38,7 +48,8 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-M1: the ingestion pipeline and the canonical model. This is deliberately
-unglamorous — the same reasoning that put KAGUTSUCHI's own Evidence Engine
-(M5 in that project's numbering) before its AI/scoring/dashboard layers:
-nothing downstream is trustworthy if the foundational model is sloppy.
+M2: the SQuaRE measurement layer — real deterministic metrics (starting
+with Maintainability's Modularity/Analysability/Testability, since those
+have the most direct, uncontroversial static measures) computed against
+`RepositorySnapshot` and attached to the sub-characteristics M1 already
+models.
