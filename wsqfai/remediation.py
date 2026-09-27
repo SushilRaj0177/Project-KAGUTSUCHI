@@ -50,6 +50,7 @@ class Fix(BaseModel):
     file_path: str
     diff: str
     summary: str
+    patched_content: str
 
 
 class Suggestion(BaseModel):
@@ -95,6 +96,7 @@ def _fix_bare_except(finding: Finding, file_content: str) -> Fix | None:
         file_path=finding.evidence[0].location.file_path,
         diff=diff,
         summary="Narrowed bare 'except:' to 'except Exception:' so SystemExit/KeyboardInterrupt/GeneratorExit propagate normally.",
+        patched_content=after,
     )
 
 
@@ -141,6 +143,7 @@ def _fix_unpinned_dependency(finding: Finding, file_content: str, *, version_loo
         file_path=evidence.location.file_path,
         diff=diff,
         summary=f"Pinned {package_name} to its current latest release ({latest}) from PyPI.",
+        patched_content=after,
     )
 
 
