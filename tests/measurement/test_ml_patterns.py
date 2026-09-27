@@ -61,6 +61,48 @@ def test_ml_repository_with_versioned_artifact_filename_has_no_versioning_findin
     assert compute_ml_pattern_findings(snapshot) == []
 
 
+def test_dead_experimental_codepath_is_flagged():
+    content = (
+        "import sklearn\n"
+        "import mlflow\n"
+        "mlflow.log_model(None, 'm')\n"
+        "if False:\n"
+        "    old_model = sklearn.linear_model.LinearRegression()\n"
+        "    old_model.fit(x, y)\n"
+    )
+    snapshot = _snapshot(_py("train.py", content))
+    findings = compute_ml_pattern_findings(snapshot)
+    dead = [f for f in findings if f.evidence[0].analyzer.rule_id == "dead_experimental_codepath"]
+    assert len(dead) == 1
+    assert dead[0].sub_characteristic_key == "analysability"
+    assert dead[0].evidence[0].location.start_line == 4
+
+
+def test_if_zero_dead_codepath_is_also_flagged():
+    content = (
+        "import sklearn\nimport mlflow\nmlflow.log_model(None, 'm')\n"
+        "if 0:\n    legacy_train()\n"
+    )
+    snapshot = _snapshot(_py("train.py", content))
+    dead = [f for f in compute_ml_pattern_findings(snapshot) if f.evidence[0].analyzer.rule_id == "dead_experimental_codepath"]
+    assert len(dead) == 1
+
+
+def test_trivial_if_false_body_is_not_flagged():
+    # `if False: pass` (or a docstring-only body) has no accumulated debt
+    # to report - nothing real is hidden behind it.
+    content = "import sklearn\nimport mlflow\nmlflow.log_model(None, 'm')\nif False:\n    pass\n"
+    snapshot = _snapshot(_py("train.py", content))
+    dead = [f for f in compute_ml_pattern_findings(snapshot) if f.evidence[0].analyzer.rule_id == "dead_experimental_codepath"]
+    assert dead == []
+
+
+def test_dead_codepath_check_does_not_apply_to_non_ml_repos():
+    content = "if False:\n    do_something_real()\n"
+    snapshot = _snapshot(_py("app.py", content))
+    assert compute_ml_pattern_findings(snapshot) == []  # not an ML repo at all
+
+
 def test_every_ml_pattern_finding_cites_a_real_sub_characteristic():
     from wsqfai.domain.quality_model import sub_characteristic
 

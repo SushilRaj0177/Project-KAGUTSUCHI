@@ -125,13 +125,28 @@ No milestone is marked done because a plan for it exists.
         line-counting) — a real, deliberate scope change to M1's
         ingestion layer, covered by 2 new tests there (34 → all still
         passing).
-  - [ ] **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
+  - **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
         Pipeline Jungles, Dead Experimental Codepaths, Test Infrastructure
         Independence, Wrap Black-box Packages into Common APIs, and the
         rest of the 12+13+8 catalogue. Each needs a detection heuristic
         honest enough not to be mostly false positives from a static,
         no-execution read of source — that's real design work per
         pattern, not a batch of regexes to add in one sitting.
+    - [x] **Dead Experimental Codepaths.** `wsqfai/measurement/ml_patterns.py`:
+          AST-based detection of `if False:`/`if 0:` branches containing
+          real code (not just `pass`/a docstring) in an ML-containing
+          repository. Sculley et al.'s "Hidden Technical Debt in Machine
+          Learning Systems" (NeurIPS 2015) names this exact pattern — an
+          alternative approach tried behind a conditional that's later
+          disabled rather than removed, accumulating as debt that obscures
+          what the system does. The lowest-false-positive instance of this
+          pattern a static, no-execution read can identify: a literal
+          `False`/`0` condition can never be true regardless of any runtime
+          state, so no semantic analysis is needed to know the branch is
+          dead. ISO/IEC 25010's Analysability sub-characteristic. 4 tests.
+    - [ ] Glue Code, Pipeline Jungles, Test Infrastructure Independence,
+          Wrap Black-box Packages into Common APIs, and the rest of the
+          12+13+8 catalogue — still need their own honest scoping pass.
   - [ ] **M3c — ISO/IEC 25059 AI-specific characteristics themselves**
         (Functional Adaptability, User Controllability, Transparency,
         Intervenability, Societal/Ethical Risk Mitigation from
