@@ -1,16 +1,11 @@
+import Link from "next/link";
 import CopyCommand from "./CopyCommand";
+import Header from "./Header";
 
 export default function Home() {
   return (
     <>
-      <header className="top">
-        <div className="wrap">
-          <span className="brand">WSQF-AI</span>
-          <a className="gh" href="https://github.com/SushilRaj0177/Project-KAGUTSUCHI">
-            Source →
-          </a>
-        </div>
-      </header>
+      <Header />
 
       <section className="hero">
         <div className="wrap">
@@ -35,87 +30,20 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="research">
+      <section id="research-teaser">
         <div className="wrap">
           <span className="eyebrow">Grounded in real research</span>
           <h2>Not a generic auditor with a professor&apos;s name attached afterward</h2>
           <p className="lede">
-            Every architectural decision below traces to a specific, citable piece of Prof. Washizaki&apos;s
-            published work or standards role — not a vibe.
+            Every architectural decision in this project traces to a specific, citable piece of Prof. Hironori
+            Washizaki&apos;s published work or standards role — WSQF/WSQB, SWEBOK v4.0, ISO/IEC 25059, ML design
+            patterns, the AI Security Continuum.
           </p>
-          <div className="cards">
-            <div className="card">
-              <h3>WSQF / WSQB</h3>
-              <p>
-                A SQuaRE-based framework that measures real products against ISO/IEC 25010&apos;s characteristics and
-                benchmarks them, rather than inventing a 0–100 score.
-              </p>
-              <span className="src">ICSE 2019 · 21 commercial products benchmarked</span>
-            </div>
-            <div className="card">
-              <h3>SWEBOK Guide v4.0</h3>
-              <p>
-                Washizaki personally edited the field&apos;s canonical Software Engineering Body of Knowledge,
-                adding Architecture, Security, and Operations as knowledge areas.
-              </p>
-              <span className="src">IEEE Computer Society, Oct 2024</span>
-            </div>
-            <div className="card">
-              <h3>ISO/IEC 25059</h3>
-              <p>
-                SQuaRE&apos;s AI-systems extension — Functional Adaptability, User Controllability, Transparency,
-                Intervenability, Societal/Ethical Risk Mitigation.
-              </p>
-              <span className="src">SC7/WG20, convened by Washizaki since 2015</span>
-            </div>
-            <div className="card">
-              <h3>ML design patterns</h3>
-              <p>
-                A sustained research line cataloguing 12 architecture patterns, 13 design patterns, and 8
-                anti-patterns for ML systems — this project&apos;s ML-pattern engine builds directly on it.
-              </p>
-              <span className="src">IEEE Computer, Vol. 55 No. 3, Mar 2022</span>
-            </div>
-            <div className="card">
-              <h3>AI Security Continuum</h3>
-              <p>
-                A multi-dimensional model (environment, activity, architecture layer, automation level, measure
-                level) for framing AI-era security findings.
-              </p>
-              <span className="src">Washizaki &amp; Yoshioka, CAIN 2024</span>
-            </div>
-            <div className="card">
-              <h3>Reliable SE Lab</h3>
-              <p>
-                Washizaki &amp; Ubayashi Lab&apos;s stated mission: quality assurance of software systems using AI as
-                the evaluation platform — the exact shape of this project.
-              </p>
-              <span className="src">Waseda University</span>
-            </div>
-          </div>
-
-          <div className="trace">
-            <div className="row">
-              <span className="decision">Quality is measured, never scored by an LLM&apos;s guess</span>
-              <span className="source">WSQF/WSQB methodology</span>
-            </div>
-            <div className="row">
-              <span className="decision">A dedicated AI/ML quality dimension, not bolted onto generic code quality</span>
-              <span className="source">ISO/IEC 25059</span>
-            </div>
-            <div className="row">
-              <span className="decision">Security findings must be proven, never asserted from a static match</span>
-              <span className="source">Real Landlock-confined sandbox verification</span>
-            </div>
-            <div className="row">
-              <span className="decision">Evidence has explicit provenance: repo → file → line → analyzer → rule</span>
-              <span className="source">ISO/IEC 25000-2 vocabulary</span>
-            </div>
-            <div className="row">
-              <span className="decision">Findings organized by SWEBOK knowledge area</span>
-              <span className="source">SWEBOK Guide v4.0</span>
-            </div>
-          </div>
+          <p className="lede" style={{ marginTop: 14 }}>
+            <Link href="/research" style={{ color: "var(--accent)", fontWeight: 600 }}>
+              Read the full research grounding →
+            </Link>
+          </p>
         </div>
       </section>
 

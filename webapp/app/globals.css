@@ -68,6 +68,22 @@ header.top .wrap {
   padding-block: 12px;
 }
 
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.nav-links a {
+  color: var(--ink-soft);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.nav-links a:hover {
+  color: var(--ink);
+}
+
 .brand {
   font-family: var(--font-mono), monospace;
   font-weight: 500;
