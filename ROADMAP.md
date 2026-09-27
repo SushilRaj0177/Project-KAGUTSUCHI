@@ -53,10 +53,44 @@ No milestone is marked done because a plan for it exists.
         yet — scoping this honestly, rather than forcing a weak metric
         onto a characteristic that doesn't have one yet, is real M2b
         work, not something to guess at now.
-- [ ] **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
+- **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
-      detection/recommendation engine (Washizaki's Computer 2022 / PLoP
-      2024 pattern catalog as the starting reference set).
+      detection/recommendation engine, grounded in Washizaki et al.'s own
+      catalogue (IEEE Computer, Vol. 55 No. 3, March 2022: 12 ML
+      architecture patterns, 13 ML design patterns, 8 ML anti-patterns,
+      itself building on Sculley et al.'s "Hidden Technical Debt in
+      Machine Learning Systems", NeurIPS 2015). Split into slices for the
+      same reason M2 was:
+  - [x] **M3a — ML-repository detection + ML Versioning check.**
+        `wsqfai/measurement/ml_patterns.py`: `is_ml_repository()` detects
+        real, direct imports of a general-purpose ML/DL framework
+        (scikit-learn, PyTorch, TensorFlow/Keras, XGBoost, LightGBM,
+        CatBoost, Transformers, JAX) — deliberately excluding bare
+        numpy/pandas usage as too weak a signal. For ML-containing repos,
+        checks for a real "ML Versioning" signal (Washizaki's cataloged
+        good pattern) — DVC config, MLflow/model-registry usage, or a
+        versioned artifact filename (`*_v<N>.<ext>`) — and flags a
+        Maintainability/Modifiability Finding, citing the pattern by name
+        and source, when none is found. 9 tests. This required extending
+        `wsqfai/ingestion/repository.py`'s `FileRecord` to retain each
+        classified file's text content (previously discarded right after
+        line-counting) — a real, deliberate scope change to M1's
+        ingestion layer, covered by 2 new tests there (34 → all still
+        passing).
+  - [ ] **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
+        Pipeline Jungles, Dead Experimental Codepaths, Test Infrastructure
+        Independence, Wrap Black-box Packages into Common APIs, and the
+        rest of the 12+13+8 catalogue. Each needs a detection heuristic
+        honest enough not to be mostly false positives from a static,
+        no-execution read of source — that's real design work per
+        pattern, not a batch of regexes to add in one sitting.
+  - [ ] **M3c — ISO/IEC 25059 AI-specific characteristics themselves**
+        (Functional Adaptability, User Controllability, Transparency,
+        Intervenability, Societal/Ethical Risk Mitigation from
+        `quality_model.py`) — these need signals beyond static structure
+        (e.g. whether a model-serving endpoint exposes an explanation/
+        override mechanism), which is further scoping work, not yet
+        started.
 - [ ] **M4 — Security, proven not asserted.** Reintroduce
       `engine-archive/kagutsuchi`'s sandbox + attack-hypothesis + verify
       pipeline, re-platformed onto the new Finding/Evidence model, findings
@@ -71,13 +105,9 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-M2b or M3. M2b (Reliability/Performance/Compatibility/Usability/
-Portability) needs real file content to measure honestly, which means
-extending ingestion to optionally retain source text for small repos
-rather than discarding it after the clone — a real scoping decision, not
-just more metric functions. M3 (AI/ML quality extension) can start
-independently: ISO/IEC 25059 characteristics for ML-containing repos, plus
-the ML design-pattern detection engine referencing Washizaki's own pattern
-catalog (Computer 2022 / PLoP 2024) — arguably the single most
-recruiter-legible, Washizaki-specific piece of this whole project, so it's
-worth pulling forward rather than strictly waiting on M2b to fully close.
+Now that ingestion retains file content (built for M3a, and equally usable
+by M2b), M2b's remaining SQuaRE characteristics are unblocked too. Next up
+is picking up either M2b (content-based Reliability/Usability/Portability
+metrics) or M3b (the harder catalogue patterns — Glue Code, Pipeline
+Jungles, Dead Experimental Codepaths) — both are now real, startable work
+rather than blocked on a scoping decision.

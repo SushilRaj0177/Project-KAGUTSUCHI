@@ -11,6 +11,16 @@ The clone/validation safety pattern (URL allowlist, ref validation,
 carried over from Project KAGUTSUCHI's server/repo_scan.py, which was
 exercised against real public repositories in production - not
 reinvented here, generalized from Python-only to any language.
+
+Classified files also have their text content retained on FileRecord
+(within the same per-file size cap already enforced below), because M2's
+Maintainability slice needed nothing beyond size/line-count, but M2b and
+M3 (real content-based metrics, ML-pattern detection) do. This is kept
+simple rather than optimal: content for every classified file sits in
+memory for the snapshot's lifetime, capped only by _MAX_FILE_BYTES per
+file and _MAX_FILES file count - fine for the repo sizes this project
+targets, but streaming instead of retaining-all is real future work if
+that ever stops being true.
 """
 from __future__ import annotations
 
@@ -68,6 +78,7 @@ class FileRecord:
     language: str | None
     size_bytes: int
     line_count: int
+    content: str | None = None  # only populated for classified (language is not None) files
 
 
 @dataclass
@@ -126,12 +137,12 @@ def _classify(path: Path) -> str | None:
     return _LANGUAGE_BY_EXTENSION.get(path.suffix.lower())
 
 
-def _count_lines(path: Path) -> int:
+def _read_text_and_count_lines(path: Path) -> tuple[str | None, int]:
     try:
-        with path.open("r", encoding="utf-8", errors="ignore") as f:
-            return sum(1 for _ in f)
+        text = path.read_text(encoding="utf-8", errors="ignore")
     except OSError:
-        return 0
+        return None, 0
+    return text, len(text.splitlines())
 
 
 def _snapshot_from_dir(root: Path, owner: str, repo: str, ref: str | None) -> RepositorySnapshot:
@@ -154,11 +165,13 @@ def _snapshot_from_dir(root: Path, owner: str, repo: str, ref: str | None) -> Re
             truncated = True
             continue
         language = _classify(path)
+        content, line_count = _read_text_and_count_lines(path) if language is not None else (None, 0)
         files.append(FileRecord(
             path=path.relative_to(root).as_posix(),
             language=language,
             size_bytes=size,
-            line_count=_count_lines(path) if language is not None else 0,
+            line_count=line_count,
+            content=content,
         ))
     return RepositorySnapshot(owner=owner, repo=repo, ref=ref, files=files, truncated=truncated)
 

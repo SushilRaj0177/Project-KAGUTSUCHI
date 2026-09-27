@@ -55,6 +55,18 @@ def test_snapshot_from_dir_skips_ignored_directories_and_classifies_files(tmp_pa
     assert summary["Python"]["files"] == 1
     assert summary["Python"]["lines"] == 4
 
+    main_py = next(f for f in snapshot.files if f.path == "src/main.py")
+    assert main_py.content == "import os\n\ndef f():\n    return 1\n"
+
+
+def test_unclassified_files_do_not_retain_content(tmp_path):
+    (tmp_path / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n")
+
+    snapshot = _snapshot_from_dir(tmp_path, owner="me", repo="proj", ref=None)
+    png = next(f for f in snapshot.files if f.path == "image.png")
+    assert png.language is None
+    assert png.content is None
+
 
 def test_snapshot_marks_truncated_when_file_cap_exceeded(tmp_path, monkeypatch):
     import wsqfai.ingestion.repository as repo_mod
