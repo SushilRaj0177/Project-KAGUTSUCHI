@@ -16,17 +16,30 @@ conventional software, need traceability across code AND the data/model
 artifacts trained from it - without it, reproducing or rolling back a
 model's behaviour becomes guesswork.
 
-This module deliberately implements only ML-repository detection and the
-ML Versioning check for now. The catalogue's remaining patterns and
-anti-patterns (Glue Code, Pipeline Jungles, Dead Experimental Codepaths,
-Test Infrastructure Independence, Wrap Black-box Packages...) don't yet
-have a detection heuristic here that's reliable enough not to be mostly
-false positives from a purely static, no-execution read of the source -
-building one honestly, rather than shipping a rule that just pattern-
-matches import statements and calls it done, is real further M3 work.
+M3b adds one more of the catalogue's 8 anti-patterns: Dead Experimental
+Codepaths. Sculley et al.'s original paper describes it directly - ML
+development often proceeds by trying an alternative approach behind a
+conditional, and "it is often the case that the branches taken by such
+[dead] codepaths never fire in production... over time, it is common for
+these branches to become increasingly stale," accumulating debt and
+obscuring what the system actually does. A branch gated on a literal
+`False`/`0` (`if False: ...`) can never fire at all - the least ambiguous,
+lowest-false-positive instance of this pattern a purely static, no-
+execution read of the source can identify: no semantic analysis needed to
+know it's dead, since the condition can never be true regardless of any
+runtime state.
+
+The catalogue's remaining patterns and anti-patterns (Glue Code, Pipeline
+Jungles, Test Infrastructure Independence, Wrap Black-box Packages...)
+still don't have a detection heuristic here that's reliable enough not to
+be mostly false positives from a purely static, no-execution read of the
+source - building one honestly, rather than shipping a rule that just
+pattern-matches import statements and calls it done, is real further M3
+work.
 """
 from __future__ import annotations
 
+import ast
 import re
 
 from wsqfai.domain.evidence import AnalyzerMetadata, Confidence, Evidence, Finding, Severity, SourceLocation
@@ -110,6 +123,71 @@ def _missing_ml_versioning_finding(snapshot: RepositorySnapshot) -> Finding | No
     )
 
 
+def _is_always_false_test(test: ast.expr) -> bool:
+    return isinstance(test, ast.Constant) and test.value in (False, 0)
+
+
+def _is_trivial_body(body: list[ast.stmt]) -> bool:
+    """True if `body` is empty of real logic - just `pass` and/or a bare
+    string literal (a docstring/inline comment) - in which case there's no
+    accumulated debt worth reporting, just an inert placeholder."""
+    for stmt in body:
+        if isinstance(stmt, ast.Pass):
+            continue
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+            continue
+        return False
+    return True
+
+
+def _dead_experimental_codepath_lines(tree: ast.Module) -> list[int]:
+    return sorted({
+        node.lineno for node in ast.walk(tree)
+        if isinstance(node, ast.If) and _is_always_false_test(node.test) and not _is_trivial_body(node.body)
+    })
+
+
+def _dead_experimental_codepath_finding(path: str, lines: list[int]) -> Finding:
+    first = lines[0]
+    return Finding(
+        title=f"Dead experimental codepath(s) in {path}",
+        description=(
+            f"{len(lines)} branch(es) gated on a literal 'if False:'/'if 0:' (first at line {first}) "
+            "contain real code that can never execute, regardless of any runtime state. Sculley et "
+            "al.'s 'Hidden Technical Debt in Machine Learning Systems' (NeurIPS 2015) describes this "
+            "exact pattern - ML development often proceeds by trying an alternative approach behind a "
+            "conditional that's later disabled rather than removed, and these branches accumulate as "
+            "debt, obscuring what the system actually does. Washizaki et al.'s ML design-pattern "
+            "catalogue (IEEE Computer, Vol. 55 No. 3, March 2022) documents 'Dead Experimental "
+            "Codepaths' as one of its 8 cataloged anti-patterns. ISO/IEC 25010's Analysability "
+            "sub-characteristic: a reader has to reason about a path that can never run."
+        ),
+        characteristic=QualityCharacteristic.MAINTAINABILITY,
+        sub_characteristic_key="analysability",
+        severity=Severity.LOW,
+        evidence=[Evidence(
+            location=SourceLocation(file_path=path, start_line=first, end_line=first),
+            snippet=f"{len(lines)} 'if False:'/'if 0:' branch(es) with real code, first at line {first}",
+            analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="dead_experimental_codepath", confidence=Confidence.HIGH),
+        )],
+    )
+
+
+def _dead_experimental_codepath_findings(snapshot: RepositorySnapshot) -> list[Finding]:
+    findings: list[Finding] = []
+    for f in snapshot.files:
+        if f.language != "Python" or not f.content:
+            continue
+        try:
+            tree = ast.parse(f.content)
+        except (SyntaxError, ValueError):
+            continue
+        lines = _dead_experimental_codepath_lines(tree)
+        if lines:
+            findings.append(_dead_experimental_codepath_finding(f.path, lines))
+    return findings
+
+
 def compute_ml_pattern_findings(snapshot: RepositorySnapshot) -> list[Finding]:
     """Run every ML-pattern check this module implements. Returns an empty
     list for a repository with no detected ML framework usage - these
@@ -121,4 +199,5 @@ def compute_ml_pattern_findings(snapshot: RepositorySnapshot) -> list[Finding]:
     versioning_finding = _missing_ml_versioning_finding(snapshot)
     if versioning_finding is not None:
         findings.append(versioning_finding)
+    findings.extend(_dead_experimental_codepath_findings(snapshot))
     return findings
