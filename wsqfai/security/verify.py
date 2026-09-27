@@ -10,30 +10,36 @@ Deliberately narrow in what it can attempt, and honest about the rest.
 Reconstructing a runnable call for an arbitrary function pulled from an
 arbitrary repository is, in general, unsolved: real functions take
 multiple arguments, depend on imports and names outside their own body,
-and need object state a static scanner can't fabricate safely. This first
-slice handles exactly one concrete, mechanically reconstructible shape:
+and need object state a static scanner can't fabricate safely. This slice handles two concrete, mechanically reconstructible shapes -
+both reduce to "a shell definitely sees attacker-influenced input", which
+is what makes a single generic payload work regardless of the function's
+own base command:
 
-  - the sensitive operation is a direct shell-exec call (os.system,
-    os.popen) - `wsqfai.security.ast_scan._SIGNATURES` entries tagged
+  - a direct shell-exec call (os.system, os.popen) -
+    `wsqfai.security.ast_scan._SIGNATURES` entries tagged
     SensitiveOp.SHELL_EXEC
-  - the enclosing function takes exactly one parameter, and the tainted
-    data reaches the sink directly from that parameter with no
-    intermediate local variable (`ast_scan._sole_direct_taint_param`,
-    recorded as `Observation.metadata["single_param_direct_taint"]`)
+  - subprocess.run/Popen/call with an explicit `shell=True` keyword
+    (`ast_scan._call_has_shell_true`, recorded as
+    `Observation.metadata["shell_true"]`) - without that keyword,
+    subprocess execs argv directly with no shell involved at all, so the
+    same shell-metacharacter payload would do nothing, which is exactly
+    why plain subprocess.* calls are excluded
 
-For that shape, verification is mechanical and safe to attempt: any shell
-string built by concatenating attacker input is vulnerable to command
-chaining (`; <second command>`), independent of what the function's own
-base command actually is - the same principle the archived Kagutsuchi
-engine's netdiag fixture demonstrated, generalized here from one hardcoded
-fixture to any function of this shape pulled from any real repository.
+Both shapes also require: the enclosing function takes exactly one
+parameter, and the tainted data reaches the sink directly from that
+parameter with no intermediate local variable
+(`ast_scan._sole_direct_taint_param`, recorded as
+`Observation.metadata["single_param_direct_taint"]`) - the same principle
+the archived Kagutsuchi engine's netdiag fixture demonstrated, generalized
+here to any function of either shape pulled from any real repository.
 
-Everything else - SQL injection, deserialization, SSTI, multi-parameter
-shell-exec, taint that flows through a local variable - returns
-`Verdict.NOT_APPLICABLE`: a real, stated limitation of this slice, not a
-silent false negative. Reintroducing the archived hypothesis-generation
-LLM path (verification/hypothesis/generate.py, groq_client.py) to widen
-this is real further M4b work, not attempted here.
+Everything else - SQL injection, deserialization, SSTI, subprocess.* with
+no shell=True, multi-parameter calls, taint that flows through a local
+variable - returns `Verdict.NOT_APPLICABLE`: a real, stated limitation of
+this slice, not a silent false negative. Reintroducing the archived
+hypothesis-generation LLM path (verification/hypothesis/generate.py,
+groq_client.py) to widen this further is real further M4b work, not
+attempted here.
 """
 from __future__ import annotations
 
@@ -47,13 +53,14 @@ from wsqfai.security.sandbox import ExecutionEvidence, run_in_subprocess_sandbox
 
 _ANALYZER = "wsqfai.security.verify"
 
-# Only direct shell-exec sinks generalize to a payload that works
-# regardless of the function's own base command - see this module's
-# docstring. subprocess.run/Popen/call are NOT included: without knowing
-# whether the call site passes shell=True (a keyword argument, not part of
-# the call name ast_scan matches on), a generic shell-metacharacter payload
-# can't be assumed to reach a shell at all.
+# Direct shell-exec sinks (os.system/os.popen) always generalize to a
+# payload that works regardless of the function's own base command.
+# subprocess.run/Popen/call only generalize the same way when the call
+# site passes shell=True explicitly (checked separately, in
+# can_attempt_verification, via metadata["shell_true"]) - without it, a
+# generic shell-metacharacter payload can't be assumed to reach a shell.
 _VERIFIABLE_OPS = {"shell_exec"}
+_SHELL_TRUE_VERIFIABLE_OPS = {"subprocess"}
 _SHELL_INJECTION_PAYLOAD = "127.0.0.1; touch /tmp/wsqfai_pwned"
 
 
@@ -71,9 +78,14 @@ class VerificationResult(BaseModel):
 
 def can_attempt_verification(metadata: dict[str, str]) -> bool:
     """Whether this Observation's metadata (from wsqfai.security.ast_scan)
-    matches the one shape this slice can mechanically reconstruct and run
-    - see this module's docstring for exactly what that shape is."""
-    return metadata.get("sensitive_op") in _VERIFIABLE_OPS and bool(metadata.get("single_param_direct_taint"))
+    matches one of the shapes this slice can mechanically reconstruct and
+    run - see this module's docstring for exactly what those shapes are."""
+    if not metadata.get("single_param_direct_taint"):
+        return False
+    sensitive_op = metadata.get("sensitive_op")
+    if sensitive_op in _VERIFIABLE_OPS:
+        return True
+    return sensitive_op in _SHELL_TRUE_VERIFIABLE_OPS and metadata.get("shell_true") == "true"
 
 
 def build_candidate_script(function_source: str, symbol: str, module_imports: str = "") -> str:
@@ -98,10 +110,11 @@ def verify_shell_exec_observation(metadata: dict[str, str], *, timeout_s: int = 
         return VerificationResult(
             verdict=Verdict.NOT_APPLICABLE,
             detail=(
-                "This observation isn't a direct single-parameter shell-exec call with "
-                "no intermediate local variable - the only shape this verification slice "
-                "can safely and mechanically reconstruct a runnable call for. See "
-                "wsqfai/security/verify.py's module docstring."
+                "This observation isn't a single-parameter direct shell-exec call, or a "
+                "subprocess.run/Popen/call with an explicit shell=True, with no intermediate "
+                "local variable between the parameter and the sink - the only shapes this "
+                "verification slice can safely and mechanically reconstruct a runnable call "
+                "for. See wsqfai/security/verify.py's module docstring."
             ),
         )
     function_source = metadata.get("function_source", "")

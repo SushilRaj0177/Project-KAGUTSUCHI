@@ -187,10 +187,21 @@ No milestone is marked done because a plan for it exists.
         `NOT_APPLICABLE` — a stated limitation, not a silent false
         negative. 10 tests, plus 2 in `wsqfai/report.py`'s own suite proving
         the wiring: a confirmed hypothesis is promoted to a `Finding`, an
-        unsupported one stays a hypothesis. Reintroducing the archived
-        LLM-based hypothesis generation (`verification/hypothesis/
-        generate.py`, `groq_client.py`) to widen coverage beyond this one
-        shape is real further M4b work.
+        unsupported one stays a hypothesis.
+
+        **Widened later:** `subprocess.run`/`Popen`/`call` with an explicit
+        `shell=True` keyword is now verifiable too — `ast_scan.py` records
+        whether the call site passes `shell=True`
+        (`Observation.metadata["shell_true"]`), and `verify.py` attempts
+        the same generic shell-metacharacter payload against it, since
+        `shell=True` means the command genuinely reaches a real shell
+        (unlike plain `subprocess.run(argv)`, which execs directly and
+        stays unverifiable). 4 new tests (2 in `ast_scan`, 2 in `verify`,
+        including a real sandbox-confirmed end-to-end run). Reintroducing
+        the archived LLM-based hypothesis generation
+        (`verification/hypothesis/generate.py`, `groq_client.py`) to widen
+        coverage further — SQL injection, deserialization, multi-parameter
+        calls, taint through a local variable — is real further M4b work.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -291,7 +302,7 @@ the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
 demonstrate the same static pattern in two different real functions
 correctly resolving to two different verdicts. The highest-value next step
-there is widening M4b's coverage beyond its one shell-exec shape
+there is widening M4b's coverage beyond its two shell-reaching shapes
 (reintroducing `verification/hypothesis`'s LLM-based hypothesis
 generation, or handling multi-parameter functions), since that's what
 turns this from "one narrow
