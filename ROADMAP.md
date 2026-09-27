@@ -85,10 +85,22 @@ No milestone is marked done because a plan for it exists.
           goal is catching completely unconstrained dependencies, the
           clearest low-false-positive signal, not grading pin strictness.
           9 tests.
-    - [ ] Performance Efficiency, Compatibility, Usability — not started.
-          Each needs its own honest scoping pass; Performance Efficiency in
-          particular can't be measured from static source alone at all —
-          it needs a profiling run, not a source read.
+    - [x] **Compatibility (Co-existence).** `wsqfai/measurement/compatibility.py`:
+          AST-based detection of a literal integer passed as `port=` to any
+          call (`app.run(port=5000)`, `uvicorn.run(app, port=8000)`) - a
+          service that hardcodes the port it binds to can't share a host
+          with another instance of itself, or an unrelated service wanting
+          the same port, without the user first editing the source. Not
+          specific to one framework: scoped to the `port=` keyword itself,
+          the common signature across Flask/uvicorn/plain socket servers.
+          Deliberately narrow: `port=int(os.environ.get("PORT", 5000))` is
+          a `Call`, not a bare `Constant`, so it's correctly left alone -
+          the port is already configurable there. Test files excluded,
+          since a hardcoded port for the duration of one test run isn't a
+          real co-existence risk. 9 tests.
+    - [ ] Performance Efficiency, Usability — not started. Each needs its
+          own honest scoping pass to find a signal reachable from static
+          source without fabricating one.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
@@ -113,13 +125,28 @@ No milestone is marked done because a plan for it exists.
         line-counting) — a real, deliberate scope change to M1's
         ingestion layer, covered by 2 new tests there (34 → all still
         passing).
-  - [ ] **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
+  - **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
         Pipeline Jungles, Dead Experimental Codepaths, Test Infrastructure
         Independence, Wrap Black-box Packages into Common APIs, and the
         rest of the 12+13+8 catalogue. Each needs a detection heuristic
         honest enough not to be mostly false positives from a static,
         no-execution read of source — that's real design work per
         pattern, not a batch of regexes to add in one sitting.
+    - [x] **Dead Experimental Codepaths.** `wsqfai/measurement/ml_patterns.py`:
+          AST-based detection of `if False:`/`if 0:` branches containing
+          real code (not just `pass`/a docstring) in an ML-containing
+          repository. Sculley et al.'s "Hidden Technical Debt in Machine
+          Learning Systems" (NeurIPS 2015) names this exact pattern — an
+          alternative approach tried behind a conditional that's later
+          disabled rather than removed, accumulating as debt that obscures
+          what the system does. The lowest-false-positive instance of this
+          pattern a static, no-execution read can identify: a literal
+          `False`/`0` condition can never be true regardless of any runtime
+          state, so no semantic analysis is needed to know the branch is
+          dead. ISO/IEC 25010's Analysability sub-characteristic. 4 tests.
+    - [ ] Glue Code, Pipeline Jungles, Test Infrastructure Independence,
+          Wrap Black-box Packages into Common APIs, and the rest of the
+          12+13+8 catalogue — still need their own honest scoping pass.
   - [ ] **M3c — ISO/IEC 25059 AI-specific characteristics themselves**
         (Functional Adaptability, User Controllability, Transparency,
         Intervenability, Societal/Ethical Risk Mitigation from
@@ -187,10 +214,21 @@ No milestone is marked done because a plan for it exists.
         `NOT_APPLICABLE` — a stated limitation, not a silent false
         negative. 10 tests, plus 2 in `wsqfai/report.py`'s own suite proving
         the wiring: a confirmed hypothesis is promoted to a `Finding`, an
-        unsupported one stays a hypothesis. Reintroducing the archived
-        LLM-based hypothesis generation (`verification/hypothesis/
-        generate.py`, `groq_client.py`) to widen coverage beyond this one
-        shape is real further M4b work.
+        unsupported one stays a hypothesis.
+
+        **Widened later:** `subprocess.run`/`Popen`/`call` with an explicit
+        `shell=True` keyword is now verifiable too — `ast_scan.py` records
+        whether the call site passes `shell=True`
+        (`Observation.metadata["shell_true"]`), and `verify.py` attempts
+        the same generic shell-metacharacter payload against it, since
+        `shell=True` means the command genuinely reaches a real shell
+        (unlike plain `subprocess.run(argv)`, which execs directly and
+        stays unverifiable). 4 new tests (2 in `ast_scan`, 2 in `verify`,
+        including a real sandbox-confirmed end-to-end run). Reintroducing
+        the archived LLM-based hypothesis generation
+        (`verification/hypothesis/generate.py`, `groq_client.py`) to widen
+        coverage further — SQL injection, deserialization, multi-parameter
+        calls, taint through a local variable — is real further M4b work.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -257,10 +295,19 @@ No milestone is marked done because a plan for it exists.
         aggregated-per-file Finding to one per unpinned dependency (with a
         real line number) - each fix needs its own precise line to edit,
         which an aggregated summary string couldn't provide.
-  - [ ] **M7b — Wider fix coverage.** `swallowed_broad_exception` (insert
-        real logging), `pyproject.toml`'s unpinned dependencies (needs
-        line-number tracking tomllib doesn't give for free), and
-        anything else M2b/M3b add later.
+  - [x] **M7b — Wider fix coverage.** `pyproject.toml`'s unpinned
+        dependencies now get real per-entry line numbers - tomllib doesn't
+        expose array-entry line numbers, so `portability.py` recovers them
+        with a narrow raw-text scan of the `[project]` table's
+        `dependencies = [...]` array, falling back to the old aggregated
+        Finding if the scan can't place every entry tomllib itself reports
+        as unpinned (an escaped-character mismatch, an unrecognized array
+        shape) rather than guessing a wrong line. `swallowed_broad_exception`
+        gets a `Suggestion` (log the fault, consider re-raising) rather than
+        an auto-fix - safely inserting a logging call needs to know whether
+        the file already imports `logging`, and whether the swallow was
+        ever actually intentional is a judgment call this tool can't make.
+        164 -> 168 tests. Anything else M2b/M3b add later stays open.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is
@@ -306,7 +353,7 @@ the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
 demonstrate the same static pattern in two different real functions
 correctly resolving to two different verdicts. The highest-value next step
-there is widening M4b's coverage beyond its one shell-exec shape
+there is widening M4b's coverage beyond its two shell-reaching shapes
 (reintroducing `verification/hypothesis`'s LLM-based hypothesis
 generation, or handling multi-parameter functions), since that's what
 turns this from "one narrow
