@@ -59,10 +59,21 @@ No milestone is marked done because a plan for it exists.
           broad handler that logs, re-raises, or returns is correctly left
           unflagged — the breadth of the catch isn't the problem, silently
           discarding the fault is. 9 tests.
-    - [ ] Performance Efficiency, Compatibility, Usability, Portability —
-          not started. Each needs its own honest scoping pass (most can't
-          be measured from static source alone at all — e.g. Performance
-          Efficiency really needs a profiling run, not a source read).
+    - [x] **Portability (Installability).** `wsqfai/measurement/portability.py`:
+          detects fully unpinned dependencies in `requirements.txt` and
+          `pyproject.toml`'s `[project.dependencies]` (parsed with the
+          stdlib `tomllib`, not regex) — a dependency with no version
+          operator at all can silently resolve to a different, untested
+          version on a fresh install, ISO/IEC 25010's Installability
+          sub-characteristic. Deliberately narrow: any version operator at
+          all (even a loose `>=`) is treated as constrained, since the
+          goal is catching completely unconstrained dependencies, the
+          clearest low-false-positive signal, not grading pin strictness.
+          9 tests.
+    - [ ] Performance Efficiency, Compatibility, Usability — not started.
+          Each needs its own honest scoping pass; Performance Efficiency in
+          particular can't be measured from static source alone at all —
+          it needs a profiling run, not a source read.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
