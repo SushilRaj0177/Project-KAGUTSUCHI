@@ -23,6 +23,23 @@ def run(cmd):
     observations = scan_source(src, "sample.py")
     assert len(observations) == 1
     assert observations[0].metadata["sensitive_op"] == "subprocess"
+    assert observations[0].metadata["shell_true"] == "true"
+
+
+def test_subprocess_call_without_shell_true_is_not_tagged_shell_true():
+    # subprocess.run with argv (no shell=True) execs directly - a generic
+    # shell-metacharacter payload wouldn't reach a shell at all here, so
+    # this must NOT carry shell_true even though it's still flagged as a
+    # sensitive subprocess call.
+    src = """
+def run(cmd):
+    import subprocess
+    subprocess.run([cmd])
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert observations[0].metadata["sensitive_op"] == "subprocess"
+    assert "shell_true" not in observations[0].metadata
 
 
 def test_detects_eval_and_pickle():

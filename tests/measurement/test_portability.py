@@ -67,6 +67,52 @@ def test_malformed_pyproject_toml_is_skipped_not_crashed():
     assert compute_portability_findings(_file("pyproject.toml", "not valid [[[ toml")) == []
 
 
+def test_pyproject_toml_multiline_array_gets_one_finding_per_line():
+    content = (
+        "[project]\n"
+        'name = "proj"\n'
+        "dependencies = [\n"
+        '    "requests",\n'
+        '    "flask==2.3.0",\n'
+        '    "numpy",\n'
+        "]\n"
+    )
+    findings = compute_portability_findings(_file("pyproject.toml", content))
+    assert len(findings) == 2
+    by_line = {f.evidence[0].location.start_line: f.evidence[0].snippet for f in findings}
+    assert by_line == {4: "requests", 6: "numpy"}
+    assert all(f.evidence[0].analyzer.rule_id == "unpinned_dependency_pyproject" for f in findings)
+
+
+def test_pyproject_toml_duplicate_declaration_gets_distinct_lines():
+    content = (
+        "[project]\n"
+        'name = "proj"\n'
+        "dependencies = [\n"
+        '    "requests",\n'
+        '    "requests",\n'
+        "]\n"
+    )
+    findings = compute_portability_findings(_file("pyproject.toml", content))
+    assert sorted(f.evidence[0].location.start_line for f in findings) == [4, 5]
+
+
+def test_pyproject_toml_escaped_content_falls_back_to_aggregated_finding():
+    # tomllib decodes the ! escape to "!"; the raw-text scan captures the
+    # literal source text instead, so the two disagree on this entry's exact
+    # string - the scan can't safely place a line for it, so it must fall back
+    # to one aggregated Finding rather than guessing wrong.
+    content = (
+        "[project]\n"
+        'name = "proj"\n'
+        'dependencies = ["numpy\\u0021"]\n'
+    )
+    findings = compute_portability_findings(_file("pyproject.toml", content))
+    assert len(findings) == 1
+    assert findings[0].evidence[0].analyzer.rule_id == "unpinned_dependency_pyproject"
+    assert findings[0].evidence[0].location.start_line is None
+
+
 def test_unrelated_files_are_ignored():
     assert compute_portability_findings(_file("README.md", "requests\n")) == []
 
