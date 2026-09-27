@@ -26,8 +26,10 @@ from pydantic import BaseModel
 
 from wsqfai.domain.evidence import Finding, Observation
 from wsqfai.ingestion.repository import RepositorySnapshot, ingest
+from wsqfai.measurement.compatibility import compute_compatibility_findings
 from wsqfai.measurement.maintainability import compute_maintainability_findings
 from wsqfai.measurement.ml_patterns import compute_ml_pattern_findings, is_ml_repository
+from wsqfai.measurement.performance import compute_performance_findings
 from wsqfai.measurement.portability import compute_portability_findings
 from wsqfai.measurement.reliability import compute_reliability_findings
 from wsqfai.measurement.usability import compute_usability_findings

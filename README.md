@@ -205,6 +205,7 @@ wsqfai/
   measurement/           -- Maintainability, Reliability, Portability, ML-pattern metrics (M2a/M2b/M3a)
   security/              -- AST hypothesis scanner (M4a) + sandbox verification (M4b)
   benchmark.py           -- WSQF/WSQB-style corpus-comparison methodology (M5a)
+  reference_corpus.py    -- curated default corpus to benchmark against, with caching (M5b)
   remediation.py         -- real auto-fix diffs for mechanically-fixable findings (M7a)
   integration/           -- opens a real GitHub PR carrying selected fixes (M7c-backend)
   server/                -- the FastAPI backend behind a future web frontend (M7c-backend)

@@ -122,13 +122,28 @@ No milestone is marked done because a plan for it exists.
         line-counting) — a real, deliberate scope change to M1's
         ingestion layer, covered by 2 new tests there (34 → all still
         passing).
-  - [ ] **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
+  - **M3b — Remaining catalogue patterns/anti-patterns.** Glue Code,
         Pipeline Jungles, Dead Experimental Codepaths, Test Infrastructure
         Independence, Wrap Black-box Packages into Common APIs, and the
         rest of the 12+13+8 catalogue. Each needs a detection heuristic
         honest enough not to be mostly false positives from a static,
         no-execution read of source — that's real design work per
         pattern, not a batch of regexes to add in one sitting.
+    - [x] **Dead Experimental Codepaths.** `wsqfai/measurement/ml_patterns.py`:
+          AST-based detection of `if False:`/`if 0:` branches containing
+          real code (not just `pass`/a docstring) in an ML-containing
+          repository. Sculley et al.'s "Hidden Technical Debt in Machine
+          Learning Systems" (NeurIPS 2015) names this exact pattern — an
+          alternative approach tried behind a conditional that's later
+          disabled rather than removed, accumulating as debt that obscures
+          what the system does. The lowest-false-positive instance of this
+          pattern a static, no-execution read can identify: a literal
+          `False`/`0` condition can never be true regardless of any runtime
+          state, so no semantic analysis is needed to know the branch is
+          dead. ISO/IEC 25010's Analysability sub-characteristic. 4 tests.
+    - [ ] Glue Code, Pipeline Jungles, Test Infrastructure Independence,
+          Wrap Black-box Packages into Common APIs, and the rest of the
+          12+13+8 catalogue — still need their own honest scoping pass.
   - [ ] **M3c — ISO/IEC 25059 AI-specific characteristics themselves**
         (Functional Adaptability, User Controllability, Transparency,
         Intervenability, Societal/Ethical Risk Mitigation from
@@ -196,10 +211,21 @@ No milestone is marked done because a plan for it exists.
         `NOT_APPLICABLE` — a stated limitation, not a silent false
         negative. 10 tests, plus 2 in `wsqfai/report.py`'s own suite proving
         the wiring: a confirmed hypothesis is promoted to a `Finding`, an
-        unsupported one stays a hypothesis. Reintroducing the archived
-        LLM-based hypothesis generation (`verification/hypothesis/
-        generate.py`, `groq_client.py`) to widen coverage beyond this one
-        shape is real further M4b work.
+        unsupported one stays a hypothesis.
+
+        **Widened later:** `subprocess.run`/`Popen`/`call` with an explicit
+        `shell=True` keyword is now verifiable too — `ast_scan.py` records
+        whether the call site passes `shell=True`
+        (`Observation.metadata["shell_true"]`), and `verify.py` attempts
+        the same generic shell-metacharacter payload against it, since
+        `shell=True` means the command genuinely reaches a real shell
+        (unlike plain `subprocess.run(argv)`, which execs directly and
+        stays unverifiable). 4 new tests (2 in `ast_scan`, 2 in `verify`,
+        including a real sandbox-confirmed end-to-end run). Reintroducing
+        the archived LLM-based hypothesis generation
+        (`verification/hypothesis/generate.py`, `groq_client.py`) to widen
+        coverage further — SQL injection, deserialization, multi-parameter
+        calls, taint through a local variable — is real further M4b work.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -216,15 +242,30 @@ No milestone is marked done because a plan for it exists.
         average, 2.0 = twice the corpus rate), returning `None` rather
         than a bogus infinity when the corpus has zero findings for that
         characteristic to divide by. 6 tests, including one real
-        end-to-end corpus build against a live public repo. This is the
-        *methodology* proven correct, not the milestone finished: there's
-        no real reference corpus yet, only whatever repo list a caller
-        supplies. See M5b.
-  - [ ] **M5b — A real reference corpus.** A curated, versioned set of
-        repositories to benchmark against by default (WSQF/WSQB's own
-        study used 21 commercial products) — needs a deliberate choice of
-        what belongs in it and why, not just picking a few repos
-        arbitrarily.
+        end-to-end corpus build against a live public repo. This was the
+        *methodology* proven correct, not the whole milestone finished at
+        the time - `compare_to_corpus` still takes any `CorpusReport`
+        a caller supplies, including a custom one; M5b adds a real curated
+        default.
+  - [x] **M5b — A real reference corpus.** `wsqfai/reference_corpus.py`:
+        a curated, versioned list of 4 real, actively-maintained,
+        permissively-licensed repositories - `pallets/flask` (web
+        framework), `psf/requests` (HTTP client), `pallets/click` (CLI
+        toolkit), `benoitc/gunicorn` (WSGI server) - deliberately diverse
+        in application shape, not just four web frameworks, since diversity
+        is what makes `compare_to_corpus()`'s baseline mean something
+        rather than secretly measuring "typical of web frameworks." Each
+        entry carries its own one-line justification inline, so the
+        corpus's composition stays auditable. `build_reference_corpus()`
+        caches the built `CorpusReport` to a JSON file (via pydantic's own
+        `model_dump_json`/`model_validate_json`) so repeated benchmark runs
+        don't re-clone and re-analyze all 4 repositories every time - only
+        `force_refresh=True` (e.g. after `REFERENCE_CORPUS` itself changes)
+        rebuilds and overwrites the cache. Deliberately small (4, not
+        WSQF/WSQB's 21): a small set that's actually exercised end-to-end
+        beats a large one that's aspirational. 8 tests, including one real
+        end-to-end build against all 4 live repositories, cached, then
+        confirmed the cache is read back without a second clone.
 - [ ] **M6 — Dashboard, report, CI/PR integration.** A real frontend
       (reusing KAGUTSUCHI's auth/i18n infrastructure from the archive where
       it fits), a generated report, and a CI-gate mode.
@@ -251,10 +292,19 @@ No milestone is marked done because a plan for it exists.
         aggregated-per-file Finding to one per unpinned dependency (with a
         real line number) - each fix needs its own precise line to edit,
         which an aggregated summary string couldn't provide.
-  - [ ] **M7b — Wider fix coverage.** `swallowed_broad_exception` (insert
-        real logging), `pyproject.toml`'s unpinned dependencies (needs
-        line-number tracking tomllib doesn't give for free), and
-        anything else M2b/M3b add later.
+  - [x] **M7b — Wider fix coverage.** `pyproject.toml`'s unpinned
+        dependencies now get real per-entry line numbers - tomllib doesn't
+        expose array-entry line numbers, so `portability.py` recovers them
+        with a narrow raw-text scan of the `[project]` table's
+        `dependencies = [...]` array, falling back to the old aggregated
+        Finding if the scan can't place every entry tomllib itself reports
+        as unpinned (an escaped-character mismatch, an unrecognized array
+        shape) rather than guessing a wrong line. `swallowed_broad_exception`
+        gets a `Suggestion` (log the fault, consider re-raising) rather than
+        an auto-fix - safely inserting a logging call needs to know whether
+        the file already imports `logging`, and whether the swallow was
+        ever actually intentional is a judgment call this tool can't make.
+        164 -> 168 tests. Anything else M2b/M3b add later stays open.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is
@@ -300,10 +350,10 @@ the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
 demonstrate the same static pattern in two different real functions
 correctly resolving to two different verdicts. The highest-value next step
-there is widening M4b's coverage beyond its one shell-exec shape
+there is widening M4b's coverage beyond its two shell-reaching shapes
 (reintroducing `verification/hypothesis`'s LLM-based hypothesis
 generation, or handling multi-parameter functions), since that's what
 turns this from "one narrow
 but real case" into something that finds proven vulnerabilities across a
-meaningfully wider slice of real code. M2b/M3b/M3c/M4c/M5b's other
-remaining slices are all real, scoped, startable work whenever picked up.
+meaningfully wider slice of real code. M2b/M3b/M3c/M4c's other remaining
+slices are all real, scoped, startable work whenever picked up.
