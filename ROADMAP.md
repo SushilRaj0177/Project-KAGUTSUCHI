@@ -25,11 +25,34 @@ No milestone is marked done because a plan for it exists.
       from Python-only to any language) and file/language classification.
       19 tests, including one real end-to-end clone against a live public
       GitHub repo (skipped, not faked, if network is unavailable).
-- [ ] **M2 — SQuaRE quality measurement.** Deterministic measurement of
-      real SQuaRE product-quality characteristics (Maintainability,
-      Reliability, Performance Efficiency, Compatibility, Usability,
-      Portability) — each metric traceable to the specific SQuaRE
-      sub-characteristic it measures.
+- **M2 — SQuaRE quality measurement.** Deterministic measurement of real
+      SQuaRE product-quality characteristics — each metric traceable to the
+      specific sub-characteristic it measures. Split honestly into slices
+      rather than checked off as one lump, since only one slice is real so
+      far:
+  - [x] **M2a — Maintainability slice.** `wsqfai/measurement/maintainability.py`:
+        deterministic, structural metrics against a `RepositorySnapshot`
+        for three Maintainability sub-characteristics — Modularity
+        (god-file line-count thresholds, the same order of magnitude
+        Checkstyle/PMD use by default), Analysability (average
+        characters-per-line, catching minified/generated code a human or
+        AI reader would struggle with), and Testability (ratio of
+        test-file-convention matches to code files, explicitly labelled a
+        structural proxy, not real coverage). Every Finding cites a real
+        `sub_characteristic_key` and at least one Evidence item pointing
+        at the file(s) that produced it. 12 tests, including one real
+        end-to-end run against a live cloned public repo. Deliberately
+        scoped to what `RepositorySnapshot` can measure without
+        re-reading file content (path/language/size/line-count only) —
+        see the module's own docstring for why that's a stated
+        limitation, not an oversight.
+  - [ ] **M2b — Remaining SQuaRE characteristics.** Reliability,
+        Performance Efficiency, Compatibility, Usability, Portability.
+        Most of these need actual file content (not just path/size/line
+        metadata) or runtime signals `RepositorySnapshot` doesn't carry
+        yet — scoping this honestly, rather than forcing a weak metric
+        onto a characteristic that doesn't have one yet, is real M2b
+        work, not something to guess at now.
 - [ ] **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine (Washizaki's Computer 2022 / PLoP
@@ -48,8 +71,13 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-M2: the SQuaRE measurement layer — real deterministic metrics (starting
-with Maintainability's Modularity/Analysability/Testability, since those
-have the most direct, uncontroversial static measures) computed against
-`RepositorySnapshot` and attached to the sub-characteristics M1 already
-models.
+M2b or M3. M2b (Reliability/Performance/Compatibility/Usability/
+Portability) needs real file content to measure honestly, which means
+extending ingestion to optionally retain source text for small repos
+rather than discarding it after the clone — a real scoping decision, not
+just more metric functions. M3 (AI/ML quality extension) can start
+independently: ISO/IEC 25059 characteristics for ML-containing repos, plus
+the ML design-pattern detection engine referencing Washizaki's own pattern
+catalog (Computer 2022 / PLoP 2024) — arguably the single most
+recruiter-legible, Washizaki-specific piece of this whole project, so it's
+worth pulling forward rather than strictly waiting on M2b to fully close.
