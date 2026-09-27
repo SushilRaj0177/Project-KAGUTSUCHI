@@ -82,6 +82,40 @@ def ping(host):
     assert "NameError" not in (result.execution_evidence.stderr or "")
 
 
+def test_can_attempt_verification_true_for_subprocess_run_shell_true():
+    src = """
+def run(cmd):
+    import subprocess
+    subprocess.run(cmd, shell=True)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is True
+
+
+def test_can_attempt_verification_false_for_subprocess_without_shell_true():
+    # Same sensitive_op, but no shell involved - a generic shell-metacharacter
+    # payload wouldn't do anything here, so this must stay unverifiable.
+    src = """
+def run(cmd):
+    import subprocess
+    subprocess.run([cmd])
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is False
+
+
+def test_end_to_end_scan_then_verify_confirms_subprocess_run_shell_true():
+    src = """
+def run(cmd):
+    import subprocess
+    subprocess.run(cmd, shell=True)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_shell_exec_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+    assert result.execution_evidence.marker_created is True
+
+
 def test_verify_returns_not_applicable_for_unsupported_shapes():
     src = """
 def get_user(conn, username):

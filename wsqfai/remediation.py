@@ -27,6 +27,12 @@ Coverage today (keyed by the `rule_id` a Finding's Evidence carries):
                                        which this doesn't have) - instead
                                        returns human-actionable guidance
                                        text, not a diff.
+  - `swallowed_broad_exception`     -> NOT auto-patched (inserting a
+                                       `logging.exception(...)` call would
+                                       need to know whether the file even
+                                       imports `logging` yet, and whether
+                                       swallowing was actually intentional
+                                       there) - guidance text instead.
 
 Everything else returns None: a real, stated gap, not a silent no-op.
 """
@@ -160,12 +166,27 @@ def _suggest_shell_injection_fix(finding: Finding) -> Suggestion:
     )
 
 
+def _suggest_swallowed_exception_fix(finding: Finding) -> Suggestion:
+    return Suggestion(
+        finding_id=finding.finding_id,
+        guidance=(
+            "Give the handler a real response to the fault instead of a bare 'pass': at minimum "
+            "log it (logging.exception(...) inside the except block captures the traceback), and "
+            "consider whether the caller needs to know the operation failed at all (re-raise, "
+            "return an error value, or degrade to a documented fallback). This isn't auto-applied - "
+            "it would need to add a 'logging' import the file may not already have, and whether "
+            "swallowing was ever actually intentional here is a judgment call only you can make."
+        ),
+    )
+
+
 _FIXERS = {
     "bare_except": _fix_bare_except,
     "unpinned_dependency": _fix_unpinned_dependency,
 }
 _SUGGESTERS = {
     "sandbox_verified_shell_injection": _suggest_shell_injection_fix,
+    "swallowed_broad_exception": _suggest_swallowed_exception_fix,
 }
 
 
