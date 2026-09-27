@@ -115,7 +115,7 @@ self-contained HTML page, `--patch` to get every proposed fix as one
 `git apply`-able diff, or `--ref <branch>` to scan a specific branch/tag
 instead of the default.
 
-Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 172 tests (install
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 173 tests (install
 with `pip install -e ".[server]"` first if you want the 10 FastAPI server
 tests included — the base install doesn't need FastAPI at all).
 
@@ -209,5 +209,5 @@ wsqfai/
   integration/           -- opens a real GitHub PR carrying selected fixes (M7c-backend)
   server/                -- the FastAPI backend behind a future web frontend (M7c-backend)
   report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML/patch)
-tests/                   -- 172 tests, mirroring wsqfai/'s package structure
+tests/                   -- 173 tests, mirroring wsqfai/'s package structure
 ```

@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from wsqfai.domain.evidence import Finding, Observation
 from wsqfai.ingestion.repository import RepositorySnapshot, ingest
+from wsqfai.measurement.compatibility import compute_compatibility_findings
 from wsqfai.measurement.maintainability import compute_maintainability_findings
 from wsqfai.measurement.ml_patterns import compute_ml_pattern_findings, is_ml_repository
 from wsqfai.measurement.performance import compute_performance_findings
@@ -80,7 +81,7 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
     findings.extend(compute_maintainability_findings(snapshot))
     findings.extend(compute_reliability_findings(snapshot))
     findings.extend(compute_portability_findings(snapshot))
-    findings.extend(compute_performance_findings(snapshot))
+    findings.extend(compute_compatibility_findings(snapshot))
     findings.extend(compute_ml_pattern_findings(snapshot))
 
     security_hypotheses = scan_repository_for_security_hypotheses(snapshot)

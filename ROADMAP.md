@@ -85,26 +85,22 @@ No milestone is marked done because a plan for it exists.
           goal is catching completely unconstrained dependencies, the
           clearest low-false-positive signal, not grading pin strictness.
           9 tests.
-    - [x] **Performance Efficiency (Time Behaviour) — one narrow, real
-          static signal.** `wsqfai/measurement/performance.py`: AST-based
-          detection of `x = x + <expr>` / `x += <expr>` executed inside a
-          loop body where the expression gives strong static evidence of
-          building a string (an f-string, a string literal, or a
-          `str(...)` call). Because Python strings are immutable, each such
-          iteration allocates an entirely new string and copies the old
-          contents in — O(n) work per iteration, O(n^2) total — a
-          well-established anti-pattern (the reason `"".join(...)` exists,
-          and the same class of issue `perflint`, a real published static
-          analyzer, flags). Correctly leaves numeric accumulation
-          (`total += price`) unflagged, since the risk is specifically
-          string-building, not augmented assignment in a loop in general. 8
-          tests. Most of Time Behaviour/Resource Utilization/Capacity still
-          genuinely can't be measured from static source alone — this is
-          one real, narrow exception, not a claim that static analysis now
-          covers performance broadly.
-    - [ ] Compatibility, Usability — not started. Each needs its own honest
-          scoping pass to find a signal reachable from static source
-          without fabricating one.
+    - [x] **Compatibility (Co-existence).** `wsqfai/measurement/compatibility.py`:
+          AST-based detection of a literal integer passed as `port=` to any
+          call (`app.run(port=5000)`, `uvicorn.run(app, port=8000)`) - a
+          service that hardcodes the port it binds to can't share a host
+          with another instance of itself, or an unrelated service wanting
+          the same port, without the user first editing the source. Not
+          specific to one framework: scoped to the `port=` keyword itself,
+          the common signature across Flask/uvicorn/plain socket servers.
+          Deliberately narrow: `port=int(os.environ.get("PORT", 5000))` is
+          a `Call`, not a bare `Constant`, so it's correctly left alone -
+          the port is already configurable there. Test files excluded,
+          since a hardcoded port for the duration of one test run isn't a
+          real co-existence risk. 9 tests.
+    - [ ] Performance Efficiency, Usability — not started. Each needs its
+          own honest scoping pass to find a signal reachable from static
+          source without fabricating one.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
