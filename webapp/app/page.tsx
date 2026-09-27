@@ -36,7 +36,7 @@ export default function Home() {
             <div className="badges">
               {[
                 <>
-                  <b>164</b> tests passing
+                  <b>208</b> tests passing
                 </>,
                 <>
                   ISO/IEC <b>25010</b> · <b>25059</b>
@@ -56,20 +56,19 @@ export default function Home() {
       <section id="research-teaser">
         <div className="wrap">
           <Reveal>
-            <span className="eyebrow">Grounded in real research</span>
+            <span className="eyebrow">Standards-based, not vibes-based</span>
           </Reveal>
           <h2>
-            <WordReveal text="Not a generic auditor with a professor's name attached afterward" />
+            <WordReveal text="Every check maps to a cited standard or paper" />
           </h2>
           <Reveal delay={0.1}>
             <p className="lede">
-              Every architectural decision in this project traces to a specific, citable piece of Prof. Hironori
-              Washizaki&apos;s published work or standards role — WSQF/WSQB, SWEBOK v4.0, ISO/IEC 25059, ML design
-              patterns, the AI Security Continuum.
+              ISO/IEC 25010 and 25059 define what gets measured; WSQF/WSQB defines how it&apos;s benchmarked. Each
+              design decision has a specific source, not a vague appeal to authority.
             </p>
             <p className="lede" style={{ marginTop: 14 }}>
               <Link href="/research" className="inline-link">
-                Read the full research grounding <span className="arrow">→</span>
+                See the sources <span className="arrow">→</span>
               </Link>
             </p>
           </Reveal>
@@ -313,7 +312,7 @@ export default function Home() {
 
       <footer>
         <div className="wrap">
-          <p>WSQF-AI — built as an extension of Waseda&apos;s Software Quality Framework methodology.</p>
+          <p>WSQF-AI — evidence-based dependability auditing, grounded in cited research.</p>
           <p>
             <a href="https://github.com/SushilRaj0177/Project-KAGUTSUCHI">
               github.com/SushilRaj0177/Project-KAGUTSUCHI
