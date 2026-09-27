@@ -46,13 +46,23 @@ No milestone is marked done because a plan for it exists.
         re-reading file content (path/language/size/line-count only) —
         see the module's own docstring for why that's a stated
         limitation, not an oversight.
-  - [ ] **M2b — Remaining SQuaRE characteristics.** Reliability,
-        Performance Efficiency, Compatibility, Usability, Portability.
-        Most of these need actual file content (not just path/size/line
-        metadata) or runtime signals `RepositorySnapshot` doesn't carry
-        yet — scoping this honestly, rather than forcing a weak metric
-        onto a characteristic that doesn't have one yet, is real M2b
-        work, not something to guess at now.
+  - **M2b — Remaining SQuaRE characteristics.** Reliability, Performance
+        Efficiency, Compatibility, Usability, Portability. Started, not
+        finished:
+    - [x] **Reliability (Fault Tolerance).** `wsqfai/measurement/reliability.py`:
+          real Python AST-based detection (not text/regex matching, which
+          would misfire inside strings/comments) of bare `except:` clauses
+          (HIGH — catches SystemExit/KeyboardInterrupt/GeneratorExit too,
+          not just the intended fault) and swallowed `except Exception`/
+          `except BaseException` handlers whose body is only `pass` (MEDIUM
+          — a fault occurred and the system proceeds as if it hadn't). A
+          broad handler that logs, re-raises, or returns is correctly left
+          unflagged — the breadth of the catch isn't the problem, silently
+          discarding the fault is. 9 tests.
+    - [ ] Performance Efficiency, Compatibility, Usability, Portability —
+          not started. Each needs its own honest scoping pass (most can't
+          be measured from static source alone at all — e.g. Performance
+          Efficiency really needs a profiling run, not a source read).
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
@@ -105,9 +115,12 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-Now that ingestion retains file content (built for M3a, and equally usable
-by M2b), M2b's remaining SQuaRE characteristics are unblocked too. Next up
-is picking up either M2b (content-based Reliability/Usability/Portability
-metrics) or M3b (the harder catalogue patterns — Glue Code, Pipeline
-Jungles, Dead Experimental Codepaths) — both are now real, startable work
-rather than blocked on a scoping decision.
+M4 (Security). M2/M3 both have further honest slices left (M2b's other
+four characteristics, M3b's harder catalogue patterns), but each remaining
+slice needs its own scoping pass rather than being more of the same
+pattern — reasonable to pick up incrementally rather than all before
+moving on. M4 is a good next milestone to open in parallel: reintroducing
+`engine-archive/kagutsuchi`'s proven sandbox/attack-hypothesis/verify
+pipeline onto the new Finding/Evidence model is large, well-understood
+(it's *already built and tested*, just archived), and is the piece of this
+project with the most existing working code behind it.
