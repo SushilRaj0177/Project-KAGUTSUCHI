@@ -61,9 +61,9 @@ No milestone is marked done because a plan for it exists.
         re-reading file content (path/language/size/line-count only) —
         see the module's own docstring for why that's a stated
         limitation, not an oversight.
-  - **M2b — Remaining SQuaRE characteristics.** Reliability, Performance
-        Efficiency, Compatibility, Usability, Portability. Started, not
-        finished:
+  - [x] **M2b — Remaining SQuaRE characteristics.** Reliability, Performance
+        Efficiency, Compatibility, Usability, Portability — all five now
+        have a real, tested static signal:
     - [x] **Reliability (Fault Tolerance).** `wsqfai/measurement/reliability.py`:
           real Python AST-based detection (not text/regex matching, which
           would misfire inside strings/comments) of bare `except:` clauses
@@ -95,9 +95,50 @@ No milestone is marked done because a plan for it exists.
           quality: a one-line README still clears it, since judging
           content quality is beyond what a static check can honestly claim.
           7 tests.
-    - [ ] Performance Efficiency, Compatibility — not started. Each needs
-          its own honest scoping pass to find a signal reachable from
-          static source without fabricating one.
+    - [x] **Performance Efficiency (Time Behaviour) — one narrow, real
+          static signal.** `wsqfai/measurement/performance.py`: AST-based
+          detection of `x = x + <expr>` / `x += <expr>` executed inside a
+          loop body where the expression gives strong static evidence of
+          building a string (an f-string, a string literal, or a
+          `str(...)` call). Because Python strings are immutable, each
+          such iteration allocates an entirely new string and copies the
+          old contents in — O(n) work per iteration, O(n^2) total — a
+          well-established anti-pattern (the reason `"".join(...)` exists,
+          and the same class of issue `perflint`, a real published static
+          analyzer, flags). Correctly leaves numeric accumulation
+          (`total += price`) unflagged. 8 tests. Most of Time Behaviour/
+          Resource Utilization/Capacity still genuinely can't be measured
+          from static source alone — this is one real, narrow exception.
+    - [x] **Compatibility (Co-existence).** `wsqfai/measurement/compatibility.py`:
+          AST-based detection of a literal integer passed as `port=` to
+          any call (`app.run(port=5000)`, `uvicorn.run(app, port=8000)`) —
+          a service that hardcodes the port it binds to can't share a host
+          with another instance of itself, or an unrelated service wanting
+          the same port, without the user first editing the source (the
+          Twelve-Factor App methodology's "Config" factor names port
+          binding as its canonical example). Not framework-specific:
+          scoped to the `port=` keyword itself. `port=int(os.environ.get(
+          "PORT", 5000))` is a `Call`, not a bare `Constant`, so it's
+          correctly left alone — the port is already configurable there.
+          Test files excluded. 9 tests.
+
+          **Bug found and fixed later (during a follow-up session):** both
+          of these modules' `compute_*_findings` functions were imported
+          into `wsqfai/report.py` but never actually called in
+          `analyze_snapshot`'s extend() chain — almost certainly dropped
+          during a manual GitHub-web merge-conflict resolution on that
+          exact block of code, across two PRs merged close together. Every
+          test in each module's own suite passed throughout, since none of
+          them exercise `analyze_snapshot` itself; this ROADMAP entry also
+          silently reverted to "not started" the same way. Caught by
+          constructing a synthetic repository that should trigger both
+          checks and finding zero matching findings in the real report
+          output. Fixed by restoring both `findings.extend(...)` calls and
+          adding `test_analyze_snapshot_wiring_covers_every_implemented_
+          characteristic` to `tests/test_report.py` — a test specifically
+          designed to catch "the module works in isolation, but nothing
+          calls it," which no existing test did. Verified it would have
+          caught the bug by reverting the fix and re-running it.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
@@ -178,6 +219,22 @@ No milestone is marked done because a plan for it exists.
         `extra_signatures` and `scan_diff`/diff-scoped scanning were left
         out of this port deliberately — they depended on a review/approval
         workflow and a CI diff view that haven't been re-platformed yet.
+  - [x] **Hardcoded credential detection (new, not in the archive).**
+        `wsqfai/security/secrets.py`: unlike everything else in this
+        module, this mints a real `Finding` directly, not an `Observation`
+        — a hardcoded secret literal *is* the complete evidence, there's
+        nothing to sandbox-verify (whether the string is exploitable
+        doesn't depend on runtime behavior the way command injection
+        does). Flags a plain string-literal assignment to a credential-
+        shaped variable name (password/secret/api key/access key/private
+        key/auth token), the same practice Bandit's B105-B107 rules and
+        secret scanners like gitleaks/truffleHog use. Deliberately
+        excludes obvious placeholders (`changeme`, `<your-key-here>`,
+        anything under 8 characters) and test files, to keep the false-
+        positive rate low. The Finding's own evidence snippet redacts the
+        actual value (`name = <redacted>`) — the report itself must never
+        become a secondary leak vector for the secret it just found. 12
+        tests, ISO/IEC 25010's Confidentiality sub-characteristic.
   - [x] **M4b — Sandbox verification (shell-exec slice).**
         `wsqfai/security/sandbox.py` re-platforms
         `engine-archive/kagutsuchi/system/sandbox/subprocess_runner.py`:
@@ -382,5 +439,5 @@ generation, constructing real pickle payloads, or handling multi-parameter
 functions), since that's what
 turns this from "one narrow
 but real case" into something that finds proven vulnerabilities across a
-meaningfully wider slice of real code. M2b/M3b/M3c/M4c's other remaining
+meaningfully wider slice of real code. M3b/M3c/M4c's other remaining
 slices are all real, scoped, startable work whenever picked up.
