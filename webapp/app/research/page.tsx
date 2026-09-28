@@ -6,40 +6,29 @@ import { HoverRow, HoverStat } from "../components/Hoverable";
 
 export const metadata: Metadata = {
   title: "WSQF-AI — Research grounding",
-  description:
-    "Every design decision in WSQF-AI traces to a specific, citable piece of Prof. Hironori Washizaki's published work or standards involvement.",
+  description: "The standards and papers WSQF-AI's design decisions actually cite, with a source for each one.",
 };
 
-const BIO_CARDS = [
+const SOURCE_CARDS = [
   {
-    title: "Editor, SWEBOK Guide v4.0",
-    body: "The field's canonical Software Engineering Body of Knowledge. v4.0 added three knowledge areas under his editorship: Software Architecture, Software Security, and Software Engineering Operations, alongside the long-standing Software Quality and Software Testing KAs.",
-    src: "IEEE Computer Society, Oct 2024",
-  },
-  {
-    title: "Convener, ISO/IEC JTC1 SC7/WG20",
-    body: "Standardizing bodies of knowledge and professional certification — the ISO/IEC 24773 series.",
-    src: "Since 2015",
-  },
-  {
-    title: "Creator, WSQF/WSQB",
-    body: "Waseda Software Quality Framework/Benchmark — a SQuaRE-based framework that doesn't score software abstractly, it measures real products against the standard's characteristics and benchmarks them.",
+    title: "WSQF/WSQB",
+    body: "A SQuaRE-based framework (Washizaki et al., ICSE 2019) that measures real products against the standard's characteristics and benchmarks them against each other, instead of producing an abstract score. This is the methodology this project's measurement layer follows.",
     src: "ICSE 2019 · 21 commercial products",
   },
   {
-    title: "ML design-pattern research",
-    body: "Lead author on a sustained line of machine-learning design-pattern research: Machine Learning Architecture and Design Patterns (Computer, 2022); Studying Software Engineering Patterns for Designing Machine Learning Systems (arXiv:1910.04736); Pattern Application Support Framework in Machine Learning Reliability Solution Patterns (PLoP 2024).",
-    src: "Computer 2022 · arXiv:1910.04736 · PLoP 2024",
+    title: "SWEBOK Guide v4.0",
+    body: "The field's Software Engineering Body of Knowledge. v4.0 added Software Architecture, Security, and Operations as knowledge areas. Findings here are organized along the same knowledge-area lines.",
+    src: "IEEE Computer Society, Oct 2024",
+  },
+  {
+    title: "ML design-pattern catalogue",
+    body: "A multivocal literature review cataloguing 12 ML architecture patterns, 13 design patterns, and 8 anti-patterns (building on Sculley et al.'s \"Hidden Technical Debt in Machine Learning Systems\", NeurIPS 2015). Source for this project's ML-pattern detectors.",
+    src: "IEEE Computer, Vol. 55 No. 3, 2022",
   },
   {
     title: "AI Security Continuum",
-    body: "Co-author, with Nobukazu Yoshioka, of a multi-dimensional model spanning the AI computing-environment continuum, technical-activity continuum, architecture-layer continuum, AI automation level, and AI security measure level.",
+    body: "A multi-dimensional model (computing-environment, technical-activity, and architecture-layer continua, plus automation and security-measure levels) for framing AI security risk. Planned as the basis for M4c's severity framing — not yet implemented.",
     src: "CAIN 2024",
-  },
-  {
-    title: "Reliable Software Engineering Lab",
-    body: "Principal Investigator (Washizaki & Ubayashi Lab), whose stated three-pillar mission is (1) AI/data-driven development efficiency, (2) quality assurance of software systems using AI as the evaluation platform, (3) talent — with QA explicitly the pillar linking the other two.",
-    src: "Waseda University",
   },
 ];
 
@@ -54,7 +43,7 @@ const TRACE_ROWS = [
   },
   {
     decision: "A design-pattern recognition engine for ML code",
-    source: "Washizaki's own ML design-pattern research (Computer 2022; PLoP 2024) — his most distinctive, ownable contribution",
+    source: "Washizaki et al.'s ML design-pattern catalogue (Computer 2022; PLoP 2024)",
   },
   {
     decision: "Security findings must be proven (exploited in a real sandbox), never asserted from a static match",
@@ -67,7 +56,7 @@ const TRACE_ROWS = [
   },
   {
     decision: "Findings organized by SWEBOK knowledge area",
-    source: "SWEBOK Guide v4.0, personally edited by Washizaki (2024)",
+    source: "SWEBOK Guide v4.0 (2024)",
   },
   {
     decision: "Evidence has explicit provenance (repo → file → line → analyzer → rule → observation), never a flat \"AI said so\"",
@@ -90,14 +79,14 @@ export default function Research() {
             <span className="eyebrow">Research grounding</span>
           </Reveal>
           <h1>
-            <WordReveal text="Who this is grounded in, and why it matters" />
+            <WordReveal text="What this is built on, with a source for each claim" />
           </h1>
           <Reveal delay={0.15}>
             <p className="lede">
-              Every major design decision in WSQF-AI traces to a specific, citable piece of Prof. Hironori
-              Washizaki&apos;s published work or standards involvement — not a generic &quot;AI code auditor&quot;
-              concept with his name attached afterward. This page is that trace, kept explicit and falsifiable: if a
-              design choice below can&apos;t be pointed at a real citation, it doesn&apos;t belong here.
+              WSQF-AI's measurement layer follows Prof. Hironori Washizaki&apos;s WSQF/WSQB methodology, and its
+              design pulls from a handful of specific, citable papers and standards below — not a generic
+              &quot;AI code auditor&quot; with a name attached for credibility. If a design choice on this page
+              can&apos;t be pointed at a real citation, it doesn&apos;t belong here.
             </p>
           </Reveal>
         </div>
@@ -106,16 +95,13 @@ export default function Research() {
       <section id="bio">
         <div className="wrap">
           <Reveal>
-            <span className="eyebrow">Prof. Hironori Washizaki</span>
+            <span className="eyebrow">Primary sources</span>
           </Reveal>
           <h2>
-            <WordReveal text="Waseda University · Visiting Professor, National Institute of Informatics" />
+            <WordReveal text="The standards and papers this cites" />
           </h2>
-          <Reveal delay={0.1}>
-            <p className="lede">As of 2024–2025:</p>
-          </Reveal>
           <div className="cards">
-            {BIO_CARDS.map((card, i) => (
+            {SOURCE_CARDS.map((card, i) => (
               <Reveal key={card.title} delay={i * 0.07} from="up">
                 <HoverStat tag="div" className="card">
                   <h3>{card.title}</h3>
@@ -125,15 +111,6 @@ export default function Research() {
               </Reveal>
             ))}
           </div>
-          <Reveal delay={0.1}>
-            <p className="lede" style={{ fontSize: "0.85rem", marginTop: 20 }}>
-              Also: editorial-board history on Japan&apos;s SQuBOK (Software Quality Body of Knowledge); connected to
-              Japan&apos;s QA4AI Consortium and AIST&apos;s Machine Learning Quality Management Guideline (AIQM).
-              Sources: his lab site (washi.cs.waseda.ac.jp), Waseda&apos;s Vision150 feature on his AI-reliability
-              framework work, the WSQF/WSQB project page, the SWEBOK v4.0 release announcement, the CAIN 2024 AI
-              Security Continuum paper, his ML design-patterns papers, and AIST/QA4AI&apos;s published guidelines.
-            </p>
-          </Reveal>
         </div>
       </section>
 
@@ -215,7 +192,7 @@ Dashboard, report, CI/PR gate       (M6 / M7c -- this website)`}
 
       <footer>
         <div className="wrap">
-          <p>WSQF-AI — built as an extension of Waseda&apos;s Software Quality Framework methodology.</p>
+          <p>WSQF-AI — evidence-based dependability auditing, grounded in cited research.</p>
           <p>
             <a href="https://github.com/SushilRaj0177/Project-KAGUTSUCHI">
               github.com/SushilRaj0177/Project-KAGUTSUCHI
