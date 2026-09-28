@@ -139,6 +139,17 @@ No milestone is marked done because a plan for it exists.
           designed to catch "the module works in isolation, but nothing
           calls it," which no existing test did. Verified it would have
           caught the bug by reverting the fix and re-running it.
+
+          Also added a cheaper, generic backstop against the same class of
+          bug for any future module: `tests/test_lint.py` runs `pyflakes`
+          across the whole `wsqfai` package and fails on any unused
+          import or undefined name — an import nobody uses is almost
+          always a sign something was wired in, then silently unwired.
+          New `lint` optional-dependency group (`pip install -e
+          ".[lint]"`); the test skips rather than fails if it isn't
+          installed. Verified it actually flags this exact bug shape by
+          re-simulating the dropped `findings.extend(...)` call and
+          confirming `pyflakes` reports the now-unused import.
 - **M3 — AI/ML quality extension.** ISO/IEC 25059 characteristics for
       ML-containing repositories, plus the ML design-pattern
       detection/recommendation engine, grounded in Washizaki et al.'s own
