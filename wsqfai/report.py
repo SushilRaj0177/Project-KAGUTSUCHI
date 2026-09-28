@@ -36,7 +36,7 @@ from wsqfai.measurement.usability import compute_usability_findings
 from wsqfai.remediation import Fix, Suggestion, propose_fix, propose_suggestion
 from wsqfai.security.scanner import scan_repository_for_security_hypotheses
 from wsqfai.security.secrets import compute_hardcoded_secret_findings
-from wsqfai.security.verify import can_attempt_verification, promote_to_finding, verify_shell_exec_observation
+from wsqfai.security.verify import can_attempt_verification, promote_to_finding, verify_security_observation
 
 _SEVERITY_ORDER = ("critical", "high", "medium", "low")
 
@@ -93,7 +93,7 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
     for observation in security_hypotheses:
         if not can_attempt_verification(observation.metadata):
             continue
-        result = verify_shell_exec_observation(observation.metadata)
+        result = verify_security_observation(observation.metadata)
         start_line = observation.location.start_line if observation.location else None
         file_path = observation.location.file_path if observation.location else "?"
         finding = promote_to_finding(observation.metadata, file_path, start_line, result)
