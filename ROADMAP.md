@@ -221,11 +221,37 @@ No milestone is marked done because a plan for it exists.
         `shell=True` means the command genuinely reaches a real shell
         (unlike plain `subprocess.run(argv)`, which execs directly and
         stays unverifiable). 4 new tests (2 in `ast_scan`, 2 in `verify`,
-        including a real sandbox-confirmed end-to-end run). Reintroducing
-        the archived LLM-based hypothesis generation
-        (`verification/hypothesis/generate.py`, `groq_client.py`) to widen
-        coverage further — SQL injection, deserialization, multi-parameter
-        calls, taint through a local variable — is real further M4b work.
+        including a real sandbox-confirmed end-to-end run).
+
+        **Widened again:** direct `eval`/`exec` calls (single-parameter,
+        no intermediate local variable, same taint discipline as the
+        shell shapes) are now verifiable too — a Python-source payload
+        (`__import__('pathlib').Path(<marker>).touch()`) proves code
+        execution the same way the shell-metacharacter payload proves
+        command injection, since eval/exec run their argument as code no
+        matter what the function otherwise does with it.
+        `verify_shell_exec_observation` was renamed to
+        `verify_security_observation` to match — it now verifies three
+        shapes, not one — and `promote_to_finding` labels the resulting
+        Finding "code execution" with `rule_id
+        sandbox_verified_code_execution`, distinct from the shell shapes'
+        "command injection" / `sandbox_verified_shell_injection`, so the
+        two vulnerability classes never get conflated in a report. Sanity-
+        checked against `pallets/flask`: its own `exec()` usage in
+        `config.py` (a multi-parameter shape) correctly stays an
+        unverified hypothesis, not a false "Proven" finding. 6 new tests,
+        including two real sandbox-confirmed end-to-end runs.
+
+        pickle.loads/marshal.loads (also `SensitiveOp.DESERIALIZATION`,
+        but taking a serialized data blob rather than directly executing
+        a source string) remain unverifiable by this slice — constructing
+        an actual malicious pickle payload as a plain argv string is real
+        further work, not attempted here. SQL injection, SSTI, multi-
+        parameter calls, and taint through a local variable also stay
+        `NOT_APPLICABLE`. Reintroducing the archived LLM-based hypothesis
+        generation (`verification/hypothesis/generate.py`,
+        `groq_client.py`) to widen coverage further is real further M4b
+        work.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -350,9 +376,10 @@ the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
 demonstrate the same static pattern in two different real functions
 correctly resolving to two different verdicts. The highest-value next step
-there is widening M4b's coverage beyond its two shell-reaching shapes
+there is widening M4b's coverage beyond its three current shapes
 (reintroducing `verification/hypothesis`'s LLM-based hypothesis
-generation, or handling multi-parameter functions), since that's what
+generation, constructing real pickle payloads, or handling multi-parameter
+functions), since that's what
 turns this from "one narrow
 but real case" into something that finds proven vulnerabilities across a
 meaningfully wider slice of real code. M2b/M3b/M3c/M4c's other remaining

@@ -1,5 +1,5 @@
 from wsqfai.security.ast_scan import scan_source
-from wsqfai.security.verify import Verdict, can_attempt_verification, promote_to_finding, verify_shell_exec_observation
+from wsqfai.security.verify import Verdict, can_attempt_verification, promote_to_finding, verify_security_observation
 
 
 def test_can_attempt_verification_true_for_single_param_shell_exec():
@@ -34,7 +34,7 @@ def run_lookup(hostname):
     os.system("ping -c 1 " + hostname)
 """
     [observation] = scan_source(src, "sample.py")
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert result.verdict == Verdict.VULNERABLE_CONFIRMED
     assert result.execution_evidence is not None
     assert result.execution_evidence.marker_created is True
@@ -56,7 +56,7 @@ def run_lookup_safe(hostname):
 """
     [observation] = scan_source(src, "sample.py")
     assert can_attempt_verification(observation.metadata) is True  # same static shape
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert result.verdict == Verdict.NOT_REPRODUCED
     assert result.execution_evidence.marker_created is False
 
@@ -77,7 +77,7 @@ def ping(host):
 """
     [observation] = scan_source(src, "sample.py")
     assert observation.metadata["module_imports"] == "import os"
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert result.verdict == Verdict.VULNERABLE_CONFIRMED
     assert "NameError" not in (result.execution_evidence.stderr or "")
 
@@ -111,9 +111,75 @@ def run(cmd):
     subprocess.run(cmd, shell=True)
 """
     [observation] = scan_source(src, "sample.py")
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert result.verdict == Verdict.VULNERABLE_CONFIRMED
     assert result.execution_evidence.marker_created is True
+
+
+def test_can_attempt_verification_true_for_direct_eval():
+    src = """
+def compute(expr):
+    return eval(expr)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is True
+
+
+def test_can_attempt_verification_true_for_direct_exec():
+    src = """
+def run_snippet(code):
+    exec(code)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is True
+
+
+def test_can_attempt_verification_false_for_eval_through_local_variable():
+    # Same sink, but the taint reaches it through an intermediate local -
+    # outside what this slice can mechanically reconstruct.
+    src = """
+def compute(expr):
+    parsed = expr
+    return eval(parsed)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is False
+
+
+def test_end_to_end_scan_then_verify_confirms_direct_eval():
+    src = """
+def compute(expr):
+    return eval(expr)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+    assert result.execution_evidence.marker_created is True
+
+
+def test_end_to_end_scan_then_verify_confirms_direct_exec():
+    src = """
+def run_snippet(code):
+    exec(code)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+    assert result.execution_evidence.marker_created is True
+
+
+def test_promote_to_finding_labels_eval_exec_as_code_execution_not_command_injection():
+    src = """
+def compute(expr):
+    return eval(expr)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    finding = promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, result)
+    assert finding is not None
+    assert "code execution" in finding.title
+    assert "command injection" not in finding.title
+    assert finding.evidence[0].analyzer.rule_id == "sandbox_verified_code_execution"
 
 
 def test_verify_returns_not_applicable_for_unsupported_shapes():
@@ -123,7 +189,7 @@ def get_user(conn, username):
     cursor.execute(f"SELECT * FROM users WHERE name = '{username}'")
 """
     [observation] = scan_source(src, "sample.py")
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert result.verdict == Verdict.NOT_APPLICABLE
     assert result.execution_evidence is None
 
@@ -135,7 +201,7 @@ def run_lookup(hostname):
     os.system("ping -c 1 " + hostname)
 """
     [observation] = scan_source(src, "sample.py")
-    confirmed = verify_shell_exec_observation(observation.metadata)
+    confirmed = verify_security_observation(observation.metadata)
     finding = promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, confirmed)
     assert finding is not None
     assert finding.severity.value == "critical"
@@ -154,7 +220,7 @@ def run_lookup_safe(hostname):
     os.system("ping -c 1 " + hostname)
 """
     [observation] = scan_source(src, "sample.py")
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, result) is None
 
 
@@ -165,7 +231,7 @@ def get_user(conn, username):
     cursor.execute(f"SELECT * FROM users WHERE name = '{username}'")
 """
     [observation] = scan_source(src, "sample.py")
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     assert promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, result) is None
 
 
@@ -178,7 +244,7 @@ def run_lookup(hostname):
     os.system("ping -c 1 " + hostname)
 """
     [observation] = scan_source(src, "sample.py")
-    result = verify_shell_exec_observation(observation.metadata)
+    result = verify_security_observation(observation.metadata)
     finding = promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, result)
     assert finding.characteristic == QualityCharacteristic.SECURITY
     sc = sub_characteristic(finding.sub_characteristic_key)
