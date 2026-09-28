@@ -35,6 +35,7 @@ from wsqfai.measurement.reliability import compute_reliability_findings
 from wsqfai.measurement.usability import compute_usability_findings
 from wsqfai.remediation import Fix, Suggestion, propose_fix, propose_suggestion
 from wsqfai.security.scanner import scan_repository_for_security_hypotheses
+from wsqfai.security.secrets import compute_hardcoded_secret_findings
 from wsqfai.security.verify import can_attempt_verification, promote_to_finding, verify_shell_exec_observation
 
 _SEVERITY_ORDER = ("critical", "high", "medium", "low")
@@ -82,8 +83,11 @@ def analyze_snapshot(snapshot: RepositorySnapshot) -> RepositoryReport:
     findings.extend(compute_maintainability_findings(snapshot))
     findings.extend(compute_reliability_findings(snapshot))
     findings.extend(compute_portability_findings(snapshot))
+    findings.extend(compute_performance_findings(snapshot))
+    findings.extend(compute_compatibility_findings(snapshot))
     findings.extend(compute_usability_findings(snapshot))
     findings.extend(compute_ml_pattern_findings(snapshot))
+    findings.extend(compute_hardcoded_secret_findings(snapshot))
 
     security_hypotheses = scan_repository_for_security_hypotheses(snapshot)
     for observation in security_hypotheses:

@@ -33,6 +33,44 @@ def test_analyze_snapshot_composes_every_module():
     assert report.security_hypotheses[0].metadata["sensitive_op"] == "shell_exec"
 
 
+def test_analyze_snapshot_wiring_covers_every_implemented_characteristic():
+    # Regression test: compute_performance_findings and
+    # compute_compatibility_findings were once imported into report.py but
+    # never actually called in analyze_snapshot's extend() chain - a real
+    # bug (silently dropped, almost certainly during a manual GitHub-web
+    # merge-conflict resolution on this exact chain of calls) that every
+    # module's own isolated test suite passed straight through, since none
+    # of them exercise analyze_snapshot itself. This test exists
+    # specifically to catch "the module works, but nothing calls it" for
+    # every wired-in measurement/security characteristic at once, rather
+    # than trusting each module's own tests to imply real end-to-end wiring.
+    content = (
+        "def build(items):\n"
+        "    out = ''\n"
+        "    for item in items:\n"
+        "        out = out + str(item)\n"  # performance_efficiency
+        "    return out\n"
+        "\n"
+        "app.run(port=5000)\n"  # compatibility
+        "API_KEY = 'sk_live_abc123def456ghijk'\n"  # security (confidentiality)
+        "requests\n"  # portability (in requirements.txt, added below)
+    )
+    snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
+        _py("app.py", content),
+        FileRecord(path="requirements.txt", language=None, size_bytes=8, line_count=1, content="requests\n"),
+    ])
+    report = analyze_snapshot(snapshot)
+    characteristics = {f.characteristic.value for f in report.findings}
+    assert characteristics == {
+        "performance_efficiency",
+        "compatibility",
+        "security",
+        "portability",
+        "usability",  # no README anywhere in this snapshot
+        "maintainability",  # few/no test files
+    }
+
+
 def test_sandbox_verified_shell_injection_is_promoted_to_a_critical_finding():
     snapshot = RepositorySnapshot(owner="me", repo="proj", ref=None, files=[
         _py("app.py", "def run(cmd):\n    import os\n    os.system(cmd)\n"),
