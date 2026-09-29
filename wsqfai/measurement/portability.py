@@ -35,9 +35,27 @@ aggregated, non-line-precise Finding rather than reporting a wrong line
 number. Either way this stays reported-not-auto-fixable: rewriting a TOML
 array entry safely needs more than the line-splice `remediation.py` uses
 for requirements.txt.
+
+Also covers `package.json`'s `dependencies`/`devDependencies` - the same
+Installability risk, but with npm's opposite ecosystem convention: a bare
+version (`"2.31.0"`) IS an exact pin in npm, and `npm install` itself
+writes a caret range (`^2.31.0`) by default, constraining to a major
+version at minimum. Flagging every `^`/`~` range the way a Python range
+operator is left alone would just be noise inconsistent with how the
+ecosystem is actually used - so only the genuinely unconstrained
+specifiers (`*`, `x`, `latest`, or an empty string - "whatever's
+currently published, no constraint at all") are flagged, the npm-shaped
+equivalent of requirements.txt's bare `requests`. A `workspace:`/`file:`/
+`link:`/`git+`/URL specifier is deliberately never flagged either, even
+though it carries no semver constraint: it pins to a specific known
+source (a monorepo's own local package, a fixed commit, a fixed file),
+not "whatever the registry currently serves". `dependencies` and
+`devDependencies` only - `peerDependencies`/`optionalDependencies` aren't
+covered, a stated narrowing rather than a silent gap.
 """
 from __future__ import annotations
 
+import json
 import re
 
 from wsqfai.domain.evidence import AnalyzerMetadata, Confidence, Evidence, Finding, Severity, SourceLocation
@@ -50,6 +68,12 @@ _PROJECT_HEADER_RE = re.compile(r"^\s*\[project\]\s*$")
 _TABLE_HEADER_RE = re.compile(r"^\s*\[")
 _DEPENDENCIES_KEY_RE = re.compile(r"^\s*dependencies\s*=\s*\[")
 _STRING_LITERAL_RE = re.compile(r'"([^"]*)"|\'([^\']*)\'')
+
+_NPM_DEPENDENCY_GROUPS = ("dependencies", "devDependencies")
+_NPM_FULLY_UNCONSTRAINED = {"*", "x", "latest", ""}
+_NPM_PINNED_SOURCE_PREFIXES = ("workspace:", "file:", "link:", "git+", "git:", "http://", "https://")
+_PACKAGE_JSON_GROUP_HEADER_RE_TEMPLATE = r'^\s*"{group}"\s*:\s*\{{\s*$'
+_PACKAGE_JSON_DEP_LINE_RE = re.compile(r'^\s*"([^"]+)"\s*:\s*"([^"]*)"\s*,?\s*$')
 
 
 def _requirements_txt_unpinned(content: str) -> list[tuple[int, str]]:
@@ -192,6 +216,92 @@ def _pyproject_toml_findings(file_path: str, content: str) -> list[Finding]:
     return [_pyproject_toml_line_finding(file_path, lineno, declaration) for lineno, declaration in resolved]
 
 
+def _package_json_unpinned(content: str) -> list[tuple[str, str, str]]:
+    """(dependency_group, name, version_spec) for every `dependencies`/
+    `devDependencies` entry whose specifier is genuinely unconstrained -
+    see this module's docstring for exactly which specifiers that means
+    and why a caret/tilde range doesn't count. Returns an empty list for
+    anything that doesn't parse as a JSON object - a malformed manifest is
+    a different problem this check doesn't claim to diagnose."""
+    try:
+        data = json.loads(content)
+    except (json.JSONDecodeError, ValueError):
+        return []
+    if not isinstance(data, dict):
+        return []
+    unpinned: list[tuple[str, str, str]] = []
+    for group in _NPM_DEPENDENCY_GROUPS:
+        deps = data.get(group)
+        if not isinstance(deps, dict):
+            continue
+        for dep_name, spec in deps.items():
+            if not isinstance(spec, str):
+                continue
+            stripped = spec.strip()
+            if stripped.startswith(_NPM_PINNED_SOURCE_PREFIXES):
+                continue
+            if stripped in _NPM_FULLY_UNCONSTRAINED:
+                unpinned.append((group, dep_name, spec))
+    return unpinned
+
+
+def _package_json_dependency_lines(content: str, group: str) -> dict[str, int]:
+    """name -> line number for every entry inside `package.json`'s
+    top-level `"<group>": { ... }` object, via a narrow raw-text scan -
+    the stdlib `json` module doesn't expose source positions. Unlike
+    requirements.txt/pyproject.toml, duplicate keys can't occur (a JSON
+    object's keys are already unique), so a plain dict is enough - no
+    "consume each line at most once" bookkeeping needed."""
+    header_re = re.compile(_PACKAGE_JSON_GROUP_HEADER_RE_TEMPLATE.format(group=re.escape(group)))
+    lines: dict[str, int] = {}
+    in_group = False
+    for lineno, raw_line in enumerate(content.splitlines(), start=1):
+        if not in_group:
+            if header_re.match(raw_line):
+                in_group = True
+            continue
+        if raw_line.strip().startswith("}"):
+            break
+        match = _PACKAGE_JSON_DEP_LINE_RE.match(raw_line)
+        if match:
+            lines[match.group(1)] = lineno
+    return lines
+
+
+def _package_json_finding(file_path: str, group: str, name: str, spec: str, lineno: int | None) -> Finding:
+    location_note = f" (line {lineno})" if lineno else ""
+    return Finding(
+        title=f"Unpinned npm dependency in {file_path}: {name}",
+        description=(
+            f'"{name}": "{spec}" in {group} of {file_path}{location_note} has no version '
+            "constraint at all - unlike a caret/tilde range (which still constrains to at least a "
+            "major version) or an exact pin, npm resolves this to whatever is currently published "
+            "on install. A fresh `npm install` can silently pull a different, untested version - "
+            "ISO/IEC 25010's Installability sub-characteristic, the same risk a bare "
+            "requirements.txt entry carries for a Python project."
+        ),
+        characteristic=QualityCharacteristic.PORTABILITY,
+        sub_characteristic_key="installability",
+        severity=Severity.MEDIUM,
+        evidence=[Evidence(
+            location=SourceLocation(file_path=file_path, start_line=lineno, end_line=lineno),
+            snippet=f'"{name}": "{spec}"',
+            analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="unpinned_dependency_package_json", confidence=Confidence.HIGH),
+        )],
+    )
+
+
+def _package_json_findings(file_path: str, content: str) -> list[Finding]:
+    unpinned = _package_json_unpinned(content)
+    if not unpinned:
+        return []
+    lines_by_group = {group: _package_json_dependency_lines(content, group) for group in _NPM_DEPENDENCY_GROUPS}
+    return [
+        _package_json_finding(file_path, group, name, spec, lines_by_group[group].get(name))
+        for group, name, spec in unpinned
+    ]
+
+
 def compute_portability_findings(snapshot: RepositorySnapshot) -> list[Finding]:
     findings: list[Finding] = []
     for f in snapshot.files:
@@ -202,4 +312,6 @@ def compute_portability_findings(snapshot: RepositorySnapshot) -> list[Finding]:
             findings.extend(_requirements_txt_finding(f.path, lineno, decl) for lineno, decl in _requirements_txt_unpinned(f.content))
         elif name == "pyproject.toml":
             findings.extend(_pyproject_toml_findings(f.path, f.content))
+        elif name == "package.json":
+            findings.extend(_package_json_findings(f.path, f.content))
     return findings

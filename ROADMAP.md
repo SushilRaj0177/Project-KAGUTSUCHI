@@ -85,6 +85,29 @@ No milestone is marked done because a plan for it exists.
           goal is catching completely unconstrained dependencies, the
           clearest low-false-positive signal, not grading pin strictness.
           9 tests.
+
+          **Widened to `package.json`.** Same Installability risk, npm's
+          opposite ecosystem convention: a bare version (`"2.31.0"`) IS an
+          exact pin in npm, and `npm install` itself writes a caret range
+          (`^2.31.0`) by default, so flagging every `^`/`~` range the way a
+          Python range operator is left alone would just be noise
+          inconsistent with real-world usage — only the genuinely
+          unconstrained specifiers (`*`, `x`, `latest`, an empty string)
+          are flagged, the npm-shaped equivalent of a bare `requests` in
+          requirements.txt. A `workspace:`/`file:`/`link:`/`git+`/URL
+          specifier is deliberately never flagged either, even though it
+          carries no semver constraint: it pins to a specific known source
+          (a monorepo's own local package, a fixed commit, a fixed file),
+          not "whatever the registry currently serves". Line numbers
+          recovered the same way as pyproject.toml's array entries — a
+          narrow raw-text scan, since the stdlib `json` module doesn't
+          expose source positions either. `dependencies`/`devDependencies`
+          only (`peerDependencies`/`optionalDependencies` aren't covered —
+          a stated narrowing, not a silent gap). 7 new tests. Sanity-
+          checked against this project's own real repository (which has a
+          real `webapp/package.json`): all of `webapp`'s dependencies use
+          caret ranges, and correctly produce zero findings — the
+          discipline doesn't fire on the ecosystem's own normal usage.
     - [x] **Usability (Appropriateness Recognizability).**
           `wsqfai/measurement/usability.py`: flags a repository with no
           README (`README`/`README.md`/`README.rst`/`README.txt`) at its
