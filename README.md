@@ -178,9 +178,11 @@ wearing an AI badge:
   service (background-job scanning so a slow clone can't 504 a request,
   per-IP rate limiting, and an endpoint that opens a real GitHub pull
   request carrying the selected fixes) — the API a "paste a repo link"
-  website would call. The website itself (reconnecting
-  `engine-archive/kagutsuchi/webapp`'s frontend) is the next milestone,
-  not yet built.
+  website calls. `webapp/app/analyze` is that website: paste a public
+  GitHub URL in the browser and get the real report back, no CLI install
+  required — see M7c-frontend in `ROADMAP.md` for exactly what's wired up
+  versus still open (mainly: the backend isn't deployed publicly yet, so
+  the hosted webapp can't reach it until it is).
 
 ## Why this exists
 

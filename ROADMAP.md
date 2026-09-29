@@ -424,21 +424,51 @@ No milestone is marked done because a plan for it exists.
           `octocat/Hello-World` scan over HTTP, and polled it to
           completion. Uses stdlib `urllib`, not the `requests` package -
           matches `remediation.py`'s PyPI lookup, no new HTTP dependency.
-    - [ ] **M7c-frontend.** Reconnect `engine-archive/kagutsuchi/webapp`
-          (Next.js) onto this API - adapting `lib/scanTypes.ts` and the
-          UI to the new report shape, and to WSQF-AI's own branding
-          instead of Kagutsuchi's. Not started. Also still open: where
-          this gets hosted, and whether GitHub sign-in (OAuth) replaces
-          the "paste a token" MVP path `open_fix_pr` currently expects.
+    - [x] **M7c-frontend (analyze flow).** `webapp/app/analyze/page.tsx`
+          + `webapp/app/lib/api.ts`: a real page on the marketing webapp
+          that calls the actual backend - paste a public GitHub URL,
+          submit, and the browser does the same
+          `POST /api/analyze-repo/start` -> poll
+          `GET /api/analyze-repo/jobs/{job_id}` round-trip the CLI's
+          `--json` mode exercises, then renders the real
+          `RepositoryReport` (findings table, security hypotheses table,
+          proposed fixes with their real diffs, a client-built "download
+          patch" combining every fix's diff the same way
+          `RepositoryReport.combined_patch()` does server-side). No new
+          backend logic - `wsqfai/server/main.py` was already real and
+          proven (M7c-backend); this is the first thing in the browser
+          that actually calls it, closing "paste a link on a website"
+          instead of "run a CLI". `NEXT_PUBLIC_API_BASE_URL` (see
+          `webapp/.env.example`) points the webapp at the backend -
+          defaults to `http://localhost:8000` for local dev. Manually
+          driven end-to-end with Playwright against a real running
+          backend: submitted `octocat/Hello-World` (0 findings) and
+          `pallets/click` (11 findings, 7 security hypotheses, 4
+          suggestions) and confirmed both rendered correctly from a real
+          HTTP round-trip, not a mock.
+
+          Deliberately not done yet: this doesn't replace the CLI as the
+          only way to get a report, doesn't add GitHub OAuth or a "paste
+          a token" flow for `/api/open-pr` (opening the fix PR from the
+          browser), and the backend itself isn't deployed anywhere
+          public yet - `webapp/` is on Vercel, but `wsqfai/server/`
+          still only runs via `uvicorn` wherever someone starts it. Real
+          next steps: deploy the backend somewhere with a stable HTTPS
+          URL, set `WSQFAI_ALLOWED_ORIGINS` to the deployed webapp's
+          origin instead of the wildcard default, and point Vercel's
+          `NEXT_PUBLIC_API_BASE_URL` at it. Wiring `/api/open-pr` into
+          the UI (with GitHub OAuth replacing the raw-token MVP) is
+          separate further work.
 
 ## Immediately next
 
-M7c-frontend is the highest-value next step for making this something
-people actually use, not just read about - the backend it needs already
-works, proven by an actual HTTP round-trip against a live repo. It still
-needs a decision on hosting and whether GitHub OAuth replaces "paste a
-token" before that part is real. Independent of that: the core "proven,
-not asserted" loop is real
+M7c-frontend's core analyze flow is now real - paste a link on the
+website, get the same report the CLI produces, proven end to end against
+live repositories. What's left of it is deployment, not code: the
+backend needs a stable public URL before the deployed webapp (Vercel) can
+actually reach it, and `/api/open-pr` still needs a UI plus a decision on
+GitHub OAuth vs. the "paste a token" MVP. Independent of that: the core
+"proven, not asserted" loop is real
 end to end - ingest a repo, statically hypothesize (M4a), actually attempt
 the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
