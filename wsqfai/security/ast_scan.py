@@ -19,9 +19,12 @@ backed by evidence of a mere pattern match). Every hit here becomes an
 signature", not "this is a vulnerability". Promoting an Observation to a
 Finding is the sandbox-verification stage - wsqfai/security/verify.py
 (M4b), re-platforming `engine-archive/kagutsuchi/system/sandbox`. It
-currently covers one mechanically reconstructible shape (a direct,
-single-parameter shell-exec call - see verify.py's own docstring); every
-other Observation stays a hypothesis until that coverage widens.
+currently covers a handful of mechanically reconstructible shapes (a
+direct shell-exec/eval/exec call whose tainted data reaches the sink
+directly from one of its own parameters - the function can take other
+parameters too now, as long as exactly one of them is the one that call
+actually uses; see verify.py's own docstring); every other Observation
+stays a hypothesis until that coverage widens further.
 
 Parses Python source, walks each function body, and flags calls that match
 a known sensitive-operation signature (shell exec, subprocess, filesystem,
@@ -46,6 +49,7 @@ parameters. Real M4b/M6 work, not forgotten.
 from __future__ import annotations
 
 import ast
+import json
 from dataclasses import dataclass
 from enum import Enum
 
@@ -174,6 +178,8 @@ class _CallSite:
     detector: str | None = None
     severity: Severity | None = None
     shell_true: bool = False
+    direct_taint_param: str | None = None
+    other_params_json: str | None = None
 
 
 def _is_string_built(node: ast.expr) -> bool:
@@ -411,30 +417,93 @@ def _call_is_tainted(node: ast.Call, tainted: set[str]) -> bool:
     return _expr_references(node, tainted)
 
 
-def _sole_direct_taint_param(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> str | None:
-    """The function's one and only parameter, when the dangerous call's
-    tainted data traces directly to it with no intermediate local
-    variable - `os.system("ping " + host)` where `host` is the sole
-    parameter, not `raw = transform(host); os.system(raw)`.
-
-    This identifies the narrow, mechanically re-callable shape M4b's
-    sandbox verification (wsqfai/security/verify.py) can actually attempt:
-    given just this parameter name and the function's own source text, a
-    verifier can construct `symbol(payload)` and run it, with no need to
-    reconstruct multi-argument call context or a derivation chain. A
-    function with more than one parameter, or where the taint only reaches
-    the sink through a reassigned local, returns None here - real but
-    unverified by this first slice, not silently claimed as verifiable."""
+def _callable_positional_params(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> list[str] | None:
+    """Ordered positional-or-keyword parameter names, when the function's
+    signature is simple enough that M4b's verifier can safely reconstruct
+    a call for it purely with keyword arguments (see
+    `_direct_taint_param_for_call` and `verify.build_candidate_script`) -
+    order then never matters, so there's no risk of a positional
+    mismatch. None for anything this slice doesn't attempt: positional-only
+    params (can't be passed by keyword at all), *args, or **kwargs (no
+    static way to know what a caller would put there)."""
     args = func_node.args
-    if args.vararg or args.kwarg or args.kwonlyargs or args.defaults or args.kw_defaults:
+    if args.posonlyargs or args.vararg or args.kwarg or args.kwonlyargs:
         return None
-    positional = (*args.posonlyargs, *args.args)
-    if len(positional) != 1:
+    return [a.arg for a in args.args]
+
+
+def _positional_defaults(func_node: ast.FunctionDef | ast.AsyncFunctionDef) -> dict[str, ast.expr]:
+    """Map parameter name -> its default value expression, for the plain
+    positional-or-keyword parameters `_callable_positional_params` returns.
+    `ast.arguments.defaults` aligns to the *trailing* parameters, the same
+    way Python itself resolves defaults, so a 2-default function's list
+    lines up against its last two parameter names, not its first two."""
+    args = func_node.args
+    names = [a.arg for a in args.args]
+    defaults = args.defaults
+    if not defaults:
+        return {}
+    offset = len(names) - len(defaults)
+    return {names[offset + i]: default for i, default in enumerate(defaults)}
+
+
+def _direct_taint_param_for_call(
+    func_node: ast.FunctionDef | ast.AsyncFunctionDef, call_node: ast.Call, tainted: set[str]
+) -> str | None:
+    """The one function parameter whose data reaches `call_node` directly -
+    by name, with no intermediate local variable - among a signature this
+    slice can safely reconstruct a call for at all (see
+    `_callable_positional_params`). Generalizes what used to require the
+    function have exactly one parameter total: a function can now take
+    several parameters, as long as exactly one of them is the one this
+    particular call actually uses.
+
+    Returns None for anything ambiguous or indirect, the same discipline
+    the single-parameter case always had:
+      - the taint reaching this call only via a derived local - an
+        intermediate variable (`raw = data; pickle.loads(raw)`), or the
+        receiver of a method call derived from a parameter
+        (`cursor = conn.cursor(); cursor.execute(...)` - `cursor` is
+        itself untainted-by-name but derived from `conn`, so reconstructing
+        a bare `cursor.execute(...)` call site-less isn't possible anyway);
+      - more than one parameter referenced directly in the call itself
+        (`os.system(f"ping -c {count} {host}")` with both `count` and
+        `host` as parameters) - which one would a verifier inject the
+        payload into?
+    A false negative here (a real but unreconstructed shape) is an honest,
+    stated limitation; this function never returns a parameter name unless
+    the call for it really can be built unambiguously."""
+    param_names = _callable_positional_params(func_node)
+    if param_names is None:
         return None
-    only_param = positional[0].arg
-    if _tainted_names(func_node) != {only_param}:
+    param_set = set(param_names)
+    derived_tainted = tainted - param_set
+    if derived_tainted and _expr_references(call_node, derived_tainted):
         return None
-    return only_param
+    referenced_params = {p for p in param_set if _expr_references(call_node, {p})}
+    if len(referenced_params) != 1:
+        return None
+    return next(iter(referenced_params))
+
+
+def _other_params_metadata(func_node: ast.FunctionDef | ast.AsyncFunctionDef, taint_param: str) -> str | None:
+    """JSON-encoded `[[name, default_source_or_null], ...]` for every
+    callable parameter other than `taint_param` - what M4b's verifier
+    (`wsqfai/security/verify.py`) needs to fill in the rest of a real
+    function's arity so the candidate call doesn't fail with a plain
+    `TypeError: missing required argument` before the sink is ever reached.
+    `default_source` is the parameter's own default expression, reproduced
+    verbatim via `ast.unparse` when the function declares one; `null` when
+    it doesn't; a metadata dict is flat `dict[str, str]`, hence the JSON
+    encoding rather than a nested structure. None (not just `"[]"`) when
+    there are no other parameters, so the wire shape for the single-
+    parameter case this slice originally supported is completely
+    unchanged."""
+    other_params = [p for p in (_callable_positional_params(func_node) or []) if p != taint_param]
+    if not other_params:
+        return None
+    defaults = _positional_defaults(func_node)
+    return json.dumps([[p, ast.unparse(defaults[p]) if p in defaults else None] for p in other_params])
 
 
 def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
@@ -445,15 +514,22 @@ def sensitive_ops_in_function(func_node: ast.FunctionDef) -> list[_CallSite]:
             continue
         if not _call_is_tainted(node, tainted):
             continue
+        direct_taint_param = _direct_taint_param_for_call(func_node, node, tainted)
+        other_params_json = _other_params_metadata(func_node, direct_taint_param) if direct_taint_param else None
         name = _dotted_call_name(node)
         if name in _SIGNATURES:
             shell_true = name in _SHELL_TRUE_CALLS and _call_has_shell_true(node)
-            hits.append(_CallSite(func_node.name, name, node.lineno, shell_true=shell_true))
+            hits.append(_CallSite(
+                func_node.name, name, node.lineno, shell_true=shell_true,
+                direct_taint_param=direct_taint_param, other_params_json=other_params_json,
+            ))
             continue
         for heuristic in (_sql_call_hit, _django_sql_call_hit, _yaml_load_hit, _ssti_hit):
             hit = heuristic(node)
             if hit is not None:
                 hit.function_name = func_node.name
+                hit.direct_taint_param = direct_taint_param
+                hit.other_params_json = other_params_json
                 hits.append(hit)
                 break
     return hits
@@ -517,9 +593,10 @@ def scan_source(source: str, file_path: str) -> list[Observation]:
                 metadata["module_imports"] = module_imports
             if hit.shell_true:
                 metadata["shell_true"] = "true"
-            sole_param = _sole_direct_taint_param(node)  # type: ignore[arg-type]
-            if sole_param is not None:
-                metadata["single_param_direct_taint"] = sole_param
+            if hit.direct_taint_param is not None:
+                metadata["single_param_direct_taint"] = hit.direct_taint_param
+                if hit.other_params_json is not None:
+                    metadata["other_params"] = hit.other_params_json
             observations.append(Observation(
                 description=f"{rationale} (call: {hit.call_name}, line {hit.lineno})",
                 location=SourceLocation(file_path=file_path, start_line=hit.lineno, end_line=hit.lineno),
