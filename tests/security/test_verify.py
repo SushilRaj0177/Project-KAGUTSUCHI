@@ -315,6 +315,72 @@ def ping(host, count):
     assert result.verdict == Verdict.NOT_APPLICABLE
 
 
+def test_can_attempt_verification_true_for_direct_pickle_loads():
+    src = """
+def load(data):
+    import pickle
+    return pickle.loads(data)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is True
+
+
+def test_can_attempt_verification_false_for_marshal_loads():
+    # marshal.loads alone only reconstructs a code object and returns it -
+    # nothing executes unless the caller separately does something like
+    # exec(marshal.loads(data)), a different shape this slice doesn't
+    # attempt. Unlike pickle, marshal has no __reduce__-style hook, so
+    # there's no generic payload that proves code execution here.
+    src = """
+def load(data):
+    import marshal
+    return marshal.loads(data)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is False
+
+
+def test_end_to_end_scan_then_verify_confirms_direct_pickle_loads():
+    src = """
+def load(data):
+    import pickle
+    return pickle.loads(data)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+    assert result.execution_evidence is not None
+    assert result.execution_evidence.marker_created is True
+
+
+def test_promote_to_finding_labels_pickle_as_insecure_deserialization():
+    src = """
+def load(data):
+    import pickle
+    return pickle.loads(data)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    finding = promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, result)
+    assert finding is not None
+    assert "insecure deserialization" in finding.title
+    assert "code execution" not in finding.title
+    assert "command injection" not in finding.title
+    assert finding.evidence[0].analyzer.rule_id == "sandbox_verified_pickle_deserialization"
+
+
+def test_verify_returns_not_applicable_for_marshal_loads():
+    src = """
+def load(data):
+    import marshal
+    return marshal.loads(data)
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.NOT_APPLICABLE
+    assert result.execution_evidence is None
+
+
 def test_finding_validates_against_the_real_domain_model():
     from wsqfai.domain.quality_model import QualityCharacteristic, sub_characteristic
 

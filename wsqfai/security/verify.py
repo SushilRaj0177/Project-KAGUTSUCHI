@@ -56,22 +56,45 @@ parameters, `*args`/`**kwargs` (no static way to know what belongs there),
 and more than one parameter directly reaching the same call (ambiguous -
 which one would the payload go in?).
 
-Everything else - SQL injection, pickle/marshal/yaml deserialization,
-SSTI, subprocess.* with no shell=True, a call with more than one parameter
+**Widened again: direct `pickle.loads`.** A malicious pickle payload
+proves code execution the same generic way the other two payload kinds
+do, via the well-documented `__reduce__` deserialization exploit (CWE-502
+- "never unpickle untrusted data" is standard guidance precisely because
+any importable callable can be invoked with attacker-chosen arguments
+this way): `_pickle_rce_payload_b64` builds a fresh pickle stream, at
+verification time, whose sole content is an object whose `__reduce__`
+returns `(os.system, ("touch <marker>",))` - unpickling it, regardless of
+what the target function otherwise does with the result, runs that
+command. Since `pickle.loads` needs real `bytes`, not a plain string, the
+payload travels as base64 text through `sys.argv[1]` (argv is text-only)
+and the candidate script's call site decodes it back to bytes before
+handing it to the function - the same "generic payload proves the class
+of vulnerability regardless of the function's own logic" property the
+shell/code-exec payloads already have, just with a different encoding
+for the one payload kind that can't be a plain string.
+
+`marshal.loads` deliberately stays `NOT_APPLICABLE`, not just unattempted:
+unlike pickle, marshal has no `__reduce__`-style hook - `marshal.loads(data)`
+on its own only reconstructs a `code` object and returns it; nothing
+executes unless the caller separately does something like
+`exec(marshal.loads(data))`, a different two-step shape this slice
+doesn't attempt to detect or reconstruct a call for.
+
+Everything else - SQL injection, yaml deserialization, SSTI,
+subprocess.* with no shell=True, a call with more than one parameter
 directly reaching the sink, positional-only/*args/**kwargs signatures, or
 taint that flows through a local variable - returns
 `Verdict.NOT_APPLICABLE`: a real, stated limitation of this slice, not a
-silent false negative.
-pickle.loads/marshal.loads in particular are a plausible future addition
-(a malicious pickle payload can also prove code execution) but need an
-actual serialized payload constructed, not a plain argv string, which is
-real further work, not attempted here. Reintroducing the archived
-hypothesis-generation LLM path (verification/hypothesis/generate.py,
-groq_client.py) to widen coverage further is real further M4b work too.
+silent false negative. Reintroducing the archived hypothesis-generation
+LLM path (verification/hypothesis/generate.py, groq_client.py) to widen
+coverage further is real further M4b work.
 """
 from __future__ import annotations
 
+import base64
 import json
+import os
+import pickle
 from enum import Enum
 
 from pydantic import BaseModel
@@ -104,6 +127,35 @@ _SHELL_INJECTION_PAYLOAD = "127.0.0.1; touch /tmp/wsqfai_pwned"
 _CODE_EXEC_DETECTORS = {"ast.eval", "ast.exec"}
 _CODE_EXECUTION_PAYLOAD = "__import__('pathlib').Path('/tmp/wsqfai_pwned').touch()"
 
+# pickle.loads specifically (not marshal.loads - see this module's
+# docstring for why marshal alone can't be exploited this same way).
+# Detector id comes from wsqfai.security.ast_scan._SIGNATURES.
+_PICKLE_DETECTORS = {"ast.pickle.loads"}
+_MARKER_PATH_FOR_PAYLOAD = "/tmp/wsqfai_pwned"
+
+
+class _PickleRCE:
+    """Unpickling an instance of this class doesn't reconstruct an
+    instance at all - `__reduce__` tells pickle to instead call
+    `os.system("touch <marker>")` directly. This is the standard
+    `__reduce__`-based pickle deserialization exploit (CWE-502): any
+    callable importable by the unpickling process can be invoked this way
+    with attacker-chosen arguments, which is exactly why unpickling
+    untrusted data is unsafe in general, not just for this one payload."""
+
+    def __reduce__(self):
+        return (os.system, (f"touch {_MARKER_PATH_FOR_PAYLOAD}",))
+
+
+def _pickle_rce_payload_b64() -> str:
+    """Base64-encoded pickle bytes (see `_PickleRCE`) - built fresh here
+    rather than a hardcoded blob, so it isn't tied to one specific pickle
+    protocol version. Base64-encoded because `sys.argv` can only carry
+    text; `build_candidate_script` decodes it back to bytes before
+    `pickle.loads` ever sees it (`Observation.metadata["detected_by"] in
+    _PICKLE_DETECTORS` tells it to)."""
+    return base64.b64encode(pickle.dumps(_PickleRCE())).decode("ascii")
+
 
 class Verdict(str, Enum):
     VULNERABLE_CONFIRMED = "vulnerable_confirmed"
@@ -123,7 +175,7 @@ def can_attempt_verification(metadata: dict[str, str]) -> bool:
     run - see this module's docstring for exactly what those shapes are."""
     if not metadata.get("single_param_direct_taint"):
         return False
-    if metadata.get("detected_by") in _CODE_EXEC_DETECTORS:
+    if metadata.get("detected_by") in _CODE_EXEC_DETECTORS or metadata.get("detected_by") in _PICKLE_DETECTORS:
         return True
     sensitive_op = metadata.get("sensitive_op")
     if sensitive_op in _VERIFIABLE_OPS:
@@ -134,6 +186,8 @@ def can_attempt_verification(metadata: dict[str, str]) -> bool:
 def _payload_for(metadata: dict[str, str]) -> str:
     if metadata.get("detected_by") in _CODE_EXEC_DETECTORS:
         return _CODE_EXECUTION_PAYLOAD
+    if metadata.get("detected_by") in _PICKLE_DETECTORS:
+        return _pickle_rce_payload_b64()
     return _SHELL_INJECTION_PAYLOAD
 
 
@@ -167,6 +221,8 @@ def build_candidate_script(
     taint_param: str,
     module_imports: str = "",
     other_params_json: str | None = None,
+    *,
+    decode_base64_payload: bool = False,
 ) -> str:
     """A self-contained script: the source file's own top-level imports
     (a function frequently relies on a name like `os` imported at module
@@ -176,11 +232,15 @@ def build_candidate_script(
     (see `_other_param_kwargs`) - by keyword throughout, so parameter order
     never matters and a taint parameter that isn't the function's first
     argument still gets the payload, not whatever positionally happens to
-    land there. Only valid to call when `can_attempt_verification` is
-    true."""
+    land there. `decode_base64_payload` is true only for the pickle shape:
+    `sys.argv` can only carry text, but `pickle.loads` needs real bytes, so
+    the payload arrives base64-encoded and gets decoded back to bytes right
+    here, at the call site, before the function ever sees it. Only valid to
+    call when `can_attempt_verification` is true."""
     imports_block = f"{module_imports}\n\n" if module_imports else ""
     other_args = _other_param_kwargs(other_params_json)
-    call = f"{symbol}({taint_param}=sys.argv[1]{other_args})"
+    payload_expr = "__import__('base64').b64decode(sys.argv[1])" if decode_base64_payload else "sys.argv[1]"
+    call = f"{symbol}({taint_param}={payload_expr}{other_args})"
     return f"{imports_block}{function_source}\n\nif __name__ == '__main__':\n    import sys\n    {call}\n"
 
 
@@ -195,11 +255,11 @@ def verify_security_observation(metadata: dict[str, str], *, timeout_s: int = 10
             verdict=Verdict.NOT_APPLICABLE,
             detail=(
                 "This observation isn't one of the shapes this verification slice can safely "
-                "and mechanically reconstruct a runnable call for - a single-parameter direct "
-                "shell-exec call, a subprocess.run/Popen/call with an explicit shell=True, or a "
-                "direct eval/exec call, in each case with no intermediate local variable "
-                "between the parameter and the sink. See wsqfai/security/verify.py's module "
-                "docstring."
+                "and mechanically reconstruct a runnable call for - a direct shell-exec call, a "
+                "subprocess.run/Popen/call with an explicit shell=True, a direct eval/exec call, "
+                "or a direct pickle.loads call, in each case with the tainted data reaching the "
+                "sink directly from exactly one of the function's own parameters, no intermediate "
+                "local variable in between. See wsqfai/security/verify.py's module docstring."
             ),
         )
     function_source = metadata.get("function_source", "")
@@ -208,8 +268,11 @@ def verify_security_observation(metadata: dict[str, str], *, timeout_s: int = 10
     module_imports = metadata.get("module_imports", "")
     other_params_json = metadata.get("other_params")
     is_code_exec = metadata.get("detected_by") in _CODE_EXEC_DETECTORS
-    payload_kind = "Python-source" if is_code_exec else "shell-metacharacter"
-    candidate = build_candidate_script(function_source, symbol, taint_param, module_imports, other_params_json)
+    is_pickle = metadata.get("detected_by") in _PICKLE_DETECTORS
+    payload_kind = "Python-source" if is_code_exec else ("malicious pickle" if is_pickle else "shell-metacharacter")
+    candidate = build_candidate_script(
+        function_source, symbol, taint_param, module_imports, other_params_json, decode_base64_payload=is_pickle
+    )
     evidence = run_in_subprocess_sandbox(candidate_code=candidate, payload=_payload_for(metadata), timeout_s=timeout_s)
 
     if evidence.marker_created:
@@ -249,9 +312,13 @@ def promote_to_finding(
     sub_key = observation_metadata.get("likely_security_sub_characteristic", "integrity")
     symbol = observation_metadata.get("symbol", "?")
     evidence = verification.execution_evidence
-    is_code_exec = observation_metadata.get("detected_by") in _CODE_EXEC_DETECTORS
-    vuln_label = "code execution" if is_code_exec else "command injection"
-    rule_id = "sandbox_verified_code_execution" if is_code_exec else "sandbox_verified_shell_injection"
+    detected_by = observation_metadata.get("detected_by")
+    if detected_by in _PICKLE_DETECTORS:
+        vuln_label, rule_id = "insecure deserialization", "sandbox_verified_pickle_deserialization"
+    elif detected_by in _CODE_EXEC_DETECTORS:
+        vuln_label, rule_id = "code execution", "sandbox_verified_code_execution"
+    else:
+        vuln_label, rule_id = "command injection", "sandbox_verified_shell_injection"
     return Finding(
         title=f"Proven {vuln_label} in {symbol}()",
         description=(

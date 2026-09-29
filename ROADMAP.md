@@ -354,6 +354,40 @@ No milestone is marked done because a plan for it exists.
         after this change: its `exec()` call in `config.py` — the exact
         multi-parameter shape called out above — still correctly stays an
         unverified hypothesis, not a newly-claimed false "Proven" finding.
+
+        **Widened again: direct `pickle.loads`.** A malicious pickle
+        payload proves code execution the same generic way the shell/eval/
+        exec payloads do, via the well-documented `__reduce__`
+        deserialization exploit (CWE-502 — any importable callable can be
+        invoked with attacker-chosen arguments this way, which is exactly
+        why unpickling untrusted data is unsafe in general). `verify.py`'s
+        `_pickle_rce_payload_b64` builds a fresh pickle stream at
+        verification time whose sole content is an object whose
+        `__reduce__` returns `(os.system, ("touch <marker>",))`. Since
+        `pickle.loads` needs real `bytes` and `sys.argv` can only carry
+        text, the payload travels as base64 and the candidate script's call
+        site decodes it back before the function ever sees it
+        (`build_candidate_script`'s new `decode_base64_payload` flag) — the
+        same "one generic payload proves the class of vulnerability" idea,
+        just with an encoding step for the one payload kind that can't be a
+        plain string. A confirmed pickle Finding is labeled "insecure
+        deserialization" with its own `rule_id`
+        (`sandbox_verified_pickle_deserialization`), not conflated with
+        code execution or command injection.
+
+        `marshal.loads` deliberately stays `NOT_APPLICABLE`, not just
+        unattempted: unlike pickle, marshal has no `__reduce__`-style hook —
+        `marshal.loads(data)` alone only reconstructs a `code` object and
+        returns it, and nothing executes unless the caller separately does
+        something like `exec(marshal.loads(data))`, a different two-step
+        shape this slice doesn't attempt to detect or reconstruct a call
+        for. 5 new tests, including a real sandbox-confirmed end-to-end run
+        and an explicit check that `marshal.loads` still correctly reports
+        `NOT_APPLICABLE`. 237 → 242 tests.
+
+        What's left to widen M4b further: reintroducing the archived
+        hypothesis-generation LLM path
+        (`verification/hypothesis/generate.py`, `groq_client.py`).
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -508,12 +542,11 @@ the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
 demonstrate the same static pattern in two different real functions
 correctly resolving to two different verdicts. Multi-parameter functions
-are now part of that coverage, not just single-argument toy shapes.
-What's left to widen M4b further: reintroducing
-`verification/hypothesis`'s LLM-based hypothesis generation, or
-constructing real pickle/marshal payloads (currently the only
-`SensitiveOp.DESERIALIZATION` shape this slice still can't attempt) -
-either one turns this from "several narrow but real cases" into something
-that finds proven vulnerabilities across a meaningfully wider slice of
-real code. M3b/M3c/M4c's other remaining slices are all real, scoped,
+and direct `pickle.loads` calls are now both part of that coverage, not
+just single-argument toy shapes or shell/eval-only sinks. What's left to
+widen M4b further: reintroducing `verification/hypothesis`'s LLM-based
+hypothesis generation - the remaining path to finding proven
+vulnerabilities across a meaningfully wider slice of real code than
+mechanically-reconstructible shapes alone can reach. M3b/M3c/M4c's other
+remaining slices are all real, scoped,
 startable work whenever picked up.
