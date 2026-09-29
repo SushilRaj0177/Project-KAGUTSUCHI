@@ -1,3 +1,5 @@
+import json
+
 from wsqfai.security.ast_scan import scan_source
 from wsqfai.security.verify import Verdict, can_attempt_verification, promote_to_finding, verify_security_observation
 
@@ -233,6 +235,84 @@ def get_user(conn, username):
     [observation] = scan_source(src, "sample.py")
     result = verify_security_observation(observation.metadata)
     assert promote_to_finding(observation.metadata, "sample.py", observation.location.start_line, result) is None
+
+
+def test_can_attempt_verification_true_for_multi_parameter_function():
+    src = """
+def run_lookup(hostname, verbose):
+    import os
+    if verbose:
+        print("looking up", hostname)
+    os.system("ping -c 1 " + hostname)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert can_attempt_verification(observation.metadata) is True
+
+
+def test_end_to_end_scan_then_verify_confirms_multi_parameter_vulnerable_function():
+    # The genuinely new case: a real second parameter (`verbose`) that the
+    # sink never touches. The candidate call has to supply it anyway (the
+    # function needs both arguments to even run) - proving the sandbox
+    # construction handles real function arity, not just single-argument
+    # toy functions.
+    src = """
+def run_lookup(hostname, verbose):
+    import os
+    if verbose:
+        print("looking up", hostname)
+    os.system("ping -c 1 " + hostname)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert observation.metadata["single_param_direct_taint"] == "hostname"
+    assert "other_params" in observation.metadata
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+    assert result.execution_evidence.marker_created is True
+
+
+def test_end_to_end_scan_then_verify_uses_the_declared_default_for_other_parameters():
+    # `timeout` has a real default (5) the candidate call should reuse
+    # verbatim, rather than a made-up placeholder - it's the closest thing
+    # to how the function is actually meant to be called.
+    src = """
+def run_lookup(hostname, timeout=5):
+    import os
+    os.system("ping -c 1 " + hostname)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert json.loads(observation.metadata["other_params"]) == [["timeout", "5"]]
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+
+
+def test_taint_param_injected_by_keyword_even_when_not_the_first_parameter():
+    # `verbose` comes first in the signature - if the candidate call passed
+    # the payload positionally, it would bind to `verbose`, not `hostname`.
+    # Keyword-based construction (build_candidate_script) has to get this
+    # right regardless of parameter order.
+    src = """
+def run_lookup(verbose, hostname):
+    import os
+    if verbose:
+        pass
+    os.system("ping -c 1 " + hostname)
+"""
+    [observation] = scan_source(src, "sample.py")
+    assert observation.metadata["single_param_direct_taint"] == "hostname"
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.VULNERABLE_CONFIRMED
+    assert result.execution_evidence.marker_created is True
+
+
+def test_verify_returns_not_applicable_when_two_real_parameters_both_reach_the_sink():
+    src = """
+def ping(host, count):
+    import os
+    os.system(f"ping -c {count} {host}")
+"""
+    [observation] = scan_source(src, "sample.py")
+    result = verify_security_observation(observation.metadata)
+    assert result.verdict == Verdict.NOT_APPLICABLE
 
 
 def test_finding_validates_against_the_real_domain_model():

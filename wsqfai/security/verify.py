@@ -28,19 +28,40 @@ logic:
     code execution regardless of what the function otherwise does with
     the string, since eval/exec run it as code no matter what.
 
-All three shapes also require: the enclosing function takes exactly one
-parameter, and the tainted data reaches the sink directly from that
-parameter with no intermediate local variable
-(`ast_scan._sole_direct_taint_param`, recorded as
-`Observation.metadata["single_param_direct_taint"]`) - the same principle
-the archived Kagutsuchi engine's netdiag fixture demonstrated, generalized
-here to any function of any of these shapes pulled from any real
-repository.
+All three shapes also require: the tainted data reaches the sink directly
+from exactly one of the enclosing function's own parameters, with no
+intermediate local variable (`ast_scan._direct_taint_param_for_call`,
+recorded as `Observation.metadata["single_param_direct_taint"]`) - the
+same principle the archived Kagutsuchi engine's netdiag fixture
+demonstrated, generalized here to any function of any of these shapes
+pulled from any real repository.
+
+**Widened to multi-parameter functions:** the enclosing function no
+longer has to take *only* that one parameter - it can take others too, as
+long as exactly one of them is the one the dangerous call actually uses
+(`ast_scan._callable_positional_params`/`_other_params_metadata`, recorded
+as `Observation.metadata["other_params"]`, a JSON list of
+`[name, default_source_or_null]` pairs). The candidate call fills every
+other parameter in by keyword - its own declared default when it has one
+(so a call shaped like the function's real, intended usage), a generic
+placeholder string when it doesn't. This is a best-effort reconstruction,
+not a claim that the placeholder is semantically valid: if a placeholder
+value makes the function raise or take a different branch before ever
+reaching the sink, that's a `NOT_REPRODUCED` verdict (an honest false
+negative from an imperfect call, not a false claim the function is safe)
+- exactly the same "never assert, only prove" discipline this whole module
+already applies to a validated-input function that legitimately blocks
+the payload. Still excluded, the same as before: positional-only
+parameters, `*args`/`**kwargs` (no static way to know what belongs there),
+and more than one parameter directly reaching the same call (ambiguous -
+which one would the payload go in?).
 
 Everything else - SQL injection, pickle/marshal/yaml deserialization,
-SSTI, subprocess.* with no shell=True, multi-parameter calls, taint that
-flows through a local variable - returns `Verdict.NOT_APPLICABLE`: a real,
-stated limitation of this slice, not a silent false negative.
+SSTI, subprocess.* with no shell=True, a call with more than one parameter
+directly reaching the sink, positional-only/*args/**kwargs signatures, or
+taint that flows through a local variable - returns
+`Verdict.NOT_APPLICABLE`: a real, stated limitation of this slice, not a
+silent false negative.
 pickle.loads/marshal.loads in particular are a plausible future addition
 (a malicious pickle payload can also prove code execution) but need an
 actual serialized payload constructed, not a plain argv string, which is
@@ -50,6 +71,7 @@ groq_client.py) to widen coverage further is real further M4b work too.
 """
 from __future__ import annotations
 
+import json
 from enum import Enum
 
 from pydantic import BaseModel
@@ -115,16 +137,51 @@ def _payload_for(metadata: dict[str, str]) -> str:
     return _SHELL_INJECTION_PAYLOAD
 
 
-def build_candidate_script(function_source: str, symbol: str, module_imports: str = "") -> str:
+_PLACEHOLDER_ARG = "'wsqfai_placeholder'"
+
+
+def _other_param_kwargs(other_params_json: str | None) -> str:
+    """`, name=value, ...` for every parameter besides the directly tainted
+    one, so the candidate call matches the real function's arity instead of
+    failing with `TypeError: missing N required positional arguments`
+    before the sink is ever reached. `other_params_json` is
+    `Observation.metadata["other_params"]` (see ast_scan.py's
+    `_other_params_metadata`) - a JSON list of `[name, default_source]`
+    pairs; `default_source` is the parameter's own declared default,
+    reproduced verbatim, or None when it has none. Malformed/missing input
+    yields no extra arguments rather than raising - the caller already
+    gated on `can_attempt_verification`, so this is defensive, not a path
+    expected to matter in practice."""
+    if not other_params_json:
+        return ""
+    try:
+        pairs = json.loads(other_params_json)
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return ""
+    return "".join(f", {name}={default if default else _PLACEHOLDER_ARG}" for name, default in pairs)
+
+
+def build_candidate_script(
+    function_source: str,
+    symbol: str,
+    taint_param: str,
+    module_imports: str = "",
+    other_params_json: str | None = None,
+) -> str:
     """A self-contained script: the source file's own top-level imports
     (a function frequently relies on a name like `os` imported at module
     scope rather than inside itself - the common real-world shape), then
-    the observed function's own source, then a call to it with argv[1] as
-    its single argument. Only valid to call when `can_attempt_verification`
-    is true - the function must take exactly one parameter for this call
-    shape to be correct."""
+    the observed function's own source, then a call to it with the payload
+    passed as `taint_param` and every other parameter filled in by keyword
+    (see `_other_param_kwargs`) - by keyword throughout, so parameter order
+    never matters and a taint parameter that isn't the function's first
+    argument still gets the payload, not whatever positionally happens to
+    land there. Only valid to call when `can_attempt_verification` is
+    true."""
     imports_block = f"{module_imports}\n\n" if module_imports else ""
-    return f"{imports_block}{function_source}\n\nif __name__ == '__main__':\n    import sys\n    {symbol}(sys.argv[1])\n"
+    other_args = _other_param_kwargs(other_params_json)
+    call = f"{symbol}({taint_param}=sys.argv[1]{other_args})"
+    return f"{imports_block}{function_source}\n\nif __name__ == '__main__':\n    import sys\n    {call}\n"
 
 
 def verify_security_observation(metadata: dict[str, str], *, timeout_s: int = 10) -> VerificationResult:
@@ -147,10 +204,12 @@ def verify_security_observation(metadata: dict[str, str], *, timeout_s: int = 10
         )
     function_source = metadata.get("function_source", "")
     symbol = metadata.get("symbol", "")
+    taint_param = metadata.get("single_param_direct_taint", "")
     module_imports = metadata.get("module_imports", "")
+    other_params_json = metadata.get("other_params")
     is_code_exec = metadata.get("detected_by") in _CODE_EXEC_DETECTORS
     payload_kind = "Python-source" if is_code_exec else "shell-metacharacter"
-    candidate = build_candidate_script(function_source, symbol, module_imports)
+    candidate = build_candidate_script(function_source, symbol, taint_param, module_imports, other_params_json)
     evidence = run_in_subprocess_sandbox(candidate_code=candidate, payload=_payload_for(metadata), timeout_s=timeout_s)
 
     if evidence.marker_created:

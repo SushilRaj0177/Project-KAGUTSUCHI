@@ -1,3 +1,5 @@
+import json
+
 from wsqfai.security.ast_scan import scan_source
 
 
@@ -256,11 +258,81 @@ def load(data):
     assert "single_param_direct_taint" not in observations[0].metadata
 
 
-def test_single_param_direct_taint_absent_when_function_has_more_than_one_parameter():
+def test_single_param_direct_taint_absent_when_taint_reaches_call_via_derived_receiver():
+    # Two parameters, but that alone isn't why this is unverifiable: `cursor`
+    # is itself derived from `conn` (not a parameter), and it's `cursor` -
+    # not `conn` - that the call directly references (as the receiver of
+    # .execute), so the taint reaches this call only through that
+    # intermediate local. See the multi-parameter tests below for a case
+    # with two real parameters that *is* now recorded.
     src = """
 def get_user(conn, username):
     cursor = conn.cursor()
     cursor.execute(f"SELECT * FROM users WHERE name = '{username}'")
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert "single_param_direct_taint" not in observations[0].metadata
+
+
+def test_direct_taint_param_recorded_for_multi_parameter_function_when_only_one_reaches_the_sink():
+    # `verbose` is a real second parameter, but it's never referenced by
+    # the os.system call at all - only `hostname` is. This is the widened
+    # case: a function can take other parameters now, as long as exactly
+    # one of them is the one the dangerous call actually uses.
+    src = """
+def run_lookup(hostname, verbose):
+    import os
+    if verbose:
+        print("looking up", hostname)
+    os.system("ping -c 1 " + hostname)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert observations[0].metadata["single_param_direct_taint"] == "hostname"
+    other_params = json.loads(observations[0].metadata["other_params"])
+    assert other_params == [["verbose", None]]
+
+
+def test_other_params_metadata_carries_a_real_default_verbatim():
+    # `timeout` has its own default and, unlike `verbose` above, is never
+    # referenced by the sink at all - only `hostname` is.
+    src = """
+def run_lookup(hostname, timeout=5):
+    import os
+    os.system("ping -c 1 " + hostname)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert observations[0].metadata["single_param_direct_taint"] == "hostname"
+    other_params = json.loads(observations[0].metadata["other_params"])
+    assert other_params == [["timeout", "5"]]
+
+
+def test_direct_taint_param_absent_when_two_real_parameters_both_reach_the_call():
+    # Genuinely ambiguous: both `host` and `count` are parameters, and both
+    # are referenced directly in the same call - a verifier has no honest
+    # way to know which one to inject the payload into, so this stays
+    # unrecorded (NOT_APPLICABLE downstream in verify.py), not guessed.
+    src = """
+def ping(host, count):
+    import os
+    os.system(f"ping -c {count} {host}")
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert "single_param_direct_taint" not in observations[0].metadata
+    assert "other_params" not in observations[0].metadata
+
+
+def test_direct_taint_param_absent_for_positional_only_parameters():
+    # Positional-only params can't be passed by keyword, which is how
+    # verify.py's candidate call fills in every parameter - so this stays
+    # unsupported even though only one parameter reaches the sink.
+    src = """
+def run_lookup(hostname, /):
+    import os
+    os.system("ping -c 1 " + hostname)
 """
     observations = scan_source(src, "sample.py")
     assert len(observations) == 1

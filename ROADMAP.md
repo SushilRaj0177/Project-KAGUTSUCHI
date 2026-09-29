@@ -314,12 +314,46 @@ No milestone is marked done because a plan for it exists.
         but taking a serialized data blob rather than directly executing
         a source string) remain unverifiable by this slice — constructing
         an actual malicious pickle payload as a plain argv string is real
-        further work, not attempted here. SQL injection, SSTI, multi-
-        parameter calls, and taint through a local variable also stay
-        `NOT_APPLICABLE`. Reintroducing the archived LLM-based hypothesis
-        generation (`verification/hypothesis/generate.py`,
-        `groq_client.py`) to widen coverage further is real further M4b
-        work.
+        further work, not attempted here. SQL injection, SSTI, and taint
+        through a local variable also stay `NOT_APPLICABLE`. Reintroducing
+        the archived LLM-based hypothesis generation
+        (`verification/hypothesis/generate.py`, `groq_client.py`) to widen
+        coverage further is real further M4b work.
+
+        **Widened again: multi-parameter functions.** The enclosing
+        function no longer has to take *only* the tainted parameter —
+        `ast_scan.py`'s `_direct_taint_param_for_call` now identifies the
+        one parameter (out of however many the function declares) that a
+        given dangerous call actually uses directly, as long as it's
+        unambiguous (exactly one parameter referenced in that call, no
+        intermediate local variable in between — the same "direct"
+        discipline as before, just no longer requiring the function have
+        nothing else). Every other parameter is recorded too
+        (`Observation.metadata["other_params"]`, a JSON list of
+        `[name, default_source_or_null]` pairs from
+        `_other_params_metadata`), and `verify.py`'s candidate call fills
+        them in by keyword — the parameter's own declared default when it
+        has one, a generic placeholder otherwise — so the call matches the
+        function's real arity instead of failing on a missing argument
+        before the sink is ever reached. Built entirely with keyword
+        arguments specifically so a taint parameter that isn't first in the
+        signature still gets the payload, not whatever the positional slot
+        happens to bind to. Still excluded, honestly: positional-only
+        parameters and `*args`/`**kwargs` (can't be filled in by keyword at
+        all, or safely at all), and a call where more than one real
+        parameter is directly referenced (genuinely ambiguous — which one
+        would the payload go in?). A placeholder value that makes an
+        unrelated parameter branch differently, or crash, before the sink
+        is reached correctly reports `NOT_REPRODUCED` rather than a false
+        `VULNERABLE_CONFIRMED` — the same "prove it or say nothing"
+        discipline this module already applies to a function that
+        legitimately validates its input. 9 new tests (6 in `ast_scan`, 3
+        end-to-end in `verify`, including real sandbox-confirmed runs
+        against a two-parameter function and against one where the taint
+        parameter isn't listed first). Re-checked against `pallets/flask`
+        after this change: its `exec()` call in `config.py` — the exact
+        multi-parameter shape called out above — still correctly stays an
+        unverified hypothesis, not a newly-claimed false "Proven" finding.
   - [ ] **M4c — AI Security Continuum framing.** Reframe M4a/M4b findings
         via Washizaki & Yoshioka's multi-dimensional continuum (CAIN 2024)
         instead of flat severity tags.
@@ -473,12 +507,13 @@ end to end - ingest a repo, statically hypothesize (M4a), actually attempt
 the exploit in a kernel-confined sandbox (M4b), and only mint a Security
 Finding when the sandbox proves it - `wsqfai/report.py`'s own tests
 demonstrate the same static pattern in two different real functions
-correctly resolving to two different verdicts. The highest-value next step
-there is widening M4b's coverage beyond its three current shapes
-(reintroducing `verification/hypothesis`'s LLM-based hypothesis
-generation, constructing real pickle payloads, or handling multi-parameter
-functions), since that's what
-turns this from "one narrow
-but real case" into something that finds proven vulnerabilities across a
-meaningfully wider slice of real code. M3b/M3c/M4c's other remaining
-slices are all real, scoped, startable work whenever picked up.
+correctly resolving to two different verdicts. Multi-parameter functions
+are now part of that coverage, not just single-argument toy shapes.
+What's left to widen M4b further: reintroducing
+`verification/hypothesis`'s LLM-based hypothesis generation, or
+constructing real pickle/marshal payloads (currently the only
+`SensitiveOp.DESERIALIZATION` shape this slice still can't attempt) -
+either one turns this from "several narrow but real cases" into something
+that finds proven vulnerabilities across a meaningfully wider slice of
+real code. M3b/M3c/M4c's other remaining slices are all real, scoped,
+startable work whenever picked up.
