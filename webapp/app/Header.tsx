@@ -8,6 +8,7 @@ import { spawnRipple } from "./components/ripple";
 
 const NAV_LINKS = [
   { href: "/", label: "Product" },
+  { href: "/analyze", label: "Analyze" },
   { href: "/research", label: "Research" },
 ];
 
