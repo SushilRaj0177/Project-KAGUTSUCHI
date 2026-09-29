@@ -551,6 +551,22 @@ No milestone is marked done because a plan for it exists.
           the UI (with GitHub OAuth replacing the raw-token MVP) is
           separate further work.
 
+          **Deploy-ready, not yet deployed.** The repo root `Dockerfile`
+          packages the backend for any "deploy from Dockerfile" host
+          (Railway/Render/Fly/a plain VM) - see `DEPLOYING.md`. Honestly
+          disclosed there too: this development environment has no
+          reachable Docker daemon (the same limitation already documented
+          for `docker_runner.py`), so the container itself hasn't been
+          through a real `docker build`/`docker run` here. What *is*
+          verified for real: a completely clean `pip install ".[server]"`
+          from just `pyproject.toml` + `wsqfai/` (matching the
+          Dockerfile's own install step), then `uvicorn
+          wsqfai.server.main:app`, then a real `POST /api/analyze-repo/
+          start` + poll round-trip against a live public repo - the whole
+          backend, minus the container layer itself. Picking an actual
+          host and provisioning it is a decision (and credentials) this
+          repository can't make on its own.
+
 ## Immediately next
 
 M7c-frontend's core analyze flow is now real - paste a link on the
