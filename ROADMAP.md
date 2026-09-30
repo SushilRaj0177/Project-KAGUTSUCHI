@@ -539,17 +539,34 @@ No milestone is marked done because a plan for it exists.
           HTTP round-trip, not a mock.
 
           Deliberately not done yet: this doesn't replace the CLI as the
-          only way to get a report, doesn't add GitHub OAuth or a "paste
-          a token" flow for `/api/open-pr` (opening the fix PR from the
-          browser), and the backend itself isn't deployed anywhere
-          public yet - `webapp/` is on Vercel, but `wsqfai/server/`
-          still only runs via `uvicorn` wherever someone starts it. Real
-          next steps: deploy the backend somewhere with a stable HTTPS
-          URL, set `WSQFAI_ALLOWED_ORIGINS` to the deployed webapp's
-          origin instead of the wildcard default, and point Vercel's
-          `NEXT_PUBLIC_API_BASE_URL` at it. Wiring `/api/open-pr` into
-          the UI (with GitHub OAuth replacing the raw-token MVP) is
-          separate further work.
+          only way to get a report, and the backend itself isn't deployed
+          anywhere public yet - `webapp/` is on Vercel, but
+          `wsqfai/server/` still only runs via `uvicorn` wherever someone
+          starts it. Real next step: deploy the backend somewhere with a
+          stable HTTPS URL, set `WSQFAI_ALLOWED_ORIGINS` to the deployed
+          webapp's origin instead of the wildcard default, and point
+          Vercel's `NEXT_PUBLIC_API_BASE_URL` at it.
+
+          **Widened: `/api/open-pr` wired into the UI.** When a scan
+          produces at least one real fix, the page now offers "Open a
+          pull request with these fixes" - a GitHub-token field, a
+          checkbox per fix (all selected by default), and a submit that
+          calls the same `/api/open-pr` the CLI's underlying
+          `wsqfai/integration/github_pr.py` already proved out, then
+          renders the real PR URL it returns. The token travels straight
+          to the backend for that one request and is never stored client-
+          side, matching `github_pr.py`'s own "used once, never logged"
+          discipline. Still the raw-token MVP, not GitHub OAuth - that
+          decision is still open (see below). Manually driven end-to-end
+          with Playwright: a real scan of `pallets/flask` (which produces
+          one real fix) through to the panel rendering with that fix
+          checked, then a mocked `/api/open-pr` response (the same "mock
+          the GitHub write boundary" discipline `github_pr.py`'s own test
+          suite already uses, since a live write needs a real PAT this
+          environment doesn't have) confirming the returned PR URL
+          renders correctly. GitHub OAuth replacing the paste-a-token MVP
+          is separate further work, and needs its own OAuth App
+          credentials this repository doesn't have either.
 
           **Deploy-ready, not yet deployed.** The repo root `Dockerfile`
           packages the backend for any "deploy from Dockerfile" host
@@ -569,12 +586,14 @@ No milestone is marked done because a plan for it exists.
 
 ## Immediately next
 
-M7c-frontend's core analyze flow is now real - paste a link on the
-website, get the same report the CLI produces, proven end to end against
-live repositories. What's left of it is deployment, not code: the
-backend needs a stable public URL before the deployed webapp (Vercel) can
-actually reach it, and `/api/open-pr` still needs a UI plus a decision on
-GitHub OAuth vs. the "paste a token" MVP. Independent of that: the core
+M7c-frontend's analyze-and-fix flow is now real end to end in the
+browser - paste a link, get the same report the CLI produces, and open a
+real PR with the fixes, all proven against live repositories. What's left
+of it is deployment and a credential decision, not code: the backend
+needs a stable public URL (and real hosting credentials this repo can't
+supply itself) before the deployed webapp (Vercel) can actually reach it,
+and GitHub OAuth replacing the paste-a-token MVP needs its own OAuth App
+credentials. Independent of that: the core
 "proven, not asserted" loop is real
 end to end - ingest a repo, statically hypothesize (M4a), actually attempt
 the exploit in a kernel-confined sandbox (M4b), and only mint a Security

@@ -6,7 +6,10 @@ import {
   ApiError,
   combinedPatch,
   getJobStatus,
+  openFixPr,
   startAnalysis,
+  type Fix,
+  type OpenPrResult,
   type RepositoryReport,
   type Severity,
 } from "../lib/api";
@@ -279,7 +282,106 @@ function ReportView({
             ))}
           </>
         )}
+
+        {report.fixes.length > 0 && <OpenPrPanel repoUrl={`https://github.com/${report.owner}/${report.repo}`} fixes={report.fixes} />}
       </div>
     </motion.section>
+  );
+}
+
+type OpenPrState =
+  | { phase: "idle" }
+  | { phase: "submitting" }
+  | { phase: "done"; result: OpenPrResult }
+  | { phase: "error"; message: string };
+
+function OpenPrPanel({ repoUrl, fixes }: { repoUrl: string; fixes: Fix[] }) {
+  const [token, setToken] = useState("");
+  const [baseBranch, setBaseBranch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(fixes.map((f) => f.finding_id)));
+  const [state, setState] = useState<OpenPrState>({ phase: "idle" });
+
+  function toggle(findingId: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(findingId)) next.delete(findingId);
+      else next.add(findingId);
+      return next;
+    });
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    const chosen = fixes.filter((f) => selected.has(f.finding_id));
+    if (!token.trim() || chosen.length === 0) return;
+    setState({ phase: "submitting" });
+    try {
+      const result = await openFixPr(repoUrl, chosen, token.trim(), baseBranch.trim() || undefined);
+      setState({ phase: "done", result });
+    } catch (err) {
+      setState({ phase: "error", message: describeError(err) });
+    }
+  }
+
+  if (state.phase === "done") {
+    return (
+      <div className="open-pr-panel">
+        <h3>Pull request opened</h3>
+        <p className="lede" style={{ fontSize: "0.95rem" }}>
+          <a className="inline-link" href={state.result.pr_url} target="_blank" rel="noreferrer">
+            {state.result.pr_url} <span className="arrow">→</span>
+          </a>{" "}
+          on branch <code>{state.result.branch}</code>.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="open-pr-panel">
+      <h3>Open a pull request with these fixes</h3>
+      <p className="lede" style={{ fontSize: "0.9rem" }}>
+        Needs a GitHub token with write access to this repo — sent directly to the backend for this one request,
+        never stored or logged (see `wsqfai/integration/github_pr.py`).
+      </p>
+      <form className="open-pr-form" onSubmit={handleSubmit}>
+        <div className="open-pr-fixes">
+          {fixes.map((fix) => (
+            <label key={fix.finding_id} className="open-pr-fix-row">
+              <input type="checkbox" checked={selected.has(fix.finding_id)} onChange={() => toggle(fix.finding_id)} />
+              <code>{fix.file_path}</code> — {fix.summary}
+            </label>
+          ))}
+        </div>
+        <div className="analyze-form">
+          <input
+            type="password"
+            placeholder="GitHub token"
+            value={token}
+            onChange={(e) => setToken(e.target.value)}
+            disabled={state.phase === "submitting"}
+            required
+          />
+          <input
+            type="text"
+            placeholder="base branch (optional)"
+            value={baseBranch}
+            onChange={(e) => setBaseBranch(e.target.value)}
+            disabled={state.phase === "submitting"}
+            className="analyze-ref"
+          />
+          <motion.button
+            type="submit"
+            className="ripple-host"
+            onPointerDown={spawnRipple}
+            whileTap={{ scale: 0.97 }}
+            disabled={state.phase === "submitting" || selected.size === 0}
+          >
+            {state.phase === "submitting" ? "Opening…" : "Open PR"}
+          </motion.button>
+        </div>
+        {state.phase === "error" && <p className="analyze-status analyze-status-error">{state.message}</p>}
+      </form>
+    </div>
   );
 }

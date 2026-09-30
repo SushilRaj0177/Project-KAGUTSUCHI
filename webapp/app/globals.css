@@ -799,3 +799,35 @@ tbody tr:hover {
   color: var(--ink);
   border-color: var(--accent);
 }
+
+/* ---------------------------------------------------------------------
+   /analyze - open-a-PR panel below the proposed fixes.
+   --------------------------------------------------------------------- */
+.open-pr-panel {
+  margin-top: 40px;
+  border-top: 1px solid var(--line);
+  padding-top: 28px;
+}
+
+.open-pr-form {
+  margin-top: 0;
+}
+
+.open-pr-fixes {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.open-pr-fix-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.open-pr-fix-row input {
+  accent-color: var(--accent);
+}

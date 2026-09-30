@@ -123,3 +123,28 @@ export async function getJobStatus(jobId: string): Promise<JobStatus> {
 export function combinedPatch(report: RepositoryReport): string {
   return report.fixes.map((f) => f.diff).join("");
 }
+
+export interface OpenPrResult {
+  pr_url: string;
+  branch: string;
+}
+
+export async function openFixPr(
+  repoUrl: string,
+  fixes: Fix[],
+  githubToken: string,
+  baseBranch?: string,
+): Promise<OpenPrResult> {
+  const res = await fetch(`${API_BASE_URL}/api/open-pr`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repo_url: repoUrl,
+      fixes,
+      github_token: githubToken,
+      base_branch: baseBranch || null,
+    }),
+  });
+  if (!res.ok) throw new ApiError(await readErrorDetail(res), res.status);
+  return (await res.json()) as OpenPrResult;
+}
