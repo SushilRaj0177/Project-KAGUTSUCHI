@@ -36,6 +36,16 @@ html,
 body {
   padding: 0;
   margin: 0;
+  /* Reveal.tsx's scroll-triggered entrances start translated off-canvas
+     (e.g. from="left" begins at x:+28px, sliding to x:0) for content
+     below the fold that hasn't scrolled into view yet - without this,
+     that transform briefly (or, before its viewport check fires,
+     indefinitely for off-screen content) extends the page's own
+     scrollable width past the viewport, showing a horizontal scrollbar
+     on any page with an off-canvas reveal in it. This is the standard
+     fix - clip at the document level, not by chasing every individual
+     transform's bounds. */
+  overflow-x: hidden;
 }
 
 body {
@@ -247,7 +257,13 @@ p.lede {
 
 .trace .row {
   display: grid;
-  grid-template-columns: 1.3fr 1fr;
+  /* minmax(0, ...) not a bare fr - a grid track's default min size is
+     "auto" (its content's min-content width), which a bare 1.3fr/1fr
+     can't shrink below even when the track itself is narrower - the
+     classic CSS grid mobile-overflow bug. Pinning the min to 0 lets long
+     unbroken text actually wrap/truncate within the track instead of
+     forcing the whole grid (and the page) wider than the viewport. */
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr);
   gap: 18px;
   padding-block: 14px;
   border-bottom: 1px solid var(--line);
@@ -375,7 +391,9 @@ td code,
 
 .stage {
   display: grid;
-  grid-template-columns: 52px 1fr auto;
+  /* minmax(0, 1fr), not a bare 1fr - see the .trace .row comment above;
+     same grid-overflow bug, same fix. */
+  grid-template-columns: 52px minmax(0, 1fr) auto;
   align-items: center;
   gap: 14px;
   padding-block: 12px;
@@ -454,7 +472,7 @@ footer a {
 
 @media (max-width: 520px) {
   .stage {
-    grid-template-columns: 40px 1fr;
+    grid-template-columns: 40px minmax(0, 1fr);
   }
 
   .stage .pill {
@@ -464,7 +482,7 @@ footer a {
   }
 
   .trace .row {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 6px;
   }
 }
