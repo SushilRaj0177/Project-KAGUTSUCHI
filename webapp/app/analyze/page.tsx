@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
+import Header from "../Header";
 import {
   ApiError,
   combinedPatch,
@@ -85,56 +86,70 @@ export default function AnalyzePage() {
   }
 
   return (
-    <main>
-      <section className="hero" style={{ paddingBottom: 24 }}>
-        <div className="wrap">
-          <span className="eyebrow">Run it in the browser</span>
-          <h1>Analyze a public repository</h1>
-          <p className="lede">
-            Paste a GitHub URL. This calls the same ingest → measure → hypothesize → verify pipeline the CLI
-            runs — nothing to install.
-          </p>
-
-          <form className="analyze-form" onSubmit={handleSubmit}>
-            <input
-              type="text"
-              inputMode="url"
-              placeholder="https://github.com/owner/repo"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              disabled={state.phase === "running"}
-              required
-            />
-            <input
-              type="text"
-              placeholder="branch or tag (optional)"
-              value={ref}
-              onChange={(e) => setRef(e.target.value)}
-              disabled={state.phase === "running"}
-              className="analyze-ref"
-            />
-            <motion.button
-              type="submit"
-              className="ripple-host"
-              onPointerDown={spawnRipple}
-              whileTap={{ scale: 0.97 }}
-              disabled={state.phase === "running"}
-            >
-              {state.phase === "running" ? "Analyzing…" : "Run analysis"}
-            </motion.button>
-          </form>
-
-          {state.phase === "running" && (
-            <p className="analyze-status">
-              <span className="analyze-spinner" aria-hidden /> {runningMessage(elapsedS)}
+    <>
+      <Header />
+      <main>
+        <section className="hero" style={{ paddingBottom: 24 }}>
+          <div className="wrap">
+            <span className="eyebrow">Run it in the browser</span>
+            <h1>Analyze a public repository</h1>
+            <p className="lede">
+              Paste a GitHub URL. This calls the same ingest → measure → hypothesize → verify pipeline the CLI
+              runs — nothing to install.
             </p>
-          )}
-          {state.phase === "error" && <p className="analyze-status analyze-status-error">{state.message}</p>}
-        </div>
-      </section>
 
-      {state.phase === "done" && <ReportView report={state.report} onDownloadPatch={handleDownloadPatch} />}
-    </main>
+            <form className="analyze-form" onSubmit={handleSubmit}>
+              <input
+                type="text"
+                inputMode="url"
+                placeholder="https://github.com/owner/repo"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                disabled={state.phase === "running"}
+                required
+              />
+              <input
+                type="text"
+                placeholder="branch or tag (optional)"
+                value={ref}
+                onChange={(e) => setRef(e.target.value)}
+                disabled={state.phase === "running"}
+                className="analyze-ref"
+              />
+              <motion.button
+                type="submit"
+                className="ripple-host"
+                onPointerDown={spawnRipple}
+                whileTap={{ scale: 0.97 }}
+                disabled={state.phase === "running"}
+              >
+                {state.phase === "running" ? "Analyzing…" : "Run analysis"}
+              </motion.button>
+            </form>
+
+            {state.phase === "running" && (
+              <p className="analyze-status">
+                <span className="analyze-spinner" aria-hidden /> {runningMessage(elapsedS)}
+              </p>
+            )}
+            {state.phase === "error" && <p className="analyze-status analyze-status-error">{state.message}</p>}
+          </div>
+        </section>
+
+        {state.phase === "done" && <ReportView report={state.report} onDownloadPatch={handleDownloadPatch} />}
+      </main>
+
+      <footer>
+        <div className="wrap">
+          <p>WSQF-AI — evidence-based dependability auditing, grounded in cited research.</p>
+          <p>
+            <a href="https://github.com/SushilRaj0177/Project-KAGUTSUCHI">
+              github.com/SushilRaj0177/Project-KAGUTSUCHI
+            </a>
+          </p>
+        </div>
+      </footer>
+    </>
   );
 }
 

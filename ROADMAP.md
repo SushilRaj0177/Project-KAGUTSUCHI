@@ -585,6 +585,27 @@ No milestone is marked done because a plan for it exists.
           confirm the running-state message renders correctly against
           live traffic.
 
+          **Bug found and fixed later (during a follow-up mobile check):**
+          `webapp/app/Header.tsx` (site nav) and the shared `<footer>` were
+          never actually mounted on `/analyze` at all - `page.tsx` (home)
+          and `research/page.tsx` both render `<Header />` themselves
+          (there's no root-layout-level nav), and `analyze/page.tsx`
+          simply never got that line added when it was built in the first
+          place. Every screenshot taken of `/analyze` while building
+          M7c-frontend showed only the page's own content, cropped at the
+          top exactly where a header would start - easy to miss when
+          reviewing content-focused screenshots without a reason to
+          scroll up and check for a nav bar that "should" be there.
+          First noticed checking the page at a real mobile viewport width
+          (375px) for the first time; confirmed with a plain
+          `document.querySelectorAll('header').length === 0` check that
+          it wasn't just visually subtle, it genuinely wasn't in the DOM,
+          at any viewport width, including desktop. Fixed by adding the
+          same `<Header />` + `<footer>` pair the other two pages already
+          use. Re-verified at both 375px and 1280px widths after the fix:
+          the header renders, wraps cleanly on narrow viewports, and
+          `/analyze` correctly highlights as the active nav item.
+
           **Deploy-ready, not yet deployed.** The repo root `Dockerfile`
           packages the backend for any "deploy from Dockerfile" host
           (Railway/Render/Fly/a plain VM) - see `DEPLOYING.md`. Honestly
