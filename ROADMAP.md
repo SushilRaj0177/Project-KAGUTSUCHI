@@ -568,6 +568,23 @@ No milestone is marked done because a plan for it exists.
           is separate further work, and needs its own OAuth App
           credentials this repository doesn't have either.
 
+          **Hardened for real network conditions.** Two gaps a purely
+          local dev loop doesn't surface: a bare `fetch` failure (backend
+          down, or - the likely real case once actually deployed -
+          `WSQFAI_ALLOWED_ORIGINS` not yet including the live webapp's
+          origin) used to bubble up as Chrome's raw `Failed to fetch`;
+          `webapp/app/lib/api.ts`'s `apiFetch` now catches that specific
+          failure and names the actual likely cause instead. And the
+          running-state message no longer promises a flat "this can take
+          a minute" no matter how long a scan actually runs - it escalates
+          with real elapsed seconds past 20s/60s, since a message that
+          stops matching reality past its own stated bound reads as
+          broken. Verified for real: pointed the webapp at a genuinely
+          unreachable backend URL and confirmed the actionable message
+          renders (not a raw browser error), and drove a real scan to
+          confirm the running-state message renders correctly against
+          live traffic.
+
           **Deploy-ready, not yet deployed.** The repo root `Dockerfile`
           packages the backend for any "deploy from Dockerfile" host
           (Railway/Render/Fly/a plain VM) - see `DEPLOYING.md`. Honestly
