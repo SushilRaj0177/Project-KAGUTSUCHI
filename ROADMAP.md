@@ -529,6 +529,20 @@ No milestone is marked done because a plan for it exists.
         a file that imports `logging` produced a real diff replacing
         `pass` with `logging.exception("Swallowed exception")`. 255 -> 260
         tests.
+
+        **Widened again: `bare_except` now fixes every occurrence in a
+        file, not just the first.** `reliability.py` previously emitted
+        one aggregated `Evidence` item citing only the first bare-except
+        line, even when a file had several - `remediation.py`'s fixer
+        could only ever act on that one line. `reliability.py` now emits
+        one `Evidence` item per occurrence, and `_fix_bare_except` loops
+        over all of them, narrowing every one it can in a single diff (a
+        line that no longer matches, because the file changed since the
+        scan ran, is skipped rather than aborting the whole fix - whatever
+        still matches gets fixed). 2 new tests. Verified end-to-end
+        through `analyze_snapshot`: a two-function file with a bare
+        `except:` in each produced one diff narrowing both. 260 -> 262
+        tests.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is

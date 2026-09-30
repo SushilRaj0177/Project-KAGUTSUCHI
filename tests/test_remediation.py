@@ -72,6 +72,45 @@ def test_returns_none_when_the_line_no_longer_matches_a_bare_except():
     assert propose_fix(finding, {"app.py": "x = 1\n"}) is None
 
 
+def _multi_evidence_finding(rule_id: str, file_path: str, lines: list[int]) -> Finding:
+    return Finding(
+        title="t",
+        description="d",
+        characteristic=QualityCharacteristic.RELIABILITY,
+        sub_characteristic_key="fault_tolerance",
+        severity=Severity.HIGH,
+        evidence=[
+            Evidence(
+                location=SourceLocation(file_path=file_path, start_line=line),
+                snippet="x",
+                analyzer=AnalyzerMetadata(analyzer="x", rule_id=rule_id, confidence=Confidence.HIGH),
+            )
+            for line in lines
+        ],
+    )
+
+
+def test_bare_except_fix_narrows_every_occurrence_in_one_diff():
+    finding = _multi_evidence_finding("bare_except", "app.py", [2, 5])
+    content = "def f():\n    except:\n        pass\ndef g():\n    except:\n        pass\n"
+    fix = propose_fix(finding, {"app.py": content})
+    assert fix is not None
+    assert fix.diff.count("+    except Exception:") == 2
+    assert "2 bare 'except:' clauses" in fix.summary
+    assert fix.patched_content.count("except Exception:") == 2
+
+
+def test_bare_except_fix_narrows_what_still_matches_when_one_line_changed():
+    # The file changed since the scan ran for one of the two occurrences -
+    # fix the one that still matches rather than aborting entirely.
+    finding = _multi_evidence_finding("bare_except", "app.py", [2, 5])
+    content = "def f():\n    except:\n        pass\ndef g():\n    return None\n"
+    fix = propose_fix(finding, {"app.py": content})
+    assert fix is not None
+    assert fix.diff.count("+    except Exception:") == 1
+    assert "1 bare 'except:' clause " in fix.summary
+
+
 def test_unpinned_dependency_fix_pins_to_the_looked_up_version():
     finding = _finding("unpinned_dependency", "requirements.txt", 2, "requests")
     content = "flask==2.3.0\nrequests\nnumpy==1.26.0\n"

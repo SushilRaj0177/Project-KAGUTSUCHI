@@ -88,11 +88,17 @@ def _fault_tolerance_findings_for_file(path: str, content: str) -> list[Finding]
             characteristic=QualityCharacteristic.RELIABILITY,
             sub_characteristic_key="fault_tolerance",
             severity=Severity.HIGH,
-            evidence=[Evidence(
-                location=SourceLocation(file_path=path, start_line=bare_lines[0]),
-                snippet=f"{len(bare_lines)} bare except clause(s), first at line {bare_lines[0]}",
-                analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="bare_except", confidence=Confidence.HIGH),
-            )],
+            # One Evidence per occurrence, not one aggregated item citing
+            # only the first line - so remediation.py can narrow every
+            # bare except in the file in one diff, not just the first.
+            evidence=[
+                Evidence(
+                    location=SourceLocation(file_path=path, start_line=line),
+                    snippet=f"bare except clause at line {line}",
+                    analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="bare_except", confidence=Confidence.HIGH),
+                )
+                for line in bare_lines
+            ],
         ))
     if swallowed_handlers:
         first_handler = swallowed_handlers[0]

@@ -102,28 +102,39 @@ def _unified_diff(file_path: str, before: str, after: str) -> str | None:
 
 
 def _fix_bare_except(finding: Finding, file_content: str) -> Fix | None:
-    lineno = finding.evidence[0].location.start_line
-    if lineno is None:
-        return None
+    """Narrows every bare `except:` this Finding cites - reliability.py
+    emits one Evidence item per occurrence (not one aggregated item citing
+    only the first), so a file with several gets them all fixed in one
+    diff. A line that no longer matches (the file changed since the scan
+    ran) is skipped rather than aborting the whole fix - whatever still
+    matches gets fixed."""
     lines = file_content.splitlines(keepends=True)
-    if not (1 <= lineno <= len(lines)):
-        return None
-    match = _BARE_EXCEPT_RE.match(lines[lineno - 1].rstrip("\n").rstrip("\r"))
-    if match is None:
-        return None
-    indent, _, rest = match.groups()
-    line_ending = lines[lineno - 1][len(lines[lineno - 1].rstrip("\r\n")):]
     new_lines = list(lines)
-    new_lines[lineno - 1] = f"{indent}except Exception:{rest}{line_ending}"
+    fixed = 0
+    for evidence in finding.evidence:
+        lineno = evidence.location.start_line
+        if lineno is None or not (1 <= lineno <= len(lines)):
+            continue
+        match = _BARE_EXCEPT_RE.match(lines[lineno - 1].rstrip("\n").rstrip("\r"))
+        if match is None:
+            continue
+        indent, _, rest = match.groups()
+        line_ending = lines[lineno - 1][len(lines[lineno - 1].rstrip("\r\n")):]
+        new_lines[lineno - 1] = f"{indent}except Exception:{rest}{line_ending}"
+        fixed += 1
+    if fixed == 0:
+        return None
     after = "".join(new_lines)
-    diff = _unified_diff(finding.evidence[0].location.file_path, file_content, after)
+    file_path = finding.evidence[0].location.file_path
+    diff = _unified_diff(file_path, file_content, after)
     if diff is None:
         return None
+    plural = "s" if fixed != 1 else ""
     return Fix(
         finding_id=finding.finding_id,
-        file_path=finding.evidence[0].location.file_path,
+        file_path=file_path,
         diff=diff,
-        summary="Narrowed bare 'except:' to 'except Exception:' so SystemExit/KeyboardInterrupt/GeneratorExit propagate normally.",
+        summary=f"Narrowed {fixed} bare 'except:' clause{plural} to 'except Exception:' so SystemExit/KeyboardInterrupt/GeneratorExit propagate normally.",
         patched_content=after,
     )
 
