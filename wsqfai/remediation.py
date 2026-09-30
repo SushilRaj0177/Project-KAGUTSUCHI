@@ -21,6 +21,14 @@ Coverage today (keyed by the `rule_id` a Finding's Evidence carries):
                                        lookup; the finding's own line
                                        number makes this a precise,
                                        single-line edit)
+  - `unpinned_dependency_pyproject` -> same PyPI pin, only for the
+                                       per-entry Finding (a real line
+                                       number, one bare declaration) -
+                                       the aggregated fallback (no
+                                       precise line at all) stays
+                                       unfixable, honestly; extras/
+                                       environment markers refuse rather
+                                       than guess
   - `unpinned_dependency_package_json` -> pin to the package's current
                                        latest release on the npm registry,
                                        as a caret range (`^X.Y.Z`) rather
@@ -36,12 +44,24 @@ Coverage today (keyed by the `rule_id` a Finding's Evidence carries):
                                        which this doesn't have) - instead
                                        returns human-actionable guidance
                                        text, not a diff.
-  - `swallowed_broad_exception`     -> NOT auto-patched (inserting a
-                                       `logging.exception(...)` call would
-                                       need to know whether the file even
-                                       imports `logging` yet, and whether
-                                       swallowing was actually intentional
-                                       there) - guidance text instead.
+  - `swallowed_broad_exception`     -> auto-patched only in the one shape
+                                       this can do safely: a handler whose
+                                       body is a single bare `pass`, in a
+                                       file that already imports `logging`
+                                       (this module never adds an import).
+                                       Only ever inserts a
+                                       `logging.exception(...)` call -
+                                       never re-raises, returns, or
+                                       otherwise changes control flow -
+                                       because whether swallowing was ever
+                                       actually intentional is a judgment
+                                       call this tool can't make; logging
+                                       is the one response that's correct
+                                       regardless of that answer. Every
+                                       other shape (a multi-statement body,
+                                       a body that's just a comment-string,
+                                       no `logging` import) falls back to
+                                       the guidance text below.
 
 Everything else returns None: a real, stated gap, not a silent no-op.
 """
@@ -90,28 +110,39 @@ def _unified_diff(file_path: str, before: str, after: str) -> str | None:
 
 
 def _fix_bare_except(finding: Finding, file_content: str) -> Fix | None:
-    lineno = finding.evidence[0].location.start_line
-    if lineno is None:
-        return None
+    """Narrows every bare `except:` this Finding cites - reliability.py
+    emits one Evidence item per occurrence (not one aggregated item citing
+    only the first), so a file with several gets them all fixed in one
+    diff. A line that no longer matches (the file changed since the scan
+    ran) is skipped rather than aborting the whole fix - whatever still
+    matches gets fixed."""
     lines = file_content.splitlines(keepends=True)
-    if not (1 <= lineno <= len(lines)):
-        return None
-    match = _BARE_EXCEPT_RE.match(lines[lineno - 1].rstrip("\n").rstrip("\r"))
-    if match is None:
-        return None
-    indent, _, rest = match.groups()
-    line_ending = lines[lineno - 1][len(lines[lineno - 1].rstrip("\r\n")):]
     new_lines = list(lines)
-    new_lines[lineno - 1] = f"{indent}except Exception:{rest}{line_ending}"
+    fixed = 0
+    for evidence in finding.evidence:
+        lineno = evidence.location.start_line
+        if lineno is None or not (1 <= lineno <= len(lines)):
+            continue
+        match = _BARE_EXCEPT_RE.match(lines[lineno - 1].rstrip("\n").rstrip("\r"))
+        if match is None:
+            continue
+        indent, _, rest = match.groups()
+        line_ending = lines[lineno - 1][len(lines[lineno - 1].rstrip("\r\n")):]
+        new_lines[lineno - 1] = f"{indent}except Exception:{rest}{line_ending}"
+        fixed += 1
+    if fixed == 0:
+        return None
     after = "".join(new_lines)
-    diff = _unified_diff(finding.evidence[0].location.file_path, file_content, after)
+    file_path = finding.evidence[0].location.file_path
+    diff = _unified_diff(file_path, file_content, after)
     if diff is None:
         return None
+    plural = "s" if fixed != 1 else ""
     return Fix(
         finding_id=finding.finding_id,
-        file_path=finding.evidence[0].location.file_path,
+        file_path=file_path,
         diff=diff,
-        summary="Narrowed bare 'except:' to 'except Exception:' so SystemExit/KeyboardInterrupt/GeneratorExit propagate normally.",
+        summary=f"Narrowed {fixed} bare 'except:' clause{plural} to 'except Exception:' so SystemExit/KeyboardInterrupt/GeneratorExit propagate normally.",
         patched_content=after,
     )
 
@@ -150,6 +181,56 @@ def _fix_unpinned_dependency(finding: Finding, file_content: str, *, version_loo
     line_ending = lines[lineno - 1][len(lines[lineno - 1].rstrip("\r\n")):]
     new_lines = list(lines)
     new_lines[lineno - 1] = f"{package_name}=={latest}{line_ending}"
+    after = "".join(new_lines)
+    diff = _unified_diff(evidence.location.file_path, file_content, after)
+    if diff is None:
+        return None
+    return Fix(
+        finding_id=finding.finding_id,
+        file_path=evidence.location.file_path,
+        diff=diff,
+        summary=f"Pinned {package_name} to its current latest release ({latest}) from PyPI.",
+        patched_content=after,
+    )
+
+
+def _fix_unpinned_dependency_pyproject(
+    finding: Finding, file_content: str, *, version_lookup=pypi_latest_version
+) -> Fix | None:
+    """Only for `portability.py`'s per-entry `unpinned_dependency_pyproject`
+    Finding (a real line number, one bare declaration) - never for its
+    aggregated fallback (no `start_line` at all, a summary snippet like "3
+    unconstrained dependencies: ..."), which stays genuinely not precise
+    enough to safely edit. Same bare-name-only restriction as
+    `_fix_unpinned_dependency`: extras/environment markers refuse rather
+    than guess, since correctly reconstructing `"pkg[extra]==X.Y.Z"` or
+    preserving a `; python_version >= ...` marker needs more than a
+    line-splice."""
+    evidence = finding.evidence[0]
+    lineno = evidence.location.start_line
+    if lineno is None:
+        return None
+    package_name = evidence.snippet.strip()
+    if not package_name or not re.match(r"^[A-Za-z0-9_.-]+$", package_name):
+        return None
+    latest = version_lookup(package_name)
+    if latest is None:
+        return None
+
+    lines = file_content.splitlines(keepends=True)
+    if not (1 <= lineno <= len(lines)):
+        return None
+    raw_line = lines[lineno - 1]
+    # Same quote character on both sides (a backreference, not two
+    # independent quote-class matches) - a malformed line with mismatched
+    # quotes should refuse, not produce a mismatched-quote result.
+    match = re.search(r"(['\"])" + re.escape(package_name) + r"\1", raw_line)
+    if match is None:
+        return None  # file changed since the scan ran - don't guess where the entry moved to
+    quote = match.group(1)
+    new_line = f"{raw_line[:match.start()]}{quote}{package_name}=={latest}{quote}{raw_line[match.end():]}"
+    new_lines = list(lines)
+    new_lines[lineno - 1] = new_line
     after = "".join(new_lines)
     diff = _unified_diff(evidence.location.file_path, file_content, after)
     if diff is None:
@@ -232,6 +313,47 @@ def _fix_unpinned_dependency_package_json(
     )
 
 
+# Deliberately narrow: only a plain, unaliased `import logging` at module
+# level. An aliased import (`import logging as log`) would need the fix to
+# call `log.exception(...)` instead, and `from logging import exception`
+# doesn't exist as a free function - rather than special-case every import
+# style, anything but the plain form just means "don't auto-fix this one",
+# same as every other narrow gate in this module.
+_LOGGING_IMPORT_RE = re.compile(r"^import logging\s*$", re.MULTILINE)
+
+
+def _fix_swallowed_exception(finding: Finding, file_content: str) -> Fix | None:
+    evidence = finding.evidence[0]
+    body_line = evidence.location.end_line
+    if body_line is None:
+        return None  # not a single bare `pass` body - see reliability.py's own gating
+    if not _LOGGING_IMPORT_RE.search(file_content):
+        return None  # never adds an import - only fixes a file that already has one
+
+    lines = file_content.splitlines(keepends=True)
+    if not (1 <= body_line <= len(lines)):
+        return None
+    raw_line = lines[body_line - 1]
+    stripped = raw_line.rstrip("\r\n")
+    if stripped.strip() != "pass":
+        return None  # file changed since the scan ran - don't blindly rewrite an unrelated line
+    indent = stripped[: len(stripped) - len(stripped.lstrip())]
+    line_ending = raw_line[len(stripped):]
+    new_lines = list(lines)
+    new_lines[body_line - 1] = f'{indent}logging.exception("Swallowed exception"){line_ending}'
+    after = "".join(new_lines)
+    diff = _unified_diff(evidence.location.file_path, file_content, after)
+    if diff is None:
+        return None
+    return Fix(
+        finding_id=finding.finding_id,
+        file_path=evidence.location.file_path,
+        diff=diff,
+        summary="Replaced a bare 'pass' with logging.exception(...) so the fault is at least recorded, not silently discarded.",
+        patched_content=after,
+    )
+
+
 def _suggest_shell_injection_fix(finding: Finding) -> Suggestion:
     return Suggestion(
         finding_id=finding.finding_id,
@@ -262,7 +384,9 @@ def _suggest_swallowed_exception_fix(finding: Finding) -> Suggestion:
 _FIXERS = {
     "bare_except": _fix_bare_except,
     "unpinned_dependency": _fix_unpinned_dependency,
+    "unpinned_dependency_pyproject": _fix_unpinned_dependency_pyproject,
     "unpinned_dependency_package_json": _fix_unpinned_dependency_package_json,
+    "swallowed_broad_exception": _fix_swallowed_exception,
 }
 _SUGGESTERS = {
     "sandbox_verified_shell_injection": _suggest_shell_injection_fix,

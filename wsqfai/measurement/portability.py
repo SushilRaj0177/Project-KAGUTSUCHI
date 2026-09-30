@@ -32,9 +32,12 @@ unpinned; the raw scan only supplies *where*). If that scan can't find a
 line for every entry tomllib reports as unpinned - a dependencies array
 built some other way this scan doesn't recognize - it falls back to one
 aggregated, non-line-precise Finding rather than reporting a wrong line
-number. Either way this stays reported-not-auto-fixable: rewriting a TOML
-array entry safely needs more than the line-splice `remediation.py` uses
-for requirements.txt.
+number. The per-entry Finding is auto-fixable after all
+(`remediation.py`'s `_fix_unpinned_dependency_pyproject` - a quoted-string
+line-splice, not the whole-line replacement `requirements.txt` uses,
+since a TOML array entry shares its line with brackets/commas/siblings);
+only the aggregated fallback, with no precise line at all, genuinely
+stays unfixable.
 
 Also covers `package.json`'s `dependencies`/`devDependencies` - the same
 Installability risk, but with npm's opposite ecosystem convention: a bare

@@ -5,8 +5,10 @@ import pytest
 from wsqfai.domain.evidence import AnalyzerMetadata, Confidence, Evidence, Finding, Severity, SourceLocation
 from wsqfai.domain.quality_model import QualityCharacteristic
 from wsqfai.remediation import (
+    _fix_swallowed_exception,
     _fix_unpinned_dependency,
     _fix_unpinned_dependency_package_json,
+    _fix_unpinned_dependency_pyproject,
     npm_registry_latest_version,
     propose_fix,
     propose_suggestion,
@@ -14,7 +16,9 @@ from wsqfai.remediation import (
 )
 
 
-def _finding(rule_id: str, file_path: str, start_line: int | None, snippet: str) -> Finding:
+def _finding(
+    rule_id: str, file_path: str, start_line: int | None, snippet: str, end_line: int | None = None
+) -> Finding:
     return Finding(
         title="t",
         description="d",
@@ -22,7 +26,7 @@ def _finding(rule_id: str, file_path: str, start_line: int | None, snippet: str)
         sub_characteristic_key="fault_tolerance",
         severity=Severity.HIGH,
         evidence=[Evidence(
-            location=SourceLocation(file_path=file_path, start_line=start_line),
+            location=SourceLocation(file_path=file_path, start_line=start_line, end_line=end_line),
             snippet=snippet,
             analyzer=AnalyzerMetadata(analyzer="x", rule_id=rule_id, confidence=Confidence.HIGH),
         )],
@@ -69,6 +73,45 @@ def test_returns_none_when_the_line_no_longer_matches_a_bare_except():
     assert propose_fix(finding, {"app.py": "x = 1\n"}) is None
 
 
+def _multi_evidence_finding(rule_id: str, file_path: str, lines: list[int]) -> Finding:
+    return Finding(
+        title="t",
+        description="d",
+        characteristic=QualityCharacteristic.RELIABILITY,
+        sub_characteristic_key="fault_tolerance",
+        severity=Severity.HIGH,
+        evidence=[
+            Evidence(
+                location=SourceLocation(file_path=file_path, start_line=line),
+                snippet="x",
+                analyzer=AnalyzerMetadata(analyzer="x", rule_id=rule_id, confidence=Confidence.HIGH),
+            )
+            for line in lines
+        ],
+    )
+
+
+def test_bare_except_fix_narrows_every_occurrence_in_one_diff():
+    finding = _multi_evidence_finding("bare_except", "app.py", [2, 5])
+    content = "def f():\n    except:\n        pass\ndef g():\n    except:\n        pass\n"
+    fix = propose_fix(finding, {"app.py": content})
+    assert fix is not None
+    assert fix.diff.count("+    except Exception:") == 2
+    assert "2 bare 'except:' clauses" in fix.summary
+    assert fix.patched_content.count("except Exception:") == 2
+
+
+def test_bare_except_fix_narrows_what_still_matches_when_one_line_changed():
+    # The file changed since the scan ran for one of the two occurrences -
+    # fix the one that still matches rather than aborting entirely.
+    finding = _multi_evidence_finding("bare_except", "app.py", [2, 5])
+    content = "def f():\n    except:\n        pass\ndef g():\n    return None\n"
+    fix = propose_fix(finding, {"app.py": content})
+    assert fix is not None
+    assert fix.diff.count("+    except Exception:") == 1
+    assert "1 bare 'except:' clause " in fix.summary
+
+
 def test_unpinned_dependency_fix_pins_to_the_looked_up_version():
     finding = _finding("unpinned_dependency", "requirements.txt", 2, "requests")
     content = "flask==2.3.0\nrequests\nnumpy==1.26.0\n"
@@ -95,6 +138,54 @@ def test_unpinned_dependency_fix_refuses_names_with_extras_or_markers():
     assert fix is None
 
 
+def test_pyproject_dependency_fix_pins_to_the_looked_up_version():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 4, "requests")
+    content = (
+        "[project]\n"
+        'name = "proj"\n'
+        "dependencies = [\n"
+        '    "requests",\n'
+        '    "flask==2.3.0",\n'
+        "]\n"
+    )
+    fix = _fix_unpinned_dependency_pyproject(finding, content, version_lookup=lambda name: "2.31.0")
+    assert fix is not None
+    assert '-    "requests",' in fix.diff
+    assert '+    "requests==2.31.0",' in fix.diff
+    assert '"flask==2.3.0"' in fix.diff  # untouched lines preserved
+    assert '"requests==2.31.0",' in fix.patched_content
+
+
+def test_pyproject_dependency_fix_preserves_single_quote_style():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 1, "requests")
+    content = "dependencies = ['requests']\n"
+    fix = _fix_unpinned_dependency_pyproject(finding, content, version_lookup=lambda name: "2.31.0")
+    assert fix is not None
+    assert "dependencies = ['requests==2.31.0']\n" == fix.patched_content
+
+
+def test_pyproject_dependency_fix_returns_none_for_the_aggregated_fallback():
+    # No start_line at all - portability.py's aggregated Finding (used when
+    # the raw-text scan couldn't place every entry) has no precise line to
+    # edit safely.
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", None, "3 unconstrained deps: a, b, c")
+    fix = _fix_unpinned_dependency_pyproject(finding, 'dependencies = ["a"]\n', version_lookup=lambda n: "1.0.0")
+    assert fix is None
+
+
+def test_pyproject_dependency_fix_refuses_names_with_extras_or_markers():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 1, "requests[socks]")
+    content = 'dependencies = ["requests[socks]"]\n'
+    fix = _fix_unpinned_dependency_pyproject(finding, content, version_lookup=lambda n: "2.31.0")
+    assert fix is None
+
+
+def test_pyproject_dependency_fix_returns_none_when_line_no_longer_matches():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 1, "requests")
+    fix = _fix_unpinned_dependency_pyproject(finding, 'dependencies = ["flask"]\n', version_lookup=lambda n: "2.31.0")
+    assert fix is None
+
+
 def test_shell_injection_finding_gets_a_suggestion_not_an_auto_fix():
     finding = _finding("sandbox_verified_shell_injection", "app.py", 4, "x")
     assert propose_fix(finding, {"app.py": "x = 1\n"}) is None
@@ -109,11 +200,55 @@ def test_propose_suggestion_returns_none_for_a_fixable_rule():
 
 
 def test_swallowed_exception_finding_gets_a_suggestion_not_an_auto_fix():
+    # No end_line set (mirrors reliability.py leaving it None for anything
+    # but a single bare `pass` body) - not precise enough to auto-fix.
     finding = _finding("swallowed_broad_exception", "app.py", 4, "x")
     assert propose_fix(finding, {"app.py": "x = 1\n"}) is None
     suggestion = propose_suggestion(finding)
     assert suggestion is not None
     assert "logging.exception" in suggestion.guidance
+
+
+def test_swallowed_exception_is_auto_fixed_when_logging_is_already_imported():
+    finding = _finding("swallowed_broad_exception", "app.py", 3, "x", end_line=4)
+    content = "import logging\n\ndef f():\n    pass\n"
+    fix = propose_fix(finding, {"app.py": content})
+    assert fix is not None
+    assert "+    logging.exception(\"Swallowed exception\")" in fix.diff
+    assert "-    pass" in fix.diff
+    assert fix.patched_content == 'import logging\n\ndef f():\n    logging.exception("Swallowed exception")\n'
+
+
+def test_swallowed_exception_preserves_indentation():
+    finding = _finding("swallowed_broad_exception", "app.py", 4, "x", end_line=5)
+    content = "import logging\n\ndef f():\n    try:\n        pass\n"
+    fix = _fix_swallowed_exception(finding, content)
+    assert fix is not None
+    assert '+        logging.exception("Swallowed exception")' in fix.diff
+
+
+def test_swallowed_exception_not_auto_fixed_without_a_logging_import():
+    finding = _finding("swallowed_broad_exception", "app.py", 1, "x", end_line=2)
+    content = "def f():\n    pass\n"
+    assert propose_fix(finding, {"app.py": content}) is None
+    suggestion = propose_suggestion(finding)
+    assert suggestion is not None
+
+
+def test_swallowed_exception_not_auto_fixed_for_aliased_logging_import():
+    # "import logging as log" would need log.exception(...), not
+    # logging.exception(...) - refuse rather than guess wrong.
+    finding = _finding("swallowed_broad_exception", "app.py", 3, "x", end_line=4)
+    content = "import logging as log\n\ndef f():\n    pass\n"
+    assert propose_fix(finding, {"app.py": content}) is None
+
+
+def test_swallowed_exception_not_auto_fixed_when_line_no_longer_matches():
+    # File changed since the scan ran - the line at end_line isn't a bare
+    # `pass` anymore. Must not blindly rewrite an unrelated line.
+    finding = _finding("swallowed_broad_exception", "app.py", 3, "x", end_line=4)
+    content = "import logging\n\ndef f():\n    return None\n"
+    assert propose_fix(finding, {"app.py": content}) is None
 
 
 @pytest.mark.skipif(
