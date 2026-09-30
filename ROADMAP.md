@@ -606,6 +606,34 @@ No milestone is marked done because a plan for it exists.
           the header renders, wraps cleanly on narrow viewports, and
           `/analyze` correctly highlights as the active nav item.
 
+          **Follow-up mobile audit of the other two pages - no live bug
+          found, two defensive hardenings kept anyway.** Auditing
+          `/` and `/research` the same way initially looked like it found
+          an 8px horizontal-scroll bug and a broken nav (`gap: normal`
+          instead of the declared `18px`, garbled heading text) - both
+          turned out to be measurement artifacts, not real bugs, and
+          it's worth being explicit about which was which rather than
+          claiming credit for fixes that didn't fix an observed problem:
+          the 8px overflow was `Reveal.tsx`'s off-canvas animation start
+          state (`from="left"` begins at `x:+28px`) for below-the-fold
+          content measured via `scrollWidth` without ever actually
+          scrolling the page - real browsers never showed it, confirmed
+          by scrolling through both pages start to finish and checking
+          `window.innerWidth > document.documentElement.clientWidth`
+          (false throughout); the missing nav gap and garbled heading
+          were a stale dev-server artifact from rebuilding without a
+          full server restart in between, gone entirely after one clean
+          `rm -rf .next && npm run build`. Two changes were still made
+          and kept, as genuine defensive hardening rather than bug fixes:
+          `.stage`/`.trace .row`'s grid tracks changed from a bare `1fr`
+          to `minmax(0, 1fr)` (a bare `1fr` track can't shrink below its
+          content's min-content width - harmless today, a real overflow
+          risk the day any milestone name or decision-trace row gets
+          genuinely long), and `overflow-x: hidden` added at the
+          `html`/`body` level (the standard, zero-downside safety net for
+          any page using an off-canvas reveal transform, so a future one
+          can never create a scrollbar even transiently).
+
           **Deploy-ready, not yet deployed.** The repo root `Dockerfile`
           packages the backend for any "deploy from Dockerfile" host
           (Railway/Render/Fly/a plain VM) - see `DEPLOYING.md`. Honestly
