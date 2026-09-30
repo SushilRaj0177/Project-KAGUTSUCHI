@@ -490,6 +490,24 @@ No milestone is marked done because a plan for it exists.
         the file already imports `logging`, and whether the swallow was
         ever actually intentional is a judgment call this tool can't make.
         164 -> 168 tests. Anything else M2b/M3b add later stays open.
+
+        **Widened again: `package.json`'s unpinned dependencies.** Now
+        that `portability.py` detects them (M2b), `remediation.py` fixes
+        them too - the same "clean it up, not just flag it" idea as the
+        PyPI-backed `requirements.txt`/`pyproject.toml` fixer, against the
+        npm registry (`registry.npmjs.org/<name>/latest`) instead. Pins to
+        a caret range (`^X.Y.Z`), not an exact version like the PyPI
+        fixer: npm's own convention is the opposite of Python's (`npm
+        install` itself writes a caret range by default), and
+        `portability.py`'s own detector already treats any caret/tilde
+        range as sufficiently constrained - a caret pin actually matches
+        how this dependency would look if a developer had just run `npm
+        install` normally. 6 new tests plus 2 reusing the existing
+        real-network pattern (skipped, not failed, without network
+        access). Verified end-to-end against a real live npm registry
+        lookup (not just a mocked one): a synthetic `package.json` with
+        `"left-pad": "*"` produced a real, applyable diff pinning it to
+        `^1.3.0`, npm's actual current release at test time.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is
