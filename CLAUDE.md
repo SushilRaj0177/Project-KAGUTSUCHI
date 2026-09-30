@@ -1,5 +1,18 @@
 # Working rules for this project
 
+## Current top priority: get the live site actually working
+
+Before adding any more features, coverage, or polish: get
+`webapp/app/analyze` on the deployed site to actually complete a real scan
+against a real backend, end to end, for a real visitor. Everything else
+in "Build-merge-continue loop" below still applies, but "the next
+highest-value item" always means "whatever gets the live site from
+broken to working" until it demonstrably works - confirmed by actually
+using the live URL, not by a local test passing. Once it works, resume
+picking from ROADMAP.md's "Immediately next" as usual, and keep
+expanding/hardening every aspect of it (breadth, robustness, coverage)
+from that working baseline rather than around it.
+
 ## Build-merge-continue loop
 
 The default operating mode on this project is autonomous, checkpointed
