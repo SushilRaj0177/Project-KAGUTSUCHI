@@ -4,7 +4,14 @@ import pytest
 
 from wsqfai.domain.evidence import AnalyzerMetadata, Confidence, Evidence, Finding, Severity, SourceLocation
 from wsqfai.domain.quality_model import QualityCharacteristic
-from wsqfai.remediation import _fix_unpinned_dependency, propose_fix, propose_suggestion, pypi_latest_version
+from wsqfai.remediation import (
+    _fix_unpinned_dependency,
+    _fix_unpinned_dependency_package_json,
+    npm_registry_latest_version,
+    propose_fix,
+    propose_suggestion,
+    pypi_latest_version,
+)
 
 
 def _finding(rule_id: str, file_path: str, start_line: int | None, snippet: str) -> Finding:
@@ -124,3 +131,60 @@ def test_pypi_latest_version_looks_up_a_real_package():
 
 def test_pypi_latest_version_returns_none_for_a_nonexistent_package():
     assert pypi_latest_version("this-package-definitely-does-not-exist-wsqfai-test") is None
+
+
+def test_package_json_fix_pins_to_a_caret_range_on_the_looked_up_version():
+    finding = _finding("unpinned_dependency_package_json", "package.json", 3, '"lodash": "*"')
+    content = (
+        "{\n"
+        '  "dependencies": {\n'
+        '    "lodash": "*",\n'
+        '    "left-pad": "1.3.0"\n'
+        "  }\n"
+        "}\n"
+    )
+    fix = _fix_unpinned_dependency_package_json(finding, content, version_lookup=lambda name: "4.17.21")
+    assert fix is not None
+    assert '-    "lodash": "*",' in fix.diff
+    assert '+    "lodash": "^4.17.21",' in fix.diff
+    assert '"left-pad": "1.3.0"' in fix.diff  # untouched lines preserved
+    assert '"lodash": "^4.17.21",' in fix.patched_content
+
+
+def test_package_json_fix_returns_none_when_lookup_fails():
+    finding = _finding("unpinned_dependency_package_json", "package.json", 1, '"lodash": "*"')
+    fix = _fix_unpinned_dependency_package_json(finding, '"lodash": "*"\n', version_lookup=lambda name: None)
+    assert fix is None
+
+
+def test_package_json_fix_returns_none_when_line_no_longer_matches():
+    # File changed since the scan ran - the line at that number isn't a
+    # plain "name": "spec" entry anymore. Must not blindly rewrite it.
+    finding = _finding("unpinned_dependency_package_json", "package.json", 1, '"lodash": "*"')
+    fix = _fix_unpinned_dependency_package_json(finding, "{}\n", version_lookup=lambda name: "4.17.21")
+    assert fix is None
+
+
+def test_package_json_fix_returns_none_without_a_line_number():
+    # Matches portability.py's own fallback for a dependencies array its raw-text
+    # scan couldn't place every entry in - no precise line to edit safely.
+    finding = _finding("unpinned_dependency_package_json", "package.json", None, '"lodash": "*"')
+    fix = _fix_unpinned_dependency_package_json(finding, '"lodash": "*"\n', version_lookup=lambda name: "4.17.21")
+    assert fix is None
+
+
+@pytest.mark.skipif(
+    subprocess.run(
+        ["python3", "-c", "import urllib.request; urllib.request.urlopen('https://registry.npmjs.org', timeout=5)"],
+        capture_output=True,
+    ).returncode != 0,
+    reason="no network access to registry.npmjs.org in this environment",
+)
+def test_npm_registry_latest_version_looks_up_a_real_package():
+    version = npm_registry_latest_version("left-pad")
+    assert version is not None
+    assert version[0].isdigit()
+
+
+def test_npm_registry_latest_version_returns_none_for_a_nonexistent_package():
+    assert npm_registry_latest_version("this-package-definitely-does-not-exist-wsqfai-test") is None

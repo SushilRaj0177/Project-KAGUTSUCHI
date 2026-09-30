@@ -21,6 +21,15 @@ Coverage today (keyed by the `rule_id` a Finding's Evidence carries):
                                        lookup; the finding's own line
                                        number makes this a precise,
                                        single-line edit)
+  - `unpinned_dependency_package_json` -> pin to the package's current
+                                       latest release on the npm registry,
+                                       as a caret range (`^X.Y.Z`) rather
+                                       than an exact pin - matching npm's
+                                       own convention (`npm install` itself
+                                       writes a caret range), unlike the
+                                       PyPI fixer above, which follows
+                                       Python's opposite convention of an
+                                       exact `==` pin
   - `sandbox_verified_shell_injection` -> NOT auto-patched (rewriting a
                                        shell-exec call correctly needs
                                        understanding the intended command,
@@ -41,6 +50,7 @@ from __future__ import annotations
 import json
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from difflib import unified_diff
 
@@ -153,6 +163,75 @@ def _fix_unpinned_dependency(finding: Finding, file_content: str, *, version_loo
     )
 
 
+def npm_registry_latest_version(package_name: str, *, timeout_s: float = 5.0) -> str | None:
+    """The current latest release of `package_name` on the npm registry, or
+    None if the lookup fails for any reason - mirrors `pypi_latest_version`'s
+    same never-raises discipline. Scoped package names (`@scope/name`) need
+    their `/` percent-encoded for the registry's URL scheme
+    (`@scope%2fname`); `urllib.parse.quote` with `safe=""` does that (and is
+    a no-op for an unscoped name, which has nothing to encode)."""
+    encoded_name = urllib.parse.quote(package_name, safe="")
+    url = f"https://registry.npmjs.org/{encoded_name}/latest"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout_s) as response:  # noqa: S310 - a fixed, hardcoded host
+            data = json.loads(response.read())
+        version = data.get("version")
+        return version if isinstance(version, str) and version else None
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError, OSError):
+        return None
+
+
+# Matches exactly the shape ast_scan.py's _package_json_finding snippet
+# always produces: `"name": "spec"`, with no surrounding text - see
+# portability.py's _package_json_finding.
+_PACKAGE_JSON_SNIPPET_RE = re.compile(r'^"([^"]+)":\s*"([^"]*)"$')
+# Matches the corresponding real source line, capturing everything up to
+# and including the value's opening quote (group 1, preserved verbatim -
+# indentation, the key's own quoting) and everything from the value's
+# closing quote onward (group 2, preserved verbatim - a trailing comma or
+# not, trailing whitespace) so only the version string itself is replaced.
+_PACKAGE_JSON_LINE_RE = re.compile(r'^(\s*"[^"]+"\s*:\s*")[^"]*("\s*,?\s*)$')
+
+
+def _fix_unpinned_dependency_package_json(
+    finding: Finding, file_content: str, *, version_lookup=npm_registry_latest_version
+) -> Fix | None:
+    evidence = finding.evidence[0]
+    lineno = evidence.location.start_line
+    if lineno is None:
+        return None  # line-recovery failed upstream (see portability.py) - nothing precise to edit
+    snippet_match = _PACKAGE_JSON_SNIPPET_RE.match(evidence.snippet.strip())
+    if snippet_match is None:
+        return None
+    package_name = snippet_match.group(1)
+    latest = version_lookup(package_name)
+    if latest is None:
+        return None
+
+    lines = file_content.splitlines(keepends=True)
+    if not (1 <= lineno <= len(lines)):
+        return None
+    raw_line = lines[lineno - 1]
+    line_ending = raw_line[len(raw_line.rstrip("\r\n")):]
+    line_match = _PACKAGE_JSON_LINE_RE.match(raw_line.rstrip("\r\n"))
+    if line_match is None:
+        return None  # the line no longer looks like a plain "name": "spec" entry - don't guess
+    prefix, suffix = line_match.groups()
+    new_lines = list(lines)
+    new_lines[lineno - 1] = f"{prefix}^{latest}{suffix}{line_ending}"
+    after = "".join(new_lines)
+    diff = _unified_diff(evidence.location.file_path, file_content, after)
+    if diff is None:
+        return None
+    return Fix(
+        finding_id=finding.finding_id,
+        file_path=evidence.location.file_path,
+        diff=diff,
+        summary=f"Pinned {package_name} to a caret range on its current latest release (^{latest}) from the npm registry.",
+        patched_content=after,
+    )
+
+
 def _suggest_shell_injection_fix(finding: Finding) -> Suggestion:
     return Suggestion(
         finding_id=finding.finding_id,
@@ -183,6 +262,7 @@ def _suggest_swallowed_exception_fix(finding: Finding) -> Suggestion:
 _FIXERS = {
     "bare_except": _fix_bare_except,
     "unpinned_dependency": _fix_unpinned_dependency,
+    "unpinned_dependency_package_json": _fix_unpinned_dependency_package_json,
 }
 _SUGGESTERS = {
     "sandbox_verified_shell_injection": _suggest_shell_injection_fix,
