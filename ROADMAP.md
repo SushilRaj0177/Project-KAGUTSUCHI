@@ -543,6 +543,27 @@ No milestone is marked done because a plan for it exists.
         through `analyze_snapshot`: a two-function file with a bare
         `except:` in each produced one diff narrowing both. 260 -> 262
         tests.
+
+        **Widened again: `pyproject.toml`'s per-entry unpinned
+        dependencies are auto-fixable after all.** Previously documented
+        as a deliberate, permanent gap ("rewriting a TOML array entry
+        safely needs more than the line-splice `remediation.py` uses for
+        requirements.txt") - true for the aggregated fallback Finding
+        (genuinely no precise line), but not for the per-entry Finding
+        M7b already added, which has a real line number and one bare
+        declaration string. `_fix_unpinned_dependency_pyproject` finds
+        that exact quoted string on that exact line (matching quote
+        character on both sides via a regex backreference, not two
+        independent quote-class matches) and replaces only its contents,
+        preserving everything else on the line - brackets, commas,
+        indentation, sibling entries. Same bare-name-only restriction as
+        the `requirements.txt` fixer: an extras/environment-marker
+        declaration refuses rather than guesses. 5 new tests. Verified
+        end-to-end through `analyze_snapshot` against a real live PyPI
+        lookup: an unpinned `requests` entry in a real
+        `dependencies = [...]` array got pinned to PyPI's actual current
+        release, with the sibling `flask==2.3.0` entry untouched.
+        262 -> 267 tests.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is

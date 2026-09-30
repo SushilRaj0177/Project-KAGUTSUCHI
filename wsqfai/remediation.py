@@ -21,6 +21,14 @@ Coverage today (keyed by the `rule_id` a Finding's Evidence carries):
                                        lookup; the finding's own line
                                        number makes this a precise,
                                        single-line edit)
+  - `unpinned_dependency_pyproject` -> same PyPI pin, only for the
+                                       per-entry Finding (a real line
+                                       number, one bare declaration) -
+                                       the aggregated fallback (no
+                                       precise line at all) stays
+                                       unfixable, honestly; extras/
+                                       environment markers refuse rather
+                                       than guess
   - `unpinned_dependency_package_json` -> pin to the package's current
                                        latest release on the npm registry,
                                        as a caret range (`^X.Y.Z`) rather
@@ -186,6 +194,56 @@ def _fix_unpinned_dependency(finding: Finding, file_content: str, *, version_loo
     )
 
 
+def _fix_unpinned_dependency_pyproject(
+    finding: Finding, file_content: str, *, version_lookup=pypi_latest_version
+) -> Fix | None:
+    """Only for `portability.py`'s per-entry `unpinned_dependency_pyproject`
+    Finding (a real line number, one bare declaration) - never for its
+    aggregated fallback (no `start_line` at all, a summary snippet like "3
+    unconstrained dependencies: ..."), which stays genuinely not precise
+    enough to safely edit. Same bare-name-only restriction as
+    `_fix_unpinned_dependency`: extras/environment markers refuse rather
+    than guess, since correctly reconstructing `"pkg[extra]==X.Y.Z"` or
+    preserving a `; python_version >= ...` marker needs more than a
+    line-splice."""
+    evidence = finding.evidence[0]
+    lineno = evidence.location.start_line
+    if lineno is None:
+        return None
+    package_name = evidence.snippet.strip()
+    if not package_name or not re.match(r"^[A-Za-z0-9_.-]+$", package_name):
+        return None
+    latest = version_lookup(package_name)
+    if latest is None:
+        return None
+
+    lines = file_content.splitlines(keepends=True)
+    if not (1 <= lineno <= len(lines)):
+        return None
+    raw_line = lines[lineno - 1]
+    # Same quote character on both sides (a backreference, not two
+    # independent quote-class matches) - a malformed line with mismatched
+    # quotes should refuse, not produce a mismatched-quote result.
+    match = re.search(r"(['\"])" + re.escape(package_name) + r"\1", raw_line)
+    if match is None:
+        return None  # file changed since the scan ran - don't guess where the entry moved to
+    quote = match.group(1)
+    new_line = f"{raw_line[:match.start()]}{quote}{package_name}=={latest}{quote}{raw_line[match.end():]}"
+    new_lines = list(lines)
+    new_lines[lineno - 1] = new_line
+    after = "".join(new_lines)
+    diff = _unified_diff(evidence.location.file_path, file_content, after)
+    if diff is None:
+        return None
+    return Fix(
+        finding_id=finding.finding_id,
+        file_path=evidence.location.file_path,
+        diff=diff,
+        summary=f"Pinned {package_name} to its current latest release ({latest}) from PyPI.",
+        patched_content=after,
+    )
+
+
 def npm_registry_latest_version(package_name: str, *, timeout_s: float = 5.0) -> str | None:
     """The current latest release of `package_name` on the npm registry, or
     None if the lookup fails for any reason - mirrors `pypi_latest_version`'s
@@ -326,6 +384,7 @@ def _suggest_swallowed_exception_fix(finding: Finding) -> Suggestion:
 _FIXERS = {
     "bare_except": _fix_bare_except,
     "unpinned_dependency": _fix_unpinned_dependency,
+    "unpinned_dependency_pyproject": _fix_unpinned_dependency_pyproject,
     "unpinned_dependency_package_json": _fix_unpinned_dependency_package_json,
     "swallowed_broad_exception": _fix_swallowed_exception,
 }

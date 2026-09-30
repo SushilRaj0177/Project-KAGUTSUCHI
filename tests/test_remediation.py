@@ -8,6 +8,7 @@ from wsqfai.remediation import (
     _fix_swallowed_exception,
     _fix_unpinned_dependency,
     _fix_unpinned_dependency_package_json,
+    _fix_unpinned_dependency_pyproject,
     npm_registry_latest_version,
     propose_fix,
     propose_suggestion,
@@ -134,6 +135,54 @@ def test_unpinned_dependency_fix_refuses_names_with_extras_or_markers():
     # extras syntax rules - refuse rather than guess.
     finding = _finding("unpinned_dependency", "requirements.txt", 1, "requests[socks]")
     fix = _fix_unpinned_dependency(finding, "requests[socks]\n", version_lookup=lambda name: "2.31.0")
+    assert fix is None
+
+
+def test_pyproject_dependency_fix_pins_to_the_looked_up_version():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 4, "requests")
+    content = (
+        "[project]\n"
+        'name = "proj"\n'
+        "dependencies = [\n"
+        '    "requests",\n'
+        '    "flask==2.3.0",\n'
+        "]\n"
+    )
+    fix = _fix_unpinned_dependency_pyproject(finding, content, version_lookup=lambda name: "2.31.0")
+    assert fix is not None
+    assert '-    "requests",' in fix.diff
+    assert '+    "requests==2.31.0",' in fix.diff
+    assert '"flask==2.3.0"' in fix.diff  # untouched lines preserved
+    assert '"requests==2.31.0",' in fix.patched_content
+
+
+def test_pyproject_dependency_fix_preserves_single_quote_style():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 1, "requests")
+    content = "dependencies = ['requests']\n"
+    fix = _fix_unpinned_dependency_pyproject(finding, content, version_lookup=lambda name: "2.31.0")
+    assert fix is not None
+    assert "dependencies = ['requests==2.31.0']\n" == fix.patched_content
+
+
+def test_pyproject_dependency_fix_returns_none_for_the_aggregated_fallback():
+    # No start_line at all - portability.py's aggregated Finding (used when
+    # the raw-text scan couldn't place every entry) has no precise line to
+    # edit safely.
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", None, "3 unconstrained deps: a, b, c")
+    fix = _fix_unpinned_dependency_pyproject(finding, 'dependencies = ["a"]\n', version_lookup=lambda n: "1.0.0")
+    assert fix is None
+
+
+def test_pyproject_dependency_fix_refuses_names_with_extras_or_markers():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 1, "requests[socks]")
+    content = 'dependencies = ["requests[socks]"]\n'
+    fix = _fix_unpinned_dependency_pyproject(finding, content, version_lookup=lambda n: "2.31.0")
+    assert fix is None
+
+
+def test_pyproject_dependency_fix_returns_none_when_line_no_longer_matches():
+    finding = _finding("unpinned_dependency_pyproject", "pyproject.toml", 1, "requests")
+    fix = _fix_unpinned_dependency_pyproject(finding, 'dependencies = ["flask"]\n', version_lookup=lambda n: "2.31.0")
     assert fix is None
 
 

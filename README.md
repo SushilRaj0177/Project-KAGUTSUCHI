@@ -115,7 +115,7 @@ self-contained HTML page, `--patch` to get every proposed fix as one
 `git apply`-able diff, or `--ref <branch>` to scan a specific branch/tag
 instead of the default.
 
-Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 262 tests (install
+Run `PYTHONPATH=. python3 -m pytest tests/ -q` to run all 267 tests (install
 with `pip install -e ".[server]"` first if you want the 10 FastAPI server
 tests included, and `pip install -e ".[lint]"` for the one that checks
 the whole package for unused imports/undefined names via `pyflakes` — a
@@ -220,5 +220,5 @@ wsqfai/
   server/                -- the FastAPI backend behind webapp/app/analyze (M7c-backend)
   report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML/patch)
 webapp/                  -- the Next.js marketing site + /analyze (M7c-frontend)
-tests/                   -- 262 tests, mirroring wsqfai/'s package structure
+tests/                   -- 267 tests, mirroring wsqfai/'s package structure
 ```
