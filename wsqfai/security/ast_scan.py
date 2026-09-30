@@ -165,6 +165,72 @@ _SIGNATURES: dict[str, tuple[SensitiveOp, str, str]] = {
         "os.spawnv spawns a new process with an attacker-influenced argv.",
         "ast.subprocess.os_spawnv",
     ),
+    # SSRF (OWASP A10:2021 - Server-Side Request Forgery): an outbound
+    # HTTP request built from attacker-influenced input can be redirected
+    # at an internal service the caller could never reach directly
+    # (a cloud metadata endpoint, an admin panel on localhost, another
+    # host on a private network) - the request travels with the
+    # server's own network position and credentials, not the attacker's.
+    # `requests`/`httpx`/the stdlib `urllib.request` are the common real-
+    # world clients this reaches through. Same taint-propagation gate as
+    # every other signature here: a hardcoded URL isn't flagged, only one
+    # built from the enclosing function's own parameters.
+    "requests.get": (
+        SensitiveOp.NETWORK_EGRESS,
+        "requests.get sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.requests_get",
+    ),
+    "requests.post": (
+        SensitiveOp.NETWORK_EGRESS,
+        "requests.post sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.requests_post",
+    ),
+    "requests.put": (
+        SensitiveOp.NETWORK_EGRESS,
+        "requests.put sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.requests_put",
+    ),
+    "requests.delete": (
+        SensitiveOp.NETWORK_EGRESS,
+        "requests.delete sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.requests_delete",
+    ),
+    "requests.request": (
+        SensitiveOp.NETWORK_EGRESS,
+        "requests.request sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.requests_request",
+    ),
+    "urllib.request.urlopen": (
+        SensitiveOp.NETWORK_EGRESS,
+        "urllib.request.urlopen sends an outbound HTTP(S) request to an "
+        "attacker-influenced URL - a classic SSRF sink (OWASP A10:2021) if the "
+        "target isn't validated against an allowlist first.",
+        "ast.ssrf.urllib_urlopen",
+    ),
+    "httpx.get": (
+        SensitiveOp.NETWORK_EGRESS,
+        "httpx.get sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.httpx_get",
+    ),
+    "httpx.post": (
+        SensitiveOp.NETWORK_EGRESS,
+        "httpx.post sends an outbound HTTP request to an attacker-influenced "
+        "URL - a classic SSRF sink (OWASP A10:2021) if the target isn't validated "
+        "against an allowlist first.",
+        "ast.ssrf.httpx_post",
+    ),
 }
 
 
