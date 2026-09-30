@@ -508,6 +508,27 @@ No milestone is marked done because a plan for it exists.
         lookup (not just a mocked one): a synthetic `package.json` with
         `"left-pad": "*"` produced a real, applyable diff pinning it to
         `^1.3.0`, npm's actual current release at test time.
+
+        **Widened again: `swallowed_broad_exception`, in the one shape
+        that's actually safe.** Previously always a `Suggestion`, never a
+        `Fix`. Now auto-fixed when - and only when - the handler's body is
+        a single bare `pass` (`reliability.py` now records that body
+        line's position, `Evidence.location.end_line`, only for exactly
+        this shape - a multi-statement or comment-string body leaves it
+        `None`, which `remediation.py` treats as "not precise enough to
+        auto-fix") *and* the file already imports plain `logging` (this
+        module never adds an import; an aliased `import logging as log`
+        is deliberately left alone too, since blindly assuming the name
+        `logging` would call the wrong thing). Even then, the fix only
+        ever inserts `logging.exception(...)` - never a re-raise, a
+        return, or any other control-flow change - because whether
+        swallowing was ever actually intentional is a judgment call this
+        tool still can't make; logging is the one response that's correct
+        regardless of that answer. 5 new tests. Verified end-to-end
+        through `analyze_snapshot`: a real swallowed-exception handler in
+        a file that imports `logging` produced a real diff replacing
+        `pass` with `logging.exception("Swallowed exception")`. 255 -> 260
+        tests.
   - **M7c — A real, running web app.** `engine-archive/kagutsuchi/webapp`
         + `server/` already built exactly this shape once (paste a repo
         link, get a report back) - reconnecting them onto this pipeline is

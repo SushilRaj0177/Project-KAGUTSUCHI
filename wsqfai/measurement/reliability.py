@@ -63,14 +63,15 @@ def _fault_tolerance_findings_for_file(path: str, content: str) -> list[Finding]
         return []
 
     bare_lines: list[int] = []
-    swallowed_lines: list[int] = []
+    swallowed_handlers: list[ast.ExceptHandler] = []
     for node in ast.walk(tree):
         if not isinstance(node, ast.ExceptHandler):
             continue
         if node.type is None:
             bare_lines.append(node.lineno)
         elif _is_broad_exception_type(node.type) and _is_swallowed(node.body):
-            swallowed_lines.append(node.lineno)
+            swallowed_handlers.append(node)
+    swallowed_lines = [h.lineno for h in swallowed_handlers]
 
     findings: list[Finding] = []
     if bare_lines:
@@ -93,7 +94,18 @@ def _fault_tolerance_findings_for_file(path: str, content: str) -> list[Finding]
                 analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="bare_except", confidence=Confidence.HIGH),
             )],
         ))
-    if swallowed_lines:
+    if swallowed_handlers:
+        first_handler = swallowed_handlers[0]
+        # Only a handler whose body is a single bare `pass` (the common real-
+        # world shape) gets a precise enough location for remediation.py to
+        # safely replace with a logging call - multi-statement or
+        # comment-string bodies stay None here, which remediation.py treats
+        # as "not precise enough to auto-fix", falling back to its Suggestion.
+        body_line = (
+            first_handler.body[0].lineno
+            if len(first_handler.body) == 1 and isinstance(first_handler.body[0], ast.Pass)
+            else None
+        )
         findings.append(Finding(
             title=f"Swallowed exception(s) in {path}",
             description=(
@@ -108,7 +120,7 @@ def _fault_tolerance_findings_for_file(path: str, content: str) -> list[Finding]
             sub_characteristic_key="fault_tolerance",
             severity=Severity.MEDIUM,
             evidence=[Evidence(
-                location=SourceLocation(file_path=path, start_line=swallowed_lines[0]),
+                location=SourceLocation(file_path=path, start_line=swallowed_lines[0], end_line=body_line),
                 snippet=f"{len(swallowed_lines)} swallowed broad-exception handler(s), first at line {swallowed_lines[0]}",
                 analyzer=AnalyzerMetadata(analyzer=_ANALYZER, rule_id="swallowed_broad_exception", confidence=Confidence.MEDIUM),
             )],

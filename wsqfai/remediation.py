@@ -36,12 +36,24 @@ Coverage today (keyed by the `rule_id` a Finding's Evidence carries):
                                        which this doesn't have) - instead
                                        returns human-actionable guidance
                                        text, not a diff.
-  - `swallowed_broad_exception`     -> NOT auto-patched (inserting a
-                                       `logging.exception(...)` call would
-                                       need to know whether the file even
-                                       imports `logging` yet, and whether
-                                       swallowing was actually intentional
-                                       there) - guidance text instead.
+  - `swallowed_broad_exception`     -> auto-patched only in the one shape
+                                       this can do safely: a handler whose
+                                       body is a single bare `pass`, in a
+                                       file that already imports `logging`
+                                       (this module never adds an import).
+                                       Only ever inserts a
+                                       `logging.exception(...)` call -
+                                       never re-raises, returns, or
+                                       otherwise changes control flow -
+                                       because whether swallowing was ever
+                                       actually intentional is a judgment
+                                       call this tool can't make; logging
+                                       is the one response that's correct
+                                       regardless of that answer. Every
+                                       other shape (a multi-statement body,
+                                       a body that's just a comment-string,
+                                       no `logging` import) falls back to
+                                       the guidance text below.
 
 Everything else returns None: a real, stated gap, not a silent no-op.
 """
@@ -232,6 +244,47 @@ def _fix_unpinned_dependency_package_json(
     )
 
 
+# Deliberately narrow: only a plain, unaliased `import logging` at module
+# level. An aliased import (`import logging as log`) would need the fix to
+# call `log.exception(...)` instead, and `from logging import exception`
+# doesn't exist as a free function - rather than special-case every import
+# style, anything but the plain form just means "don't auto-fix this one",
+# same as every other narrow gate in this module.
+_LOGGING_IMPORT_RE = re.compile(r"^import logging\s*$", re.MULTILINE)
+
+
+def _fix_swallowed_exception(finding: Finding, file_content: str) -> Fix | None:
+    evidence = finding.evidence[0]
+    body_line = evidence.location.end_line
+    if body_line is None:
+        return None  # not a single bare `pass` body - see reliability.py's own gating
+    if not _LOGGING_IMPORT_RE.search(file_content):
+        return None  # never adds an import - only fixes a file that already has one
+
+    lines = file_content.splitlines(keepends=True)
+    if not (1 <= body_line <= len(lines)):
+        return None
+    raw_line = lines[body_line - 1]
+    stripped = raw_line.rstrip("\r\n")
+    if stripped.strip() != "pass":
+        return None  # file changed since the scan ran - don't blindly rewrite an unrelated line
+    indent = stripped[: len(stripped) - len(stripped.lstrip())]
+    line_ending = raw_line[len(stripped):]
+    new_lines = list(lines)
+    new_lines[body_line - 1] = f'{indent}logging.exception("Swallowed exception"){line_ending}'
+    after = "".join(new_lines)
+    diff = _unified_diff(evidence.location.file_path, file_content, after)
+    if diff is None:
+        return None
+    return Fix(
+        finding_id=finding.finding_id,
+        file_path=evidence.location.file_path,
+        diff=diff,
+        summary="Replaced a bare 'pass' with logging.exception(...) so the fault is at least recorded, not silently discarded.",
+        patched_content=after,
+    )
+
+
 def _suggest_shell_injection_fix(finding: Finding) -> Suggestion:
     return Suggestion(
         finding_id=finding.finding_id,
@@ -263,6 +316,7 @@ _FIXERS = {
     "bare_except": _fix_bare_except,
     "unpinned_dependency": _fix_unpinned_dependency,
     "unpinned_dependency_package_json": _fix_unpinned_dependency_package_json,
+    "swallowed_broad_exception": _fix_swallowed_exception,
 }
 _SUGGESTERS = {
     "sandbox_verified_shell_injection": _suggest_shell_injection_fix,

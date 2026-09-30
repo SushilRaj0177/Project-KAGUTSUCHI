@@ -5,6 +5,7 @@ import pytest
 from wsqfai.domain.evidence import AnalyzerMetadata, Confidence, Evidence, Finding, Severity, SourceLocation
 from wsqfai.domain.quality_model import QualityCharacteristic
 from wsqfai.remediation import (
+    _fix_swallowed_exception,
     _fix_unpinned_dependency,
     _fix_unpinned_dependency_package_json,
     npm_registry_latest_version,
@@ -14,7 +15,9 @@ from wsqfai.remediation import (
 )
 
 
-def _finding(rule_id: str, file_path: str, start_line: int | None, snippet: str) -> Finding:
+def _finding(
+    rule_id: str, file_path: str, start_line: int | None, snippet: str, end_line: int | None = None
+) -> Finding:
     return Finding(
         title="t",
         description="d",
@@ -22,7 +25,7 @@ def _finding(rule_id: str, file_path: str, start_line: int | None, snippet: str)
         sub_characteristic_key="fault_tolerance",
         severity=Severity.HIGH,
         evidence=[Evidence(
-            location=SourceLocation(file_path=file_path, start_line=start_line),
+            location=SourceLocation(file_path=file_path, start_line=start_line, end_line=end_line),
             snippet=snippet,
             analyzer=AnalyzerMetadata(analyzer="x", rule_id=rule_id, confidence=Confidence.HIGH),
         )],
@@ -109,11 +112,55 @@ def test_propose_suggestion_returns_none_for_a_fixable_rule():
 
 
 def test_swallowed_exception_finding_gets_a_suggestion_not_an_auto_fix():
+    # No end_line set (mirrors reliability.py leaving it None for anything
+    # but a single bare `pass` body) - not precise enough to auto-fix.
     finding = _finding("swallowed_broad_exception", "app.py", 4, "x")
     assert propose_fix(finding, {"app.py": "x = 1\n"}) is None
     suggestion = propose_suggestion(finding)
     assert suggestion is not None
     assert "logging.exception" in suggestion.guidance
+
+
+def test_swallowed_exception_is_auto_fixed_when_logging_is_already_imported():
+    finding = _finding("swallowed_broad_exception", "app.py", 3, "x", end_line=4)
+    content = "import logging\n\ndef f():\n    pass\n"
+    fix = propose_fix(finding, {"app.py": content})
+    assert fix is not None
+    assert "+    logging.exception(\"Swallowed exception\")" in fix.diff
+    assert "-    pass" in fix.diff
+    assert fix.patched_content == 'import logging\n\ndef f():\n    logging.exception("Swallowed exception")\n'
+
+
+def test_swallowed_exception_preserves_indentation():
+    finding = _finding("swallowed_broad_exception", "app.py", 4, "x", end_line=5)
+    content = "import logging\n\ndef f():\n    try:\n        pass\n"
+    fix = _fix_swallowed_exception(finding, content)
+    assert fix is not None
+    assert '+        logging.exception("Swallowed exception")' in fix.diff
+
+
+def test_swallowed_exception_not_auto_fixed_without_a_logging_import():
+    finding = _finding("swallowed_broad_exception", "app.py", 1, "x", end_line=2)
+    content = "def f():\n    pass\n"
+    assert propose_fix(finding, {"app.py": content}) is None
+    suggestion = propose_suggestion(finding)
+    assert suggestion is not None
+
+
+def test_swallowed_exception_not_auto_fixed_for_aliased_logging_import():
+    # "import logging as log" would need log.exception(...), not
+    # logging.exception(...) - refuse rather than guess wrong.
+    finding = _finding("swallowed_broad_exception", "app.py", 3, "x", end_line=4)
+    content = "import logging as log\n\ndef f():\n    pass\n"
+    assert propose_fix(finding, {"app.py": content}) is None
+
+
+def test_swallowed_exception_not_auto_fixed_when_line_no_longer_matches():
+    # File changed since the scan ran - the line at end_line isn't a bare
+    # `pass` anymore. Must not blindly rewrite an unrelated line.
+    finding = _finding("swallowed_broad_exception", "app.py", 3, "x", end_line=4)
+    content = "import logging\n\ndef f():\n    return None\n"
+    assert propose_fix(finding, {"app.py": content}) is None
 
 
 @pytest.mark.skipif(
