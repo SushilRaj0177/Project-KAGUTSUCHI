@@ -205,6 +205,8 @@ where it's going.
 ```
 ARCHITECTURE.md          -- the research grounding + design rationale (read this first)
 ROADMAP.md               -- milestones, what's built vs planned, honestly
+DEPLOYING.md             -- how to run wsqfai/server/ as a container on a real host
+Dockerfile               -- packages the backend for any "deploy from Dockerfile" host
 engine-archive/          -- Project KAGUTSUCHI, dismantled and held for reuse
 wsqfai/
   domain/                -- the ISO/IEC 25010+25059 quality model, Finding/Evidence/Observation
@@ -215,7 +217,8 @@ wsqfai/
   reference_corpus.py    -- curated default corpus to benchmark against, with caching (M5b)
   remediation.py         -- real auto-fix diffs for mechanically-fixable findings (M7a)
   integration/           -- opens a real GitHub PR carrying selected fixes (M7c-backend)
-  server/                -- the FastAPI backend behind a future web frontend (M7c-backend)
+  server/                -- the FastAPI backend behind webapp/app/analyze (M7c-backend)
   report.py, __main__.py -- the end-to-end report + `wsqfai` CLI (text/JSON/HTML/patch)
+webapp/                  -- the Next.js marketing site + /analyze (M7c-frontend)
 tests/                   -- 249 tests, mirroring wsqfai/'s package structure
 ```
