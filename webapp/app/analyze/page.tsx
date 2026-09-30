@@ -28,6 +28,7 @@ export default function AnalyzePage() {
   const [repoUrl, setRepoUrl] = useState("");
   const [ref, setRef] = useState("");
   const [state, setState] = useState<RunState>({ phase: "idle" });
+  const [elapsedS, setElapsedS] = useState(0);
   const pollHandle = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -35,6 +36,12 @@ export default function AnalyzePage() {
       if (pollHandle.current) clearTimeout(pollHandle.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (state.phase !== "running") return;
+    const interval = setInterval(() => setElapsedS((s) => s + 1), 1000);
+    return () => clearInterval(interval);
+  }, [state.phase]);
 
   async function poll(jobId: string) {
     try {
@@ -56,6 +63,7 @@ export default function AnalyzePage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!repoUrl.trim()) return;
+    setElapsedS(0);
     setState({ phase: "running" });
     try {
       const jobId = await startAnalysis(repoUrl.trim(), ref.trim() || undefined);
@@ -118,8 +126,7 @@ export default function AnalyzePage() {
 
           {state.phase === "running" && (
             <p className="analyze-status">
-              <span className="analyze-spinner" aria-hidden /> Cloning and analyzing — this can take a
-              minute for a larger repository.
+              <span className="analyze-spinner" aria-hidden /> {runningMessage(elapsedS)}
             </p>
           )}
           {state.phase === "error" && <p className="analyze-status analyze-status-error">{state.message}</p>}
@@ -135,6 +142,17 @@ function describeError(err: unknown): string {
   if (err instanceof ApiError) return err.message;
   if (err instanceof Error) return err.message;
   return "Something went wrong reaching the analysis backend.";
+}
+
+// A real scan can take anywhere from a few seconds (a tiny repo) to a
+// couple of minutes (a large one, or a cold backend on a free-tier host
+// waking up) - a static "this can take a minute" message reads as broken
+// once the actual wait runs past what it promised. Escalating the wording
+// with elapsed time keeps it honest instead.
+function runningMessage(elapsedS: number): string {
+  if (elapsedS < 20) return "Cloning and analyzing — this can take a minute for a larger repository.";
+  if (elapsedS < 60) return `Still going (${elapsedS}s) — cloning and running the full measurement/security pipeline.`;
+  return `Still going (${elapsedS}s) — a cold backend or a large repository can take a few minutes. No need to retry.`;
 }
 
 function ReportView({

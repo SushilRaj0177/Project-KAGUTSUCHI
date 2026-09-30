@@ -103,8 +103,27 @@ async function readErrorDetail(res: Response): Promise<string> {
   return `Request failed (${res.status})`;
 }
 
+// A thin wrapper so every call site gets the same, actually-informative
+// message for the one failure mode `readErrorDetail` can't help with: the
+// request never reached the server at all. `fetch` itself throws a bare
+// TypeError for that (network down, wrong host, or - the likely real-world
+// case once this is actually deployed - the backend's WSQFAI_ALLOWED_ORIGINS
+// doesn't include this origin, so the browser blocks it as a CORS failure)
+// with no detail a person could act on otherwise.
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  try {
+    return await fetch(`${API_BASE_URL}${path}`, init);
+  } catch {
+    throw new ApiError(
+      `Couldn't reach the analysis backend at ${API_BASE_URL}. It may be down, or blocking ` +
+        "requests from this site (a CORS setting on the backend) - see DEPLOYING.md if you're the one running it.",
+      0,
+    );
+  }
+}
+
 export async function startAnalysis(repoUrl: string, ref?: string): Promise<string> {
-  const res = await fetch(`${API_BASE_URL}/api/analyze-repo/start`, {
+  const res = await apiFetch("/api/analyze-repo/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ repo_url: repoUrl, ref: ref || null }),
@@ -115,7 +134,7 @@ export async function startAnalysis(repoUrl: string, ref?: string): Promise<stri
 }
 
 export async function getJobStatus(jobId: string): Promise<JobStatus> {
-  const res = await fetch(`${API_BASE_URL}/api/analyze-repo/jobs/${jobId}`);
+  const res = await apiFetch(`/api/analyze-repo/jobs/${jobId}`);
   if (!res.ok) throw new ApiError(await readErrorDetail(res), res.status);
   return (await res.json()) as JobStatus;
 }
@@ -135,7 +154,7 @@ export async function openFixPr(
   githubToken: string,
   baseBranch?: string,
 ): Promise<OpenPrResult> {
-  const res = await fetch(`${API_BASE_URL}/api/open-pr`, {
+  const res = await apiFetch("/api/open-pr", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
