@@ -408,6 +408,36 @@ No milestone is marked done because a plan for it exists.
         and an explicit check that `marshal.loads` still correctly reports
         `NOT_APPLICABLE`. 237 → 242 tests.
 
+        **Widened again: SSRF (OWASP A10:2021) as a new M4a detector.**
+        `ast_scan.py`'s `_SIGNATURES` gained 8 new sinks —
+        `requests.get`/`post`/`put`/`delete`/`request`,
+        `urllib.request.urlopen`, `httpx.get`/`post` — all using
+        `SensitiveOp.NETWORK_EGRESS`, which had existed in this module's
+        severity/sub-characteristic tables since earlier in the project's
+        history but had no detector actually wired to it until now: a real
+        pre-existing gap, not new scope invented for its own sake. Same
+        taint-propagation gate as every other signature — a hardcoded URL
+        (`requests.get("https://example.com/api")`) is never flagged, only
+        a call built from a parameter the enclosing function received.
+        SSRF stays a static `Observation` permanently, not just for now:
+        `wsqfai/security/landlock.py`'s sandbox denies all outbound TCP by
+        design (see the M4b section above), so any attempt to actually
+        prove an SSRF exploit by connecting somewhere would be blocked by
+        the sandbox's own protective policy, producing a false
+        `NOT_REPRODUCED` regardless of whether the target code is really
+        vulnerable — the same reason SQL injection, SSTI, and multi-
+        parameter shell-exec through a local variable stay unverifiable.
+        10 new tests (2 targeted at `requests.get`, 1 confirming the
+        hardcoded-URL case is correctly *not* flagged, 7 parametrized
+        across all the new HTTP-client call shapes, 1 checking the
+        Observation carries `confidentiality` as its likely ISO/IEC 25010
+        sub-characteristic). 267 → 277 tests. Verified end to end against
+        `pallets/requests`'s own real source: 106 SSRF/deserialization
+        hypotheses surfaced across its test suite, zero incorrectly
+        promoted to a proven Finding — `network_egress` isn't in
+        `verify.py`'s verifiable-op set, so `can_attempt_verification`
+        correctly returns `False` for every one of them.
+
         What's left to widen M4b further: reintroducing the archived
         hypothesis-generation LLM path
         (`verification/hypothesis/generate.py`, `groq_client.py`).

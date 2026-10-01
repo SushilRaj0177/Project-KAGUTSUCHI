@@ -1,5 +1,7 @@
 import json
 
+import pytest
+
 from wsqfai.security.ast_scan import scan_source
 
 
@@ -374,3 +376,60 @@ def run(cmd):
     observations = scan_source(src, "sample.py")
     assert len(observations) == 1
     assert observations[0].location.start_line == 4
+
+
+def test_detects_ssrf_via_requests_get_with_tainted_url():
+    src = """
+import requests
+
+def fetch(url):
+    return requests.get(url)
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert observations[0].metadata["sensitive_op"] == "network_egress"
+    assert observations[0].metadata["detected_by"] == "ast.ssrf.requests_get"
+    assert observations[0].metadata["single_param_direct_taint"] == "url"
+
+
+def test_ssrf_not_flagged_for_a_hardcoded_url():
+    src = """
+import requests
+
+def fetch():
+    return requests.get("https://example.com/api")
+"""
+    assert scan_source(src, "sample.py") == []
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        "requests.get(url)",
+        "requests.post(url)",
+        "requests.put(url)",
+        "requests.delete(url)",
+        "urllib.request.urlopen(url)",
+        "httpx.get(url)",
+        "httpx.post(url)",
+    ],
+)
+def test_detects_ssrf_across_common_http_clients(call):
+    src = f"""
+def fetch(url):
+    return {call}
+"""
+    observations = scan_source(src, "sample.py")
+    assert len(observations) == 1
+    assert observations[0].metadata["sensitive_op"] == "network_egress"
+
+
+def test_ssrf_observation_carries_confidentiality_as_likely_sub_characteristic():
+    src = """
+import requests
+
+def fetch(url):
+    return requests.get(url)
+"""
+    observations = scan_source(src, "sample.py")
+    assert observations[0].metadata["likely_security_sub_characteristic"] == "confidentiality"
